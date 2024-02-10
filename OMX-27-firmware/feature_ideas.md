@@ -29,7 +29,24 @@ stack: 2 Kb (3.1%)
 heap: 13 Kb (20.7%)
 ```
 
+
 Bugs:
+	Endus: "@Quixotic7 So, had some free time for a couple of days, noticed a bug with the saves in 'Chord Mode'.
+
+Selected 'Save Slot 1', used the first 4 keys from the left for 'Custom Chords', then saved in 'Save Slot 1'.  Then loaded 'Save Slot 2' to start from scratch, created 4 new 'Custom Chords', again, using the first 4 keys from the left.  Then saved in 'Save Slot 2'.
+
+Now, when I load 'Save Slot 1', the root note, and key octave is how I saved it, but the '+' and '-' notes of the custom chords are how I set them in 'Save Slot 2'.  Never noticed this before, 'cause with each FW update, saves were erased.
+Also, changes I make to the custom chord '+ -' notes in 'Save Slot 1', will show in 'Save Slot 2'."
+
+"In 'Save Slot 1' all 4 keys each use a custom chord, with added custom notes.
+
+For 'Save Slot 2', the first key is a 'Fifth' chord, the second and third keys are 'Forths' chords, and the forth key is a 'Custom Chord' with custom notes.
+
+When I edit the 'Custom Notes' in the 'Custom Chord' on the forth key on 'Save Slot 2', I'll see (in the custom chord note param), and hear those changes when I load 'Save Slot 1', and press on the forth key."
+
+
+
+
 Arps don't work in MidiModeception
 
 What's next:
@@ -223,6 +240,12 @@ Arp Step
 	• If (notes) is selected (notes symbol), the Arpeggiator plays a chord with all notes from the note list. This means that you have to play at least two notes to hear the effect. The note list is not advanced.
 
 	• If ? is selected, the Arpeggiator plays a random note from the note list. This doesn’t mean that it creates any random note, it only uses one note of the note list at will. The note list is not advanced.
+
+
+Humanize Chord feature
+
+	Enduss - "A few days ago I had an idea for 'Chord Mode', a way to make chord playing have an organic feel to it.  It's basically an option to have each note, after the root note, to have their own 'Delayed Note', and/or 'Chance of Delayed Note' setting, like as if you were rolling the notes on the keys (with the right hand) from thumb, to pinky.  The settings could use those 'oblong characters' you created (or different characters) to adjust the delay for each note, and also a setting for 'Chance of Delay' if a user doesn't always want the delay to happen, and just wants all note in the chord to play at once."
+
 
 
 
