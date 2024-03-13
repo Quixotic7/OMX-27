@@ -24,6 +24,8 @@ namespace FormOmni
         bool doesConsumeLEDs() override; 
 
 	    const char* getF3shortcutName() override;
+	    bool getEncoderSelect() override;
+
 
         void setTest() override;
 
@@ -38,6 +40,8 @@ namespace FormOmni
         void onEncoderButtonDown() override;
         bool onKeyUpdate(OMXKeypadEvent e) override;
         bool onKeyHeldUpdate(OMXKeypadEvent e) override;
+	    bool onKeyQuickClicked(OMXKeypadEvent e) override;
+
         void onDisplayUpdate() override;
 
         // AUX + Top 1 = Play Stop
@@ -91,6 +95,8 @@ namespace FormOmni
         bool prevCondWasTrue_;
         bool fillActive_;
         bool firstLoop_;
+
+        bool setDirtyOnceMessageClears_;
 
         // Counts from 0 to 16 during playback to determine groove
         uint8_t grooveCounter_;

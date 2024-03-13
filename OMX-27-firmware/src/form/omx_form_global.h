@@ -37,6 +37,8 @@ bool shortcutPaste = false;
 // If true reset will happen on next quantization step
 bool quantizeReset = false;
 
+bool auxBlock = false;
+
 MusicScales *musicScale;
 
 uint8_t shortcutMode;

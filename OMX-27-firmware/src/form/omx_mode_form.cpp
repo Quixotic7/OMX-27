@@ -226,8 +226,15 @@ void OmxModeForm::setMachineTo(uint8_t machineIndex, FormMachineInterface *ptr)
 
 void OmxModeForm::updateShortcutMode()
 {
+	if (omxFormGlobal.auxBlock && midiSettings.keyState[0] == false)
+	{
+		omxFormGlobal.auxBlock = false;
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+	}
+
 	uint8_t prevMode = omxFormGlobal.shortcutMode;
-	
+
 	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX && midiSettings.keyState[1] && midiSettings.keyState[2])
 	{
 		omxFormGlobal.shortcutMode = FORMSHORTCUT_F3;
@@ -246,10 +253,10 @@ void OmxModeForm::updateShortcutMode()
 	}
 	else
 	{
-		omxFormGlobal.shortcutMode =  FORMSHORTCUT_NONE;
+		omxFormGlobal.shortcutMode = FORMSHORTCUT_NONE;
 	}
 
-	if(prevMode != omxFormGlobal.shortcutMode)
+	if (prevMode != omxFormGlobal.shortcutMode)
 	{
 		omxFormGlobal.shortcutPaste = false;
 
@@ -566,10 +573,19 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 
+	auto selMachine = machines_[selectedMachine_];
+
 	updateShortcutMode();
 
 	if (auxMacroManager_.onKeyUpdate(e))
 		return; // Key consumed by macro
+
+	// Enables quick key aux exit
+	if(e.quickClicked() && selMachine->onKeyQuickClicked(e))
+		return;
+
+	if (omxFormGlobal.auxBlock)
+		return;
 
 	if (onKeyUpdateSelMidiFX(e))
 		return;
@@ -583,8 +599,8 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	// 		return;
 	// }
 
-	int thisKey = e.key();
 
+	int thisKey = e.key();
 	// AUX KEY
 
 	// Don't go into aux mode if shortcuts F1 or F2 are being used
@@ -642,7 +658,6 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 		}
 	}
 
-	auto selMachine = machines_[selectedMachine_];
 
 	if(selMachine->doesConsumeKeys())
 	{
@@ -653,7 +668,7 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 
 		if(!keyConsumed)
 		{
-			selMachine->onKeyUpdate(e);
+			keyConsumed = selMachine->onKeyUpdate(e);
 		}
 
 		return;

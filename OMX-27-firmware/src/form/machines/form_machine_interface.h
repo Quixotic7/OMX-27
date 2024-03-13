@@ -58,6 +58,7 @@ public:
 	virtual void onEncoderButtonDown();
 	virtual bool onKeyUpdate(OMXKeypadEvent e) { return true; }
 	virtual bool onKeyHeldUpdate(OMXKeypadEvent e) { return true; }
+	virtual bool onKeyQuickClicked(OMXKeypadEvent e) { return false; }
 
 	virtual void onDisplayUpdate() {}
 

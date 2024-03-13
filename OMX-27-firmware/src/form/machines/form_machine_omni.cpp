@@ -209,6 +209,11 @@ namespace FormOmni
         return "LEN | RATE";
     }
 
+    bool FormMachineOmni::getEncoderSelect()
+    {
+	    return omxFormGlobal.encoderSelect && !midiSettings.midiAUX && !stepHeld_;
+    }
+
     void FormMachineOmni::setTest()
     {
         auto track = getTrack();
@@ -676,6 +681,10 @@ namespace FormOmni
 
             omxLeds.setDirty();
             omxDisp.setDirty();
+
+		    omxFormGlobal.shortcutMode = FORMSHORTCUT_NONE;
+			midiSettings.midiAUX = false;
+            setDirtyOnceMessageClears_ = true;
         }
     }
 
@@ -772,6 +781,13 @@ namespace FormOmni
 
     void FormMachineOmni::onClockTick()
     {
+        if(setDirtyOnceMessageClears_ && omxDisp.isMessageActive() == false)
+        {
+            omxDisp.setDirty();
+            omxLeds.setDirty();
+            setDirtyOnceMessageClears_ = false;
+        }
+
         if(omxFormGlobal.isPlaying == false) return;
 
         // Send note offs
@@ -1224,13 +1240,13 @@ namespace FormOmni
     }
     bool FormMachineOmni::onKeyUpdate(OMXKeypadEvent e)
     {
+        uint8_t thisKey = e.key();
+
         if (e.held())
             return false;
 
         omxDisp.setDirty();
         omxLeds.setDirty();
-
-        uint8_t thisKey = e.key();
 
         if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
         {
@@ -1267,12 +1283,14 @@ namespace FormOmni
                         auto track = getTrack();
 
                         selStep(thisKey - 11);
+                        stepReleased(thisKey - 11);
                         uint8_t stepIndex = key16toStep(thisKey - 11);
                         track->steps[stepIndex].mute = !track->steps[stepIndex].mute;
                     }
                     else if (e.down())
                     {
                         selStep(thisKey - 11);
+                        stepHeld(thisKey - 11);
                     }
                     else
                     {
@@ -1284,8 +1302,14 @@ namespace FormOmni
             case FORMSHORTCUT_AUX:
                 break;
             case FORMSHORTCUT_F1:
+                if(e.down() && thisKey == 0)
+                {
+                    changeUIMode(OMNIUIMODE_NOTEEDIT, false);
+                    omxFormGlobal.auxBlock = true;
+                    return true;
+                }
                 // Copy Paste
-                if (e.down() && thisKey >= 11 && thisKey < 27)
+                else if (e.down() && thisKey >= 11 && thisKey < 27)
                 {
                     if (omxFormGlobal.shortcutPaste == false)
                     {
@@ -1339,6 +1363,11 @@ namespace FormOmni
         break;
         case OMNIUIMODE_STEP:
         case OMNIUIMODE_NOTEEDIT:
+            // if (e.down() && thisKey == 0)
+            // {
+            //     changeUIMode(OMNIUIMODE_MIX, false);
+            //     return true;
+            // }
             omniNoteEditor.onKeyUpdate(e, getTrack());
             break;
         }
@@ -1346,7 +1375,7 @@ namespace FormOmni
     }
     bool FormMachineOmni::onKeyHeldUpdate(OMXKeypadEvent e)
     {
-        uint8_t thisKey = e.key();
+        // uint8_t thisKey = e.key();
 
         switch (omniUiMode_)
         {
@@ -1357,10 +1386,10 @@ namespace FormOmni
             {
             case FORMSHORTCUT_NONE:
             {
-                if (thisKey >= 11 && thisKey < 27)
-                {
-                    stepHeld(thisKey - 11);
-                }
+                // if (thisKey >= 11 && thisKey < 27)
+                // {
+                //     stepHeld(thisKey - 11);
+                // }
             }
             break;
             case FORMSHORTCUT_AUX:
@@ -1386,6 +1415,34 @@ namespace FormOmni
 
         return true;
     }
+
+    bool FormMachineOmni::onKeyQuickClicked(OMXKeypadEvent e)
+    {
+        uint8_t thisKey = e.key();
+
+        switch (omniUiMode_)
+        {
+        case OMNIUIMODE_CONFIG:
+        case OMNIUIMODE_MIX:
+        break;
+        case OMNIUIMODE_LENGTH:
+        break;
+        case OMNIUIMODE_TRANSPOSE:
+        break;
+        case OMNIUIMODE_STEP:
+        case OMNIUIMODE_NOTEEDIT:
+            if (omxFormGlobal.auxBlock == false && thisKey == 0)
+            {
+                changeUIMode(OMNIUIMODE_MIX, false);
+                omxFormGlobal.auxBlock = true;
+                return true;
+            }
+            break;
+        }
+
+        return false;
+    }
+
     void FormMachineOmni::editPage(uint8_t page, uint8_t param, int8_t amtSlow, int8_t amtFast)
     {
         switch (page)
