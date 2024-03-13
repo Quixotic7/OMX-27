@@ -138,6 +138,8 @@ private:
 
 	uint8_t selectedMachine_;
 
+	Micros ledUpdateTime_;
+
 	// uint8_t copiedMachineIndex_;
 
 	void changeFormMode(uint8_t newFormMode);

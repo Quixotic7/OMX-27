@@ -95,13 +95,16 @@ namespace FormOmni
         // Counts from 0 to 16 during playback to determine groove
         uint8_t grooveCounter_;
 
+        uint8_t playRateCounter_;
+
         // Counts from 0 to track length to determine when the track has looped
         uint8_t loopCounter_;
 
         // Increments everytime track loops
         uint16_t loopCount_;
 
-        uint8_t lastTriggeredStepIndex;
+        uint8_t lastTriggeredStepIndex_;
+        bool lastTriggeredStepState_;
 
         Micros nextStepTime_;
 

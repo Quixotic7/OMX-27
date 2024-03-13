@@ -55,6 +55,8 @@ OmxModeForm::OmxModeForm()
 
 	selectMachine(0);
 
+	ledUpdateTime_ = 0;
+
 	// machines_[0]->setContext(this);
 	// machines_[0]->setNoteOnFptr(&OmxModeForm::seqNoteOnForwarder);
 	// machines_[0]->setNoteOffFptr(&OmxModeForm::seqNoteOffForwarder);
@@ -66,6 +68,7 @@ OmxModeForm::OmxModeForm()
 
 OmxModeForm::~OmxModeForm()
 {
+	omxLeds.setBlinkAutoRefresh(true);
 	cleanup();
 }
 
@@ -404,6 +407,17 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 
 	// Can be modified by scale MidiFX
 	omxFormGlobal.musicScale->calculateScaleIfModified(scaleConfig.scaleRoot, scaleConfig.scalePattern);
+
+	if (omxFormGlobal.isPlaying)
+	{
+		uint32_t stepmicros = seqConfig.currentFrameMicros;
+
+		if (stepmicros >= ledUpdateTime_)
+		{
+			ledUpdateTime_ = stepmicros + clockConfig.ppqInterval * 12;
+			omxLeds.setDirty();
+		}
+	}
 
 	// Serial.println("LoopUpdate complete");
 }
@@ -896,7 +910,7 @@ void OmxModeForm::onDisplayUpdate()
 	if (encoderConfig.enc_edit)
 		return;
 
-	if (omxDisp.isDirty() == false)
+	if (omxDisp.canShowDisplay() == false)
 		return;
 
 	auto selMachine = getSelectedMachine();
@@ -1317,10 +1331,13 @@ void OmxModeForm::togglePlayback()
 		{
 			omxUtil.resumeClocks();
 		}
+
+		omxLeds.setBlinkAutoRefresh(false);
 	}
 	else
 	{
 		omxUtil.stopClocks();
+		omxLeds.setBlinkAutoRefresh(true);
 	}
 
 	for(auto m : machines_)

@@ -20,6 +20,7 @@ public:
 
 	void initSetup();
 
+	void setBlinkAutoRefresh(bool autoRefresh);
 	void updateBlinkStates();
 
 	int getKeyColor(MusicScales *scale, int pixel);
@@ -64,6 +65,9 @@ private:
 	unsigned long blinkInterval = clockConfig.clockbpm * 2;
 	bool blinkState = false;
 	bool slowBlinkState = false;
+
+	bool blinkAutoRefresh = true;
+
 
 	bool dirtyPixels = false;
 

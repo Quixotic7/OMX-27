@@ -27,6 +27,13 @@ void OmxLeds::initSetup()
 	strip.show();
 
 	delay(100);
+
+	blinkAutoRefresh = true;
+}
+
+void OmxLeds::setBlinkAutoRefresh(bool autoRefresh)
+{
+	blinkAutoRefresh = autoRefresh;
 }
 
 void OmxLeds::updateBlinkStates()
@@ -45,13 +52,19 @@ void OmxLeds::updateBlinkStates()
 			blinkPatPos[i] = (blinkPatPos[i] + 1) % patMax;
 		}
 
-		setDirty();
+		if(blinkAutoRefresh)
+		{
+			setDirty();
+		}
 	}
 	if (slow_blink_msec >= slowBlinkInterval)
 	{
 		slowBlinkState = !slowBlinkState;
 		slow_blink_msec = 0;
-		setDirty();
+		if(blinkAutoRefresh)
+		{
+			setDirty();
+		}
 	}
 }
 
@@ -269,6 +282,7 @@ void OmxLeds::drawOctaveKeys(uint8_t octaveDownKey, uint8_t octaveUpKey, int8_t 
 
 void OmxLeds::setDirty()
 {
+	// Serial.println("Dirty LEDS");
 	dirtyPixels = true;
 }
 

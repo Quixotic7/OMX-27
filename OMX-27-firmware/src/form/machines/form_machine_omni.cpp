@@ -233,6 +233,8 @@ namespace FormOmni
             // ticksTilNextTrigger_ = 0;
             // ticksTilNextTriggerRate_ = 0;
 
+            playRateCounter_ = playingStep_;
+
             onRateChanged();
 
             // Calculate first step
@@ -254,22 +256,22 @@ namespace FormOmni
         // nextStepTime_ = seqConfig.lastClockMicros + ;
         playingStep_ = track->playDirection == TRACKDIRECTION_FORWARD ? 0 : track->getLength() - 1;
 
+        grooveCounter_ = 0;
+        playRateCounter_ = 0;
+        loopCounter_ = 0;
+        loopCount_ = 0;
+        firstLoop_ = true;
+        prevCondWasTrue_ = false;
+        neighborPrevTrigWasTrue_ = false;
+
         if (omxFormGlobal.isPlaying)
         {
-            grooveCounter_ = 0;
-            loopCounter_ = 0;
-            loopCount_ = 0;
-            firstLoop_ = true;
             ticksTilNext16Trigger_ = 0;
             ticksTilNextTrigger_ = ticksTilNext16Trigger_;
             ticksTilNextTriggerRate_ = ticksTilNext16Trigger_;
         }
         else
         {
-            grooveCounter_ = 0;
-            loopCounter_ = 0;
-            loopCount_ = 0;
-            firstLoop_ = true;
             ticksTilNextTrigger_ = 0;
             ticksTilNext16Trigger_ = 0;
             ticksTilNextTriggerRate_ = 0;
@@ -439,7 +441,7 @@ namespace FormOmni
         // 1st
         else if(step->condition == 7 || step->condition == 8)
         {
-            if((step->condition == 5 && !firstLoop_) || (step->condition == 6 && firstLoop_))
+            if((step->condition == 7 && !firstLoop_) || (step->condition == 8 && firstLoop_))
             {
                 prevCondWasTrue_ = false;
                 return false;
@@ -773,19 +775,22 @@ namespace FormOmni
         if(omxFormGlobal.isPlaying == false) return;
 
         // Send note offs
-        auto it = noteOns_.begin();
-        while (it != noteOns_.end())
+        if (noteOns_.size() > 0)
         {
-            Micros noteOffMicros = it->noteonMicros + (stepMicros_ * it->stepLength);
-            // remove matching note numbers
-            if (seqConfig.lastClockMicros >= noteOffMicros)
+            auto it = noteOns_.begin();
+            while (it != noteOns_.end())
             {
-                seqNoteOff(*it, 255);
-                it = noteOns_.erase(it);
-            }
-            else
-            {
-                ++it;
+                Micros noteOffMicros = it->noteonMicros + (stepMicros_ * it->stepLength);
+                // remove matching note numbers
+                if (seqConfig.lastClockMicros >= noteOffMicros)
+                {
+                    seqNoteOff(*it, 255);
+                    it = noteOns_.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
             }
         }
 
@@ -813,6 +818,14 @@ namespace FormOmni
         if(ticksTilNext16Trigger_ <= 0)
         {
             ticksTilNext16Trigger_ = 24;
+
+            // auto track = getTrack();
+
+            // int8_t directionIncrement = track->playDirection == TRACKDIRECTION_FORWARD ? 1 : -1;
+            // playRateCounter_ = (playRateCounter_ + 16 + directionIncrement) % 16;
+
+            // omxLeds.setDirty();
+            // omxDisp.setDirty();
         }
 
         bool onRate = false;
@@ -820,8 +833,16 @@ namespace FormOmni
         if(ticksTilNextTriggerRate_ <= 0)
         {
             ticksTilNextTriggerRate_ = ticksPerStep_;
-
             onRate = true;
+
+            // auto track = getTrack();
+            // uint8_t length = track->len + 1;
+
+            // int8_t directionIncrement = track->playDirection == TRACKDIRECTION_FORWARD ? 1 : -1;
+            // playRateCounter_ = (playRateCounter_ + length + directionIncrement) % length;
+
+            // omxLeds.setDirty();
+            // omxDisp.setDirty();
         }
 
         // 1xxxxx1xxxxx1xxxxx1xxxxx1xxxxx1xxxxx
@@ -832,7 +853,12 @@ namespace FormOmni
 
         // uint8_t loop = 0;
 
-        triggeredNotes_.clear();
+        // ticksTilNextTrigger_ = 100;
+
+        if(ticksTilNextTrigger_ <= 0)
+        {
+            triggeredNotes_.clear();
+        }
 
         // can trigger twice in once clock if note is fully nudged
         while(ticksTilNextTrigger_ <= 0)
@@ -899,8 +925,14 @@ namespace FormOmni
             if(evaluateTrig(playingStep_, currentStep))
             {
                 triggerStep(currentStep);
+                lastTriggeredStepState_ = true;
             }
-            lastTriggeredStepIndex = playingStep_;
+            else
+            {
+                lastTriggeredStepState_ = false;
+            }
+            lastTriggeredStepIndex_ = playingStep_;
+
             // int currentNudgeTicks = abs(currentStep->nudge)
 
             // Reverse the nudges when flipping directions
@@ -1000,7 +1032,6 @@ namespace FormOmni
                 firstLoop_ = false;
             }
             playingStep_ = nextStepIndex;
-            omxLeds.setDirty();
         }
 
         ticksTilNextTrigger_--;
@@ -1158,11 +1189,21 @@ namespace FormOmni
 
             if(omxFormGlobal.isPlaying)
             {
-                uint8_t playingStepKey = lastTriggeredStepIndex % (16 * kZoomMults[zoomLevel_]);
+                // auto track = getTrack();
+                // uint8_t playingStepKey = playRateCounter_ % (16 * kZoomMults[zoomLevel_]);
 
-                playingStepKey = map(playingStepKey, 0, 16 * kZoomMults[zoomLevel_], 0, 15);
+                // playingStepKey = map(playingStepKey, 0, 16 * kZoomMults[zoomLevel_], 0, 15);
 
-                strip.setPixelColor(11 + playingStepKey, WHITE);
+                // strip.setPixelColor(11 + playingStepKey, WHITE);
+
+                uint8_t playingStepKey = lastTriggeredStepIndex_ % (16 * kZoomMults[zoomLevel_]);
+
+                if (kZoomMults[zoomLevel_] > 1)
+                {
+                    playingStepKey = map(playingStepKey, 0, 16 * kZoomMults[zoomLevel_], 0, 15);
+                }
+
+                strip.setPixelColor(11 + playingStepKey, lastTriggeredStepState_ ? WHITE : RED);
             }
         }
         break;

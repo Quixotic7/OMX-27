@@ -84,6 +84,7 @@ public:
 	void setDirty();
 	bool isDirty() { return dirtyDisplay; }
 
+	bool canShowDisplay();
 	void showDisplay();
 	void forceShowDisplay();
 

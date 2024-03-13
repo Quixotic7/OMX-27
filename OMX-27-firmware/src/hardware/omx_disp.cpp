@@ -1657,11 +1657,16 @@ void OmxDisp::forceShowDisplay()
 	dirtyDisplayTimer = 0;
 }
 
+bool OmxDisp::canShowDisplay()
+{
+	return dirtyDisplay && (dirtyDisplayTimer > displayRefreshRate);
+}
+
 void OmxDisp::showDisplay()
 {
 	if (dirtyDisplay)
 	{
-		if (dirtyDisplayTimer > displayRefreshRate)
+		if (dirtyDisplayTimer > displayRefreshRate && !isDispLocked())
 		{
 			display.display();
 			dirtyDisplay = false;
