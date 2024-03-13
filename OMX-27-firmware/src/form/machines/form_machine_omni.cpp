@@ -257,6 +257,9 @@ namespace FormOmni
         if (omxFormGlobal.isPlaying)
         {
             grooveCounter_ = 0;
+            loopCounter_ = 0;
+            loopCount_ = 0;
+            firstLoop_ = true;
             ticksTilNext16Trigger_ = 0;
             ticksTilNextTrigger_ = ticksTilNext16Trigger_;
             ticksTilNextTriggerRate_ = ticksTilNext16Trigger_;
@@ -264,6 +267,9 @@ namespace FormOmni
         else
         {
             grooveCounter_ = 0;
+            loopCounter_ = 0;
+            loopCount_ = 0;
+            firstLoop_ = true;
             ticksTilNextTrigger_ = 0;
             ticksTilNext16Trigger_ = 0;
             ticksTilNextTriggerRate_ = 0;
@@ -991,6 +997,7 @@ namespace FormOmni
             {
                 // 840 is evenly divisible by 8,7,6,5,4,3,2,1
                 loopCount_ = (loopCount_ + 1) % 840;
+                firstLoop_ = false;
             }
             playingStep_ = nextStepIndex;
             omxLeds.setDirty();
