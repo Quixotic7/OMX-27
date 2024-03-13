@@ -88,8 +88,18 @@ namespace FormOmni
 
         uint8_t playingStep_;
 
+        bool prevCondWasTrue_;
+        bool fillActive_;
+        bool firstLoop_;
+
         // Counts from 0 to 16 during playback to determine groove
         uint8_t grooveCounter_;
+
+        // Counts from 0 to track length to determine when the track has looped
+        uint8_t loopCounter_;
+
+        // Increments everytime track loops
+        uint16_t loopCount_;
 
         uint8_t lastTriggeredStepIndex;
 
@@ -118,8 +128,11 @@ namespace FormOmni
         float getStepLenMult(uint8_t len);
         String getStepLenString(uint8_t len);
         float getGateMult(uint8_t gate);
+        const char* getCondChar(uint8_t condIndex);
+
 
         MidiNoteGroup step2NoteGroup(uint8_t noteIndex, Step *step);
+        bool evaluateTrig(uint8_t stepIndex, Step *step);
         void triggerStep(Step *step);
 
         // char foo[sizeof(PotPickupUtil)]

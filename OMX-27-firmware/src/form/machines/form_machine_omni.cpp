@@ -50,15 +50,29 @@ namespace FormOmni
     // 10001000100010001000
     const uint8_t kSwingDivisionMod[] = {2,4};
 
-    const char *kTrigConditions[36] = {
-	"1:1",
-	"1:2", "2:2",
-	"1:3", "2:3", "3:3",
-	"1:4", "2:4", "3:4", "4:4",
-	"1:5", "2:5", "3:5", "4:5", "5:5",
-	"1:6", "2:6", "3:6", "4:6", "5:6", "6:6",
-	"1:7", "2:7", "3:7", "4:7", "5:7", "6:7", "7:7",
-	"1:8", "2:8", "3:8", "4:8", "5:8", "6:8", "7:8", "8:8"};
+    // const char *kTrigConditions[36] = {
+	// "1:1",
+	// "1:2", "2:2",
+	// "1:3", "2:3", "3:3",
+	// "1:4", "2:4", "3:4", "4:4",
+	// "1:5", "2:5", "3:5", "4:5", "5:5",
+	// "1:6", "2:6", "3:6", "4:6", "5:6", "6:6",
+	// "1:7", "2:7", "3:7", "4:7", "5:7", "6:7", "7:7",
+	// "1:8", "2:8", "3:8", "4:8", "5:8", "6:8", "7:8", "8:8"};
+
+    const char* kConditionModes[9] = {"--", "FILL", "!FILL", "PRE", "!PRE", "NEI", "!NEI", "1ST", "!1ST"};
+
+    // Must be a quick way to calculate this
+    uint8_t kTrigConditionsAB[35][2] = {
+	{1, 2},	{2, 2},
+	{1, 3},	{2, 3},	{3, 3},
+	{1, 4},	{2, 4},	{3, 4},	{4, 4},
+	{1, 5},	{2, 5},	{3, 5},	{4, 5},	{5, 5},
+	{1, 6},	{2, 6},	{3, 6},	{4, 6},	{5, 6},	{6, 6},	
+    {1, 7},	{2, 7},	{3, 7},	{4, 7},	{5, 7},	{6, 7},	{7, 7},
+	{1, 8},	{2, 8},	{3, 8},	{4, 8},	{5, 8},	{6, 8},	{7, 8},	{8, 8}};
+
+    // int sizeArray[sizeof(kTrigConditions)];
 
     const char *kStepFuncs[7] = {"--", "1", ">>", "<<", "<>", "#?", "?"};
 
@@ -67,6 +81,7 @@ namespace FormOmni
     ParamManager noteParams_;
 
     bool paramsInit_ = false;
+    bool neighborPrevTrigWasTrue_ = false;
 
     uint8_t omniUiMode_ = 0;
 
@@ -285,8 +300,10 @@ namespace FormOmni
     {
         if (stepHeld_)
         {
-            setPotPickups(OMNIPAGE_GBL1);
-            stepHeld_ = false;
+            // setPotPickups(OMNIPAGE_GBL1);
+            // Update pickups to new step
+            setPotPickups(trackParams_.getSelPage());
+            // stepHeld_ = false;
         }
         selStep_ = key16toStep(stepIndex);
 
@@ -373,6 +390,76 @@ namespace FormOmni
         noteGroup.unknownLength = true;
 
         return noteGroup;
+    }
+
+    bool FormMachineOmni::evaluateTrig(uint8_t stepIndex, Step *step)
+    {
+        if(step->mute == 1) return false;
+        if(step->prob == 100 && step->condition == 0) return true;
+
+        if (step->prob != 100 && (step->prob == 0 || random(100) > step->prob))
+        {
+            prevCondWasTrue_ = false;
+			return false;
+        }
+
+        // Fill
+        if(step->condition == 1 || step->condition == 2)
+        {
+            if((step->condition == 1 && !fillActive_) || (step->condition == 2 && fillActive_))
+            {
+                prevCondWasTrue_ = false;
+                return false;
+            }
+        }
+        // Pre
+        else if(step->condition == 3 || step->condition == 4)
+        {
+            if((step->condition == 3 && !prevCondWasTrue_) || (step->condition == 4 && prevCondWasTrue_))
+            {
+                prevCondWasTrue_ = false;
+                return false;
+            }
+        }
+        // NEI
+        else if(step->condition == 5 || step->condition == 6)
+        {
+            if((step->condition == 5 && !neighborPrevTrigWasTrue_) || (step->condition == 6 && neighborPrevTrigWasTrue_))
+            {
+                prevCondWasTrue_ = false;
+                return false;
+            }
+        }
+        // 1st
+        else if(step->condition == 7 || step->condition == 8)
+        {
+            if((step->condition == 5 && !firstLoop_) || (step->condition == 6 && firstLoop_))
+            {
+                prevCondWasTrue_ = false;
+                return false;
+            }
+        }
+        else if(step->condition >= 9)
+        {
+            uint8_t abIndex = step->condition - 9;
+
+            uint8_t evalA = kTrigConditionsAB[abIndex][0];
+            uint8_t evalB = kTrigConditionsAB[abIndex][1];
+
+            uint8_t loopPos = loopCount_ % evalB;
+
+            if (loopPos + 1 != evalA)
+            {
+                prevCondWasTrue_ = false;
+                return false;
+            }
+        }
+
+        // 5
+        // 7, 14, 21, 28, 35 42 49 56 63 70   112 / 8 = 14  280  420   840
+
+        prevCondWasTrue_ = true;
+        return true;
     }
 
     void FormMachineOmni::triggerStep(Step *step)
@@ -803,7 +890,10 @@ namespace FormOmni
             // uint8_t nextStepIndex = (playingStep_ + directionIncrement) % length;
             auto nextStep = &track->steps[nextStepIndex];
 
-            triggerStep(currentStep);
+            if(evaluateTrig(playingStep_, currentStep))
+            {
+                triggerStep(currentStep);
+            }
             lastTriggeredStepIndex = playingStep_;
             // int currentNudgeTicks = abs(currentStep->nudge)
 
@@ -863,11 +953,6 @@ namespace FormOmni
             //     }
             // }
 
-
-
-
-
-
             // if (onRate)
             // {
             //     ticksTilNextTrigger_ = ticksPerStep_ + nextNudgeTicks - nudgeTicks;
@@ -892,8 +977,21 @@ namespace FormOmni
 
             // loop++;
 
+            // Machines get updated left to right
+            // This variable is global
+            // Thus if this is true, it means the machine to the left
+            // Evaluated to true. 
+            neighborPrevTrigWasTrue_ = prevCondWasTrue_;
+
             // always counts forward
             grooveCounter_ = (grooveCounter_ + 1) % 16;
+
+            loopCounter_ = (loopCounter_ + 1) % track->getLength();
+            if(loopCounter_ == 0)
+            {
+                // 840 is evenly divisible by 8,7,6,5,4,3,2,1
+                loopCount_ = (loopCount_ + 1) % 840;
+            }
             playingStep_ = nextStepIndex;
             omxLeds.setDirty();
         }
@@ -1015,6 +1113,19 @@ namespace FormOmni
     float FormMachineOmni::getGateMult(uint8_t gate)
     {
         return max(gate / 100.f * 2, 0.01f);
+    }
+
+    const char *FormMachineOmni::getCondChar(uint8_t condIndex)
+    {
+        if(condIndex < 9)
+        {
+            return kConditionModes[condIndex];
+        }
+
+        uint8_t abIndex = condIndex - 9;
+
+        tempString = String(kTrigConditionsAB[abIndex][0]) + ":" + String(kTrigConditionsAB[abIndex][1]);
+        return tempString.c_str();
     }
 
     void FormMachineOmni::loopUpdate()
@@ -1375,6 +1486,8 @@ namespace FormOmni
         }
     }
 
+
+
     bool FormMachineOmni::drawPage(uint8_t page)
     {
         switch (page)
@@ -1400,7 +1513,7 @@ namespace FormOmni
             auto selStep = getSelStep();
 
             omxDisp.setLegend(0, "CHC%", selStep->prob);
-            omxDisp.setLegend(1, "COND", kTrigConditions[selStep->condition]);
+            omxDisp.setLegend(1, "COND", getCondChar(selStep->condition));
 
             if (selStep->func >= 7)
             {
