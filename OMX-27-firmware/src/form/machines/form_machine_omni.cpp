@@ -60,7 +60,7 @@ namespace FormOmni
 	// "1:7", "2:7", "3:7", "4:7", "5:7", "6:7", "7:7",
 	// "1:8", "2:8", "3:8", "4:8", "5:8", "6:8", "7:8", "8:8"};
 
-    const char* kConditionModes[9] = {"--", "FILL", "!FILL", "PRE", "!PRE", "NEI", "!NEI", "1ST", "!1ST"};
+    const char* kConditionModes[9] = {"--", "FILL", "!FIL", "PRE", "!PRE", "NEI", "!NEI", "1ST", "!1ST"};
 
     // Must be a quick way to calculate this
     uint8_t kTrigConditionsAB[35][2] = {
