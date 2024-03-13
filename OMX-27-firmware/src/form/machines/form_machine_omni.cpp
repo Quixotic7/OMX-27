@@ -1324,8 +1324,10 @@ namespace FormOmni
                 if (e.down() && thisKey >= 11 && thisKey < 27)
                 {
                     auto track = getTrack();
-                    track->len = (thisKey - 11) * kZoomMults[zoomLevel_] + (kZoomMults[zoomLevel_] - 1);
 
+                    uint8_t pageKey = (thisKey - 11) + (16 * min(activePage_, kPageMax[zoomLevel_] - 1));
+                    track->len = pageKey * kZoomMults[zoomLevel_] + (kZoomMults[zoomLevel_] - 1);
+                    omxDisp.displayMessage("LENGTH " + String(track->getLength()));
                 }
                 break;
             }
