@@ -969,8 +969,14 @@ void OmxDisp::dispSlots(const char *slotNames[], uint8_t slotCount, uint8_t sele
 		display.drawLine(63, yPos + slotHeight, 63, 25, WHITE);
 	}
 }
-
 void OmxDisp::dispCenteredSlots(const char *slotNames[], uint8_t slotCount, uint8_t selected, bool encoderSelect, bool showLabels, bool centerLabels, const char *labels[], uint8_t labelCount)
+{
+	u8g2_font_5x8_tf;
+	dispCenteredSlots(FONT_VALUES, slotNames, slotCount, selected, encoderSelect, showLabels, centerLabels, labels, labelCount);
+
+}
+
+void OmxDisp::dispCenteredSlots(const uint8_t *slotFont, const char *slotNames[], uint8_t slotCount, uint8_t selected, bool encoderSelect, bool showLabels, bool centerLabels, const char *labels[], uint8_t labelCount)
 {
 	if (isMessageActive())
 	{
@@ -984,7 +990,7 @@ void OmxDisp::dispCenteredSlots(const char *slotNames[], uint8_t slotCount, uint
 
 	for (uint8_t i = 0; i < slotCount; i++)
 	{
-		dispParamLabel(i * slotWidth, 10, slotWidth, 18, selected == i, 1, encoderSelect, true, slotNames[i], FONT_VALUES, 1, true);
+		dispParamLabel(i * slotWidth, 10, slotWidth, 18, selected == i, 1, encoderSelect, true, slotNames[i], slotFont, 1, true);
 	}
 
 	// dispParamLabel(32, 10, 32, 18, selected == 1, 1, encoderSelect, true, octaveName, FONT_VALUES, 1, true);

@@ -73,7 +73,7 @@ namespace FormOmni
 
         // returns true if should draw generic page
         void editPage(uint8_t page, uint8_t param, int8_t amtSlow, int8_t amtFast);
-        bool drawPage(uint8_t page);
+        bool drawPage(uint8_t page, uint8_t selParam);
 
         Track *getTrack();
         Step *getSelStep();

@@ -70,7 +70,7 @@ namespace FormOmni
     {
         uint8_t mute : 1;      // bool for mute
         int8_t notes[6];       // 0 - 127, -1 for off
-        int8_t potVals[4];     // 0 -> 127, -1 for off
+        int8_t potVals[5];     // 0 -> 127, -1 for off
         uint8_t vel : 7;       // 0 - 127
         int8_t nudge : 7;      // Nudge note back or forward. Range is +- 60, displayed as -100% to +100%, , displ
         uint8_t len : 5;       // [0]0.25 - 64th note, [1]0.5 - 32nd note, [2]0.75, [3]1 - 16 steps
@@ -95,7 +95,7 @@ namespace FormOmni
             mute = 0;
             for (uint8_t i = 0; i < 6; i++)
                 notes[i] = -1;
-            for (uint8_t i = 0; i < 4; i++)
+            for (uint8_t i = 0; i < 5; i++)
                 potVals[i] = -1;
             vel = 127;
             nudge = 0;

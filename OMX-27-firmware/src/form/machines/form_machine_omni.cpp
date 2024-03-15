@@ -1,10 +1,12 @@
 #include "form_machine_omni.h"
 #include "../../config.h"
 #include "../../consts/colors.h"
+#include "../../consts/consts.h"
 #include "../../utils/omx_util.h"
 #include "../../hardware/omx_disp.h"
 #include "../../hardware/omx_leds.h"
 #include "omni_note_editor.h"
+#include <U8g2_for_Adafruit_GFX.h>
 
 namespace FormOmni
 {
@@ -89,7 +91,15 @@ namespace FormOmni
     {
         if (!paramsInit_)
         {
-            trackParams_.addPages(OMNIPAGE_COUNT);
+            trackParams_.addPage(4);  // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
+            trackParams_.addPage(4);  // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
+            trackParams_.addPage(7);  // OMNIPAGE_STEPNOTES,
+            trackParams_.addPage(5);  // OMNIPAGE_STEPPOTS,
+            trackParams_.addPage(4);  // OMNIPAGE_GBL1, // BPM
+            trackParams_.addPage(4);  // OMNIPAGE_1,    // Velocity, Channel, Rate, Gate
+            trackParams_.addPage(4);  // OMNIPAGE_2,    // Transpose, TransposeMode
+            trackParams_.addPage(4);  // OMNIPAGE_3,    // SendMidi, SendCV
+            trackParams_.addPage(17); // OMNIPAGE_TPAT, // SendMidi, SendCV
         }
 
         resetPlayback();
@@ -1494,7 +1504,14 @@ namespace FormOmni
         case OMNIPAGE_STEPNOTES:
         {
             auto selStep = getSelStep();
-            selStep->notes[param] = constrain(selStep->notes[param] + amtFast, -1, 127);
+            if (param == 6)
+            {
+                omxFormGlobal.useNoteNumbers = (bool)constrain(omxFormGlobal.useNoteNumbers + amtSlow, 0, 1);
+            }
+            else
+            {
+                selStep->notes[param] = constrain(selStep->notes[param] + amtFast, -1, 127);
+            }
         }
         break;
         case OMNIPAGE_STEPPOTS:
@@ -1593,13 +1610,11 @@ namespace FormOmni
         }
     }
 
-
-
-    bool FormMachineOmni::drawPage(uint8_t page)
+    bool FormMachineOmni::drawPage(uint8_t page, uint8_t selParam)
     {
         switch (page)
         {
-        case OMNIPAGE_STEP1:  // Vel, Nudge, Length, MFX
+        case OMNIPAGE_STEP1: // Vel, Nudge, Length, MFX
         {
             omxDisp.clearLegends();
 
@@ -1612,7 +1627,7 @@ namespace FormOmni
             omxDisp.setLegend(2, "LEN", getStepLenString(selStep->len));
             omxDisp.setLegend(3, "MFX", selStep->mfxIndex == 0, selStep->mfxIndex == 1 ? "TRK" : String(selStep->mfxIndex - 1));
         }
-        return true;
+            return true;
         case OMNIPAGE_STEPCONDITION: // Prob, Condition, Func, Accum
         {
             omxDisp.clearLegends();
@@ -1633,22 +1648,70 @@ namespace FormOmni
 
             omxDisp.setLegend(3, "ACUM", selStep->accumTPat == 0, selStep->accumTPat);
         }
-        return true;
+            return true;
         case OMNIPAGE_STEPNOTES:
-        break;
+        {
+            const char *labels[6];
+            const char *headers[1];
+            headers[0] = omxFormGlobal.useNoteNumbers ? "Note Numbers" : "Notes";
+
+            auto step = getSelStep();
+
+            for (uint8_t i = 0; i < 6; i++)
+            {
+                int note = step->notes[i];
+
+                if (note >= 0 && note <= 127)
+                {
+                    // note = note + (5 * 12); // get rid of negative octaves since we can only disp 3 chars per note
+                    tempStrings[i] = omxFormGlobal.useNoteNumbers ? String(note) : omxFormGlobal.musicScale->getFullNoteName(note);
+                    labels[i] = tempStrings[i].c_str();
+                }
+                else
+                {
+                    labels[i] = "-";
+                }
+            }
+
+            omxDisp.dispCenteredSlots(FONT_LABELS, labels, 6, selParam, getEncoderSelect(), true, true, headers, 1);
+        }
+            return false;
         case OMNIPAGE_STEPPOTS:
         {
-            omxDisp.clearLegends();
+            const char *labels[5];
+            const char *headers[1];
+            headers[0] = "CC Send Bank 1";
 
-            auto selStep = getSelStep();
-            // auto bank = pots[potSettings.potbank];
+            auto step = getSelStep();
 
-            omxDisp.setLegend(0, "CC1", selStep->potVals[0] < 0, selStep->potVals[0]);
-            omxDisp.setLegend(1, "CC2", selStep->potVals[1] < 0, selStep->potVals[1]);
-            omxDisp.setLegend(2, "CC3", selStep->potVals[2] < 0, selStep->potVals[2]);
-            omxDisp.setLegend(3, "CC4", selStep->potVals[3] < 0, selStep->potVals[3]);
+            for (uint8_t i = 0; i < 5; i++)
+            {
+                int pVal = step->potVals[i];
+
+                if (pVal >= 0 && pVal <= 127)
+                {
+                    tempStrings[i] = String(pVal);
+                    labels[i] = tempStrings[i].c_str();
+                }
+                else
+                {
+                    labels[i] = "-";
+                }
+            }
+
+            omxDisp.dispCenteredSlots(labels, 5, selParam, getEncoderSelect(), true, true, headers, 1);
+
+            // omxDisp.clearLegends();
+
+            // auto selStep = getSelStep();
+            // // auto bank = pots[potSettings.potbank];
+
+            // omxDisp.setLegend(0, "CC1", selStep->potVals[0] < 0, selStep->potVals[0]);
+            // omxDisp.setLegend(1, "CC2", selStep->potVals[1] < 0, selStep->potVals[1]);
+            // omxDisp.setLegend(2, "CC3", selStep->potVals[2] < 0, selStep->potVals[2]);
+            // omxDisp.setLegend(3, "CC4", selStep->potVals[3] < 0, selStep->potVals[3]);
         }
-        return true;
+            return false;
         }
 
         return false;
@@ -1665,22 +1728,23 @@ namespace FormOmni
         case OMNIUIMODE_LENGTH:
         {
             int8_t selPage = trackParams_.getSelPage();
+            int8_t selParam = trackParams_.getSelParam();
 
             bool drawGeneric = true;
 
             switch (selPage)
             {
             case OMNIPAGE_STEP1:
-                drawGeneric = drawPage(OMNIPAGE_STEP1);
+                drawGeneric = drawPage(OMNIPAGE_STEP1, selParam);
                 break;
             case OMNIPAGE_STEPCONDITION:
-                drawGeneric = drawPage(OMNIPAGE_STEPCONDITION);
+                drawGeneric = drawPage(OMNIPAGE_STEPCONDITION, selParam);
                 break;
             case OMNIPAGE_STEPNOTES:
-                drawGeneric = drawPage(OMNIPAGE_STEPNOTES);
+                drawGeneric = drawPage(OMNIPAGE_STEPNOTES, selParam);
                 break;
             case OMNIPAGE_STEPPOTS:
-                drawGeneric = drawPage(OMNIPAGE_STEPPOTS);
+                drawGeneric = drawPage(OMNIPAGE_STEPPOTS, selParam);
                 break;
             case OMNIPAGE_GBL1: // BPM
             {

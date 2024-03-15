@@ -39,6 +39,8 @@ bool quantizeReset = false;
 
 bool auxBlock = false;
 
+bool useNoteNumbers = false;
+
 MusicScales *musicScale;
 
 uint8_t shortcutMode;
