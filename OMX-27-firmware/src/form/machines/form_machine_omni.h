@@ -1,7 +1,7 @@
 #pragma once
 #include "form_machine_interface.h"
 #include "omni_structs.h"
-
+#include "omni_transpose_pattern.h"
 
 namespace FormOmni
 {
@@ -59,6 +59,8 @@ namespace FormOmni
 
         uint8_t activePage_ = 0;
         uint8_t zoomLevel_ = 0;
+
+        OmniTransposePattern transpPat_;
 
         void onEnabled();
         void onDisabled();

@@ -83,6 +83,7 @@ namespace FormOmni
     // Global param management so pages are same across machines
     ParamManager trackParams_;
     ParamManager noteParams_;
+    ParamManager tPatParams_;
 
     bool paramsInit_ = false;
     bool neighborPrevTrigWasTrue_ = false;
@@ -102,6 +103,8 @@ namespace FormOmni
             trackParams_.addPage(4);  // OMNIPAGE_2,    // Transpose, TransposeMode
             trackParams_.addPage(4);  // OMNIPAGE_3,    // SendMidi, SendCV
             trackParams_.addPage(17); // OMNIPAGE_TPAT, // SendMidi, SendCV
+
+            tPatParams_.addPage(17);
         }
 
         resetPlayback();
@@ -608,8 +611,15 @@ namespace FormOmni
         }
         break;
         case OMNIUIMODE_TRANSPOSE:
+        {
+            tPatParams_.changeParam(enc.dir());
+        }
+        break;
         case OMNIUIMODE_STEP:
         case OMNIUIMODE_NOTEEDIT:
+        {
+            omniNoteEditor.onEncoderChangedSelectParam(enc, getTrack());
+        }
             break;
         }
 
@@ -655,13 +665,15 @@ namespace FormOmni
                 editPage(OMNIPAGE_3, selParam, amtSlow, amtFast);
                 break;
             case OMNIPAGE_TPAT: // SendMidi, SendCV
-                editPage(OMNIPAGE_TPAT, selParam, amtSlow, amtFast);
+                transpPat_.onEncoderChangedEditParam(enc, selParam, &seq_.transposePattern);
                 break;
             }
         }
         break;
         case OMNIUIMODE_LENGTH:
         case OMNIUIMODE_TRANSPOSE:
+            selParam = tPatParams_.getSelParam();
+            transpPat_.onEncoderChangedEditParam(enc, selParam, &seq_.transposePattern);
             break;
         case OMNIUIMODE_STEP:
         case OMNIUIMODE_NOTEEDIT:
@@ -1238,6 +1250,9 @@ namespace FormOmni
         case OMNIUIMODE_LENGTH:
         break;
         case OMNIUIMODE_TRANSPOSE:
+        {
+            transpPat_.updateLEDs(&tPatParams_, &seq_.transposePattern);
+        }
         break;
         case OMNIUIMODE_STEP:
         case OMNIUIMODE_NOTEEDIT:
@@ -1372,6 +1387,9 @@ namespace FormOmni
         case OMNIUIMODE_LENGTH:
         break;
         case OMNIUIMODE_TRANSPOSE:
+        {
+            transpPat_.onKeyUpdate(e, &tPatParams_, &seq_.transposePattern);
+        }
         break;
         case OMNIUIMODE_STEP:
         case OMNIUIMODE_NOTEEDIT:
@@ -1418,6 +1436,9 @@ namespace FormOmni
         case OMNIUIMODE_LENGTH:
         break;
         case OMNIUIMODE_TRANSPOSE:
+        {
+            transpPat_.onKeyHeldUpdate(e, &seq_.transposePattern);
+        }
         break;
         case OMNIUIMODE_STEP:
         case OMNIUIMODE_NOTEEDIT:
@@ -1728,6 +1749,11 @@ namespace FormOmni
             // omxDisp.setLegend(3, "CC4", selStep->potVals[3] < 0, selStep->potVals[3]);
         }
             return false;
+        case OMNIPAGE_TPAT:
+        {
+            transpPat_.onDisplayUpdate(omniUiMode_ == OMNIUIMODE_TRANSPOSE ? &tPatParams_ : &trackParams_, &seq_.transposePattern, getEncoderSelect());
+        }
+            return false;
         }
 
         return false;
@@ -1751,16 +1777,11 @@ namespace FormOmni
             switch (selPage)
             {
             case OMNIPAGE_STEP1:
-                drawGeneric = drawPage(OMNIPAGE_STEP1, selParam);
-                break;
             case OMNIPAGE_STEPCONDITION:
-                drawGeneric = drawPage(OMNIPAGE_STEPCONDITION, selParam);
-                break;
             case OMNIPAGE_STEPNOTES:
-                drawGeneric = drawPage(OMNIPAGE_STEPNOTES, selParam);
-                break;
             case OMNIPAGE_STEPPOTS:
-                drawGeneric = drawPage(OMNIPAGE_STEPPOTS, selParam);
+            case OMNIPAGE_TPAT: // SendMidi, SendCV
+                drawGeneric = drawPage(selPage, selParam);
                 break;
             case OMNIPAGE_GBL1: // BPM
             {
@@ -1816,10 +1837,7 @@ namespace FormOmni
                 omxDisp.setLegend(1, "CV", seq_.sendCV ? "SEND" : "OFF");
             }
             break;
-            case OMNIPAGE_TPAT: // SendMidi, SendCV
-            {
-            }
-            break;
+            
             }
 
             if(drawGeneric)
@@ -1829,7 +1847,11 @@ namespace FormOmni
         }
         break;
         case OMNIUIMODE_TRANSPOSE:
-            break;
+        {
+            int8_t selParam = tPatParams_.getSelParam();
+            drawPage(OMNIPAGE_TPAT, selParam);
+        }
+        break;
         case OMNIUIMODE_STEP:
         case OMNIUIMODE_NOTEEDIT:
             omniNoteEditor.onDisplayUpdate(getTrack());

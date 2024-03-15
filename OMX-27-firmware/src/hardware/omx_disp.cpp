@@ -971,9 +971,7 @@ void OmxDisp::dispSlots(const char *slotNames[], uint8_t slotCount, uint8_t sele
 }
 void OmxDisp::dispCenteredSlots(const char *slotNames[], uint8_t slotCount, uint8_t selected, bool encoderSelect, bool showLabels, bool centerLabels, const char *labels[], uint8_t labelCount)
 {
-	u8g2_font_5x8_tf;
 	dispCenteredSlots(FONT_VALUES, slotNames, slotCount, selected, encoderSelect, showLabels, centerLabels, labels, labelCount);
-
 }
 
 void OmxDisp::dispCenteredSlots(const uint8_t *slotFont, const char *slotNames[], uint8_t slotCount, uint8_t selected, bool encoderSelect, bool showLabels, bool centerLabels, const char *labels[], uint8_t labelCount)

@@ -179,6 +179,22 @@ namespace FormOmni
         }
     };
 
+    struct TransposePattern
+    {
+        int8_t pat[16]; // second pattern for transposing notes
+        uint8_t len : 4;    // Length of transpose pattern
+
+        TransposePattern()
+        {
+            len = 15;
+
+            for (uint8_t i = 0; i < 16; i++)
+            {
+                pat[i] = 0;
+            }
+        }
+    };
+
     // Saved sequencer variables
     struct OmniSeq
     {
@@ -197,8 +213,7 @@ namespace FormOmni
         uint8_t potBank : 3;
         uint8_t potMode : 1;
 
-        int8_t transpPattern[16]; // second pattern for transposing notes
-        uint8_t transpLen : 4;    // Length of transpose pattern
+        TransposePattern transposePattern;
 
         OmniSeq()
         {
