@@ -32,6 +32,8 @@ namespace FormOmni
 
     const char* kUIModeMsg[] = {"CONFIG", "MIX", "LENGTH", "TRANSPOSE", "STEP", "NOTE EDIT"};
 
+    const char* kPotMode[] = {"CC Step", "CC Fade"};
+
     // kSeqRates[] = {1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64};
     // 1, 2, 3, 4, 8, 16, 32, 64
     const uint8_t kRateShortcuts[] = {0, 1, 2, 3, 6, 9, 12, 15};
@@ -94,7 +96,7 @@ namespace FormOmni
             trackParams_.addPage(4);  // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
             trackParams_.addPage(4);  // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
             trackParams_.addPage(7);  // OMNIPAGE_STEPNOTES,
-            trackParams_.addPage(5);  // OMNIPAGE_STEPPOTS,
+            trackParams_.addPage(7);  // OMNIPAGE_STEPPOTS,
             trackParams_.addPage(4);  // OMNIPAGE_GBL1, // BPM
             trackParams_.addPage(4);  // OMNIPAGE_1,    // Velocity, Channel, Rate, Gate
             trackParams_.addPage(4);  // OMNIPAGE_2,    // Transpose, TransposeMode
@@ -1518,7 +1520,19 @@ namespace FormOmni
         {
             auto selStep = getSelStep();
 
-            selStep->potVals[param] = constrain(selStep->potVals[param] + amtFast, -1, 127);
+            if(param == 5)
+            {
+                seq_.potMode = constrain(seq_.potMode + amtSlow, 0, 1);
+
+            }
+            else if(param == 6)
+            {
+                seq_.potBank = constrain(seq_.potBank + amtSlow, 0, NUM_CC_BANKS - 1);
+            }
+            else
+            {
+                selStep->potVals[param] = constrain(selStep->potVals[param] + amtFast, -1, 127);
+            }
         }
         break;
         case OMNIPAGE_GBL1:
@@ -1679,8 +1693,10 @@ namespace FormOmni
         case OMNIPAGE_STEPPOTS:
         {
             const char *labels[5];
-            const char *headers[1];
-            headers[0] = "CC Send Bank 1";
+            const char *headers[2];
+            headers[0] = kPotMode[seq_.potMode];
+            tempStrings[5] = "Bank " + String(seq_.potBank + 1);
+            headers[1] = tempStrings[5].c_str();
 
             auto step = getSelStep();
 
@@ -1699,7 +1715,7 @@ namespace FormOmni
                 }
             }
 
-            omxDisp.dispCenteredSlots(labels, 5, selParam, getEncoderSelect(), true, true, headers, 1);
+            omxDisp.dispCenteredSlots(labels, 5, selParam, getEncoderSelect(), true, true, headers, 2);
 
             // omxDisp.clearLegends();
 

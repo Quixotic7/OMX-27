@@ -194,6 +194,8 @@ namespace FormOmni
         uint8_t sendMidi : 1;      // bool
         uint8_t sendCV : 1;        // bool
         uint8_t gate : 7;          // 0-100 mapping to 0-200% for quick legato
+        uint8_t potBank : 3;
+        uint8_t potMode : 1;
 
         int8_t transpPattern[16]; // second pattern for transposing notes
         uint8_t transpLen : 4;    // Length of transpose pattern
