@@ -173,7 +173,7 @@ const char *noteNamesNoFormat[] = {
 	"B",
 };
 
-void MusicScales::calculateScaleIfModified(uint8_t scaleRoot, uint8_t scalePattern)
+void MusicScales::calculateScaleIfModified(uint8_t scaleRoot, int8_t scalePattern)
 {
 	if (scaleRoot == rootNote && scalePattern == scaleIndex)
 		return;
@@ -181,8 +181,26 @@ void MusicScales::calculateScaleIfModified(uint8_t scaleRoot, uint8_t scalePatte
 	calculateScale(scaleRoot, scalePattern);
 }
 
-void MusicScales::calculateScale(uint8_t scaleRoot, uint8_t scalePattern)
+void MusicScales::calculateScale(uint8_t scaleRoot, int8_t scalePattern)
 {
+	if (scalePattern < 0 || scalePattern >= getNumScales())
+	{
+		rootNote = scaleRoot;
+		scaleIndex = scalePattern;
+
+		// disabled
+		for (int n = 0; n < 12; n++)
+		{
+			scaleOffsets[n] = -1;
+			scaleDegrees[n] = -1;
+			scaleColors[n] = LEDOFF;
+		}
+
+		calculateRemap();
+
+		return;
+	}
+
 	if (scaleRoot != rootNote && scalePattern != scaleIndex)
 	{
 		scaleRemapCalculated_ = false;
@@ -298,6 +316,11 @@ bool MusicScales::isNoteInScale(int8_t noteNum)
 	if (!scaleCalculated || noteNum < 0 || noteNum > 127)
 	{
 		return false;
+	}
+
+	if(scaleIndex < 0)
+	{
+		return true;
 	}
 
 	int noteIndex = noteNum % 12;
@@ -583,10 +606,10 @@ const char *MusicScales::getFullNoteName(uint8_t noteNumber)
 	return tempFullNoteName.c_str();
 }
 
-const char *MusicScales::getScaleName(uint8_t scaleIndex)
+const char *MusicScales::getScaleName(int8_t scaleIndex)
 {
 	if (scaleIndex < 0 || scaleIndex >= getNumScales())
-		return "off";
+		return "OFF";
 	return scaleNames[scaleIndex];
 }
 
@@ -595,7 +618,9 @@ int MusicScales::getScaleLength()
 	return scaleLength;
 }
 
-const int8_t *MusicScales::getScalePattern(uint8_t patIndex)
+const int8_t *MusicScales::getScalePattern(int8_t patIndex)
 {
+	if (patIndex < 0 || patIndex >= getNumScales())
+		return nullptr;
 	return scalePatterns[patIndex];
 }

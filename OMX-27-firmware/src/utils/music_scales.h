@@ -13,8 +13,8 @@ public:
 	// const char* noteNames[];
 	// const int scalePatterns[][7];
 
-	void calculateScaleIfModified(uint8_t scaleRoot, uint8_t scalePattern);
-	void calculateScale(uint8_t scaleRoot, uint8_t scalePattern);
+	void calculateScaleIfModified(uint8_t scaleRoot, int8_t scalePattern);
+	void calculateScale(uint8_t scaleRoot, int8_t scalePattern);
 	static uint8_t getNumScales();
 	// int scaleLength;
 
@@ -38,8 +38,8 @@ public:
 
 	static const char *getNoteName(uint8_t noteIndex, bool removeSpaces = false);
 	static const char *getFullNoteName(uint8_t noteNumber);
-	static const char *getScaleName(uint8_t scaleIndex);
-	static const int8_t *getScalePattern(uint8_t patIndex);
+	static const char *getScaleName(int8_t scaleIndex);
+	static const int8_t *getScalePattern(int8_t patIndex);
 	int getScaleLength();
 
 private:
