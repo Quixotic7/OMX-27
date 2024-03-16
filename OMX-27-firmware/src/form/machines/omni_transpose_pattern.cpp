@@ -36,6 +36,11 @@ namespace FormOmni
         transpPos_ = 0;
     }
 
+    void OmniTransposePattern::advance(TransposePattern *tPat)
+    {
+        transpPos_ = (transpPos_ + 1) % (tPat->len + 1);
+    }
+
     void OmniTransposePattern::copyStep(uint8_t keyIndex, TransposePattern *tPat)
     {
         if(keyIndex < 0 || keyIndex >= 16) return;
@@ -60,6 +65,18 @@ namespace FormOmni
     bool OmniTransposePattern::getEncoderSelect()
     {
         return heldKey16_ < 0;
+    }
+
+    int8_t OmniTransposePattern::getCurrentTranspose(TransposePattern *tPat)
+    {
+        transpPos_ = transpPos_ % (tPat->len + 1);
+        return tPat->pat[transpPos_];
+    }
+
+    int8_t OmniTransposePattern::getTransposeAtStep(uint8_t step, TransposePattern *tPat)
+    {
+        uint8_t stepIndex = step % (tPat->len + 1);
+        return tPat->pat[stepIndex];
     }
 
     int16_t OmniTransposePattern::applyTranspPattern(int16_t noteNumber, TransposePattern *tPat)

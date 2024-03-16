@@ -30,6 +30,7 @@ public:
 
 	int8_t getNoteByDegree(uint8_t degree, int8_t octave);
 	static uint8_t getDegreeFromNote(uint8_t noteNumber, int8_t rootNote, int8_t scalePatIndex);
+	int8_t offsetNoteByInterval(int8_t noteNumber, int8_t interval);
 
 	// Returns a color for the note
 	int getScaleColor(uint8_t noteIndex);

@@ -53,18 +53,24 @@ namespace FormOmni
         STEPFUNC_COUNT
     };
 
-    struct StepPositions
+    // 96 pulse per quarter note
+    // 24 pules per 16th note`
+
+    // Data for a step that is not saved
+    struct StepDynamic
     {
-        uint8_t tPatPos : 4; // Position in transpose pattern, this gets added to the track position mod 16
+        uint8_t tPatPos : 4; // Position in transpose pattern for accumulating
+
+        StepDynamic()
+        {
+            ResetPositions();
+        }
 
         void ResetPositions()
         {
             tPatPos = 0;
         }
     };
-
-    // 96 pulse per quarter note
-    // 24 pules per 16th note
 
     struct Step
     {
@@ -140,6 +146,19 @@ namespace FormOmni
         }
     };
 
+    struct TrackDynamic
+    {
+        StepDynamic steps[64];
+
+        void Reset()
+        {
+            for (uint8_t i = 0; i < 64; i++)
+            {
+                steps[i].ResetPositions();
+            }
+        }
+    };
+
     struct Track
     {
         Step steps[64];
@@ -200,6 +219,19 @@ namespace FormOmni
         }
     };
 
+    struct OmniSeqDynamic
+    {
+        TrackDynamic tracks[1];
+
+        void Reset()
+        {
+            for(uint8_t i = 0; i < 1; i++)
+            {
+                tracks[i].Reset();
+            }
+        }
+    };
+
     // Saved sequencer variables
     struct OmniSeq
     {
@@ -214,6 +246,7 @@ namespace FormOmni
         uint8_t solo : 1;          // bool
         uint8_t sendMidi : 1;      // bool
         uint8_t sendCV : 1;        // bool
+        uint8_t applyTransPat : 1; // bool
         uint8_t gate : 7;          // 0-100 mapping to 0-200% for quick legato
         uint8_t potBank : 3;
         uint8_t potMode : 1;
@@ -229,6 +262,7 @@ namespace FormOmni
             monoPhonic = false;
             mute = false;
             solo = false;
+            applyTransPat = false;
             sendMidi = true;
             sendCV = true;
             gate = 40;

@@ -53,6 +53,7 @@ namespace FormOmni
 
     private:
         OmniSeq seq_;
+        OmniSeqDynamic seqDynamic_;
 
         uint8_t selStep_;
         bool stepHeld_;
@@ -79,6 +80,9 @@ namespace FormOmni
 
         Track *getTrack();
         Step *getSelStep();
+
+        TrackDynamic *getDynamicTrack();
+
         uint8_t key16toStep(uint8_t key16);
 
         void selStep(uint8_t stepIndex); // 0-15
@@ -144,7 +148,9 @@ namespace FormOmni
 
         MidiNoteGroup step2NoteGroup(uint8_t noteIndex, Step *step);
         bool evaluateTrig(uint8_t stepIndex, Step *step);
-        void triggerStep(Step *step);
+
+        int8_t applyTranspose(int noteNumber, Step *step, StepDynamic *stepDynamic);
+        void triggerStep(Step *step, StepDynamic *stepDynamic);
 
         // char foo[sizeof(PotPickupUtil)]
     };

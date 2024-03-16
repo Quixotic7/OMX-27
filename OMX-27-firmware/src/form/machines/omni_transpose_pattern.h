@@ -17,6 +17,11 @@ namespace FormOmni
         void reset();
         int16_t applyTranspPattern(int16_t noteNumber, TransposePattern *tPat);
 
+        void advance(TransposePattern *tPat);
+
+        int8_t getCurrentTranspose(TransposePattern *tPat);
+        int8_t getTransposeAtStep(uint8_t step, TransposePattern *tPat);
+
         void onUIEnabled();
 
         bool getEncoderSelect();

@@ -461,6 +461,56 @@ int MusicScales::getGroup16Note(uint8_t keyNum, int8_t octave)
 	return adjnote;
 }
 
+int8_t MusicScales::offsetNoteByInterval(int8_t noteNumber, int8_t interval)
+{
+	if (interval == 0)
+	{
+		return noteNumber;
+	}
+
+	int adjnote;
+
+	if (scaleIndex < 0)
+	{
+		// Chromatically offset in semitones
+		adjnote = noteNumber + interval;
+		// Serial.println("Chromatic note: " + String(adjnote));
+	}
+	else
+	{
+		auto scalePattern = getScalePattern(scaleIndex);
+
+		uint8_t len = max(scaleLength, 1);
+
+		int oct = abs(interval) / len;
+
+		if (interval > 0)
+		{
+			int pos = interval % len;
+
+			adjnote = noteNumber + (12 * oct) + scalePattern[pos];
+		}
+		else
+		{
+			int pos = interval % len;
+			if (pos == 0)
+			{
+				adjnote = noteNumber - (12 * oct);
+			}
+			else
+			{
+				pos = (len - pos) % len;
+				adjnote = noteNumber - (12 * (oct + 1)) + scalePattern[pos];
+			}
+		}
+	}
+
+	if (adjnote > 127 || adjnote < 0)
+		adjnote = -1;
+
+	return adjnote;
+}
+
 int8_t MusicScales::getNoteByDegree(uint8_t degree, int8_t octave)
 {
 	// degree should be less than 16

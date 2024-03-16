@@ -294,6 +294,7 @@ namespace FormOmni
         neighborPrevTrigWasTrue_ = false;
 
         transpPat_.reset();
+        seqDynamic_.Reset();
 
         if (omxFormGlobal.isPlaying)
         {
@@ -315,6 +316,11 @@ namespace FormOmni
     Track *FormMachineOmni::getTrack()
     {
         return &seq_.tracks[0];
+    }
+
+    TrackDynamic *FormMachineOmni::getDynamicTrack()
+    {
+        return &seqDynamic_.tracks[0];
     }
 
     Step *FormMachineOmni::getSelStep()
@@ -414,6 +420,7 @@ namespace FormOmni
             noteGroup.noteNumber = step->notes[noteIndex];
         }
         noteGroup.velocity = step->vel;
+        noteGroup.prevNoteNumber = noteGroup.noteNumber;
 
         // noteGroup.stepLength = getStepLenMult(step->len) * stepLengthMult_ * getGateMult(seq_.gate);
 
@@ -501,7 +508,45 @@ namespace FormOmni
         return true;
     }
 
-    void FormMachineOmni::triggerStep(Step *step)
+    int8_t FormMachineOmni::applyTranspose(int noteNumber, Step *step, StepDynamic *stepDynamic)
+    {
+        // Apply global transpose
+        int intervalMod = seq_.transpose;
+
+        // Apply transpose pattern
+        if (seq_.applyTransPat == 1)
+        {
+            int8_t transp = transpPat_.getCurrentTranspose(&seq_.transposePattern);
+
+            intervalMod = intervalMod + transp;
+        }
+
+        // Apply step transpose
+        if (step->accumTPat > 0)
+        {
+            int8_t stepTransp = transpPat_.getTransposeAtStep(stepDynamic->tPatPos, &seq_.transposePattern);
+
+            intervalMod = intervalMod + stepTransp;
+        }
+
+        if (seq_.transposeMode == TRANPOSEMODE_SEMITONE || scaleConfig.scalePattern < 0)
+        {
+            noteNumber = noteNumber + intervalMod;
+        }
+        else if (seq_.transposeMode == TRANPOSEMODE_INTERVAL)
+        {
+            noteNumber = omxFormGlobal.musicScale->offsetNoteByInterval(noteNumber, intervalMod);
+        }
+
+        if(noteNumber < 0 || noteNumber > 127)
+        {
+            return -1;
+        }
+
+        return noteNumber;
+    }
+
+    void FormMachineOmni::triggerStep(Step *step, StepDynamic *stepDynamic)
     {
         if(context_ == nullptr || noteOnFuncPtr == nullptr)
             return;
@@ -518,7 +563,14 @@ namespace FormOmni
             {
                 // Serial.println("triggerStep: " + String(noteNumber));
 
+                noteNumber = applyTranspose(noteNumber, step, stepDynamic);
+
+                if (noteNumber < 0)
+                    continue;
+
                 auto noteGroup = step2NoteGroup(i, step);
+                noteGroup.noteNumber = noteNumber;
+                noteGroup.prevNoteNumber = noteNumber;
 
                 bool noteTriggeredOnSameStep = false; 
 
@@ -531,7 +583,7 @@ namespace FormOmni
                     if(n.noteNumber == noteNumber)
                     {
                         noteTriggeredOnSameStep = true;
-                        break;
+                        continue;
                     }
                 }
 
@@ -565,6 +617,9 @@ namespace FormOmni
                 }
             }
         }
+
+        // Increment steps tPat position
+        stepDynamic->tPatPos = (stepDynamic->tPatPos + step->accumTPat) % (seq_.transposePattern.len + 1);
     }
 
     void FormMachineOmni::onEnabled()
@@ -980,7 +1035,10 @@ namespace FormOmni
 
             if(evaluateTrig(playingStep_, currentStep))
             {
-                triggerStep(currentStep);
+                auto trackDynamic = getDynamicTrack();
+                auto dynamicStep = &trackDynamic->steps[playingStep_];
+
+                triggerStep(currentStep, dynamicStep);
                 lastTriggeredStepState_ = true;
             }
             else
@@ -1079,6 +1137,9 @@ namespace FormOmni
 
             // always counts forward
             grooveCounter_ = (grooveCounter_ + 1) % 16;
+
+            // Advance transpose pattern
+            transpPat_.advance(&seq_.transposePattern);
 
             loopCounter_ = (loopCounter_ + 1) % track->getLength();
             if(loopCounter_ == 0)
