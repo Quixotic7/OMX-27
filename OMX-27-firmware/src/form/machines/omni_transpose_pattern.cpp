@@ -171,7 +171,7 @@ namespace FormOmni
             return;
 
         int thisKey = e.key();
-        auto param = params->getSelParam();
+        // auto param = params->getSelParam();
 
         uint8_t shortcutMode = getShortcutMode();
 
