@@ -309,24 +309,52 @@ void OmxModeMidiKeyboard::onEncoderChanged(Encoder::Update enc)
 				musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
 			}
 		}
-		if (selParam == 2)
-		{
-			int prevPat = scaleConfig.scalePattern;
-			scaleConfig.scalePattern = constrain(scaleConfig.scalePattern + amt, -1, musicScale->getNumScales() - 1);
-			if (prevPat != scaleConfig.scalePattern)
+if (selParam == 2)
+{
+	int prevPat = scaleConfig.scalePattern;
+	scaleConfig.scalePattern = constrain(scaleConfig.scalePattern + amt, -1, musicScale->getNumScales() - 1);
+
+	if (prevPat != scaleConfig.scalePattern)
+	{
+		omxDisp.displayMessage(musicScale->getScaleName(scaleConfig.scalePattern));
+		musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
+
+		if (scaleConfig.scalePattern < 0)
+		{ 
+			// record locked and grouped states, then set the current lockScale and group16 to off
+			if (prevPat >= 0)
 			{
-				omxDisp.displayMessage(musicScale->getScaleName(scaleConfig.scalePattern));
-				musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
+				scaleConfig.lockedState = scaleConfig.lockScale;
+				scaleConfig.group16state = scaleConfig.group16;
+			}
+			scaleConfig.lockScale = false;
+			scaleConfig.group16 = false;
+		}
+		else
+		{ 
+			// restore locked and grouped states if the scale was previously set to off
+			if (prevPat < 0)
+			{
+				scaleConfig.lockScale = scaleConfig.lockedState;
+				scaleConfig.group16 = scaleConfig.group16state;
 			}
 		}
-		if (selParam == 3)
-		{
-			scaleConfig.lockScale = constrain(scaleConfig.lockScale + amt, 0, 1);
-		}
-		if (selParam == 4)
-		{
-			scaleConfig.group16 = constrain(scaleConfig.group16 + amt, 0, 1);
-		}
+	}
+}
+if (selParam == 3)
+{
+	if (scaleConfig.scalePattern >= 0)
+	{
+		scaleConfig.lockScale = constrain(scaleConfig.lockScale + amt, 0, 1);
+	}
+}
+if (selParam == 4)
+{
+	if (scaleConfig.scalePattern >= 0)
+	{
+		scaleConfig.group16 = constrain(scaleConfig.group16 + amt, 0, 1);
+	}
+}
 	}
 	else if(selPage == MIPAGE_CFG)
 	{
