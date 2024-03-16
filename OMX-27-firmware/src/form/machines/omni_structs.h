@@ -186,6 +186,11 @@ namespace FormOmni
 
         TransposePattern()
         {
+            Reinit();
+        }
+
+        void Reinit()
+        {
             len = 15;
 
             for (uint8_t i = 0; i < 16; i++)

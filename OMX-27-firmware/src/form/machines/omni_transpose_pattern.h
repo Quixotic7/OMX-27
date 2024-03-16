@@ -17,6 +17,11 @@ namespace FormOmni
         void reset();
         int16_t applyTranspPattern(int16_t noteNumber, TransposePattern *tPat);
 
+        void onUIEnabled();
+
+        bool getEncoderSelect();
+        void loopUpdate();
+
         void updateLEDs(ParamManager *params, TransposePattern *tPat);
         void onKeyUpdate(OMXKeypadEvent e, ParamManager *params, TransposePattern *tPat);
         void onKeyHeldUpdate(OMXKeypadEvent e, TransposePattern *tPat);
@@ -29,8 +34,22 @@ namespace FormOmni
 		uint8_t transpPos_ : 5;
 		int8_t heldKey16_ : 5; // Key that is held
 
+        uint8_t patShortcut_;
+
 		int8_t transpCopyBuffer_;
 
-        bool funcKeyModLength_ = false;
+		String headerMessage_;
+
+		int messageTextTimer = 0;
+
+        // bool funcKeyModLength_ = false;
+
+        uint8_t getShortcutMode();
+
+        void showMessage();
+
+        void copyStep(uint8_t keyIndex, TransposePattern *tPat);
+        void cutStep(uint8_t keyIndex, TransposePattern *tPat);
+        void pasteStep(uint8_t keyIndex, TransposePattern *tPat);
     };
 }

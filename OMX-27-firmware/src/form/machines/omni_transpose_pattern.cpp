@@ -8,31 +8,58 @@
 
 namespace FormOmni
 {
-    enum NoteEditorPage
+    enum TPatShortcut
     {
-        NEDITPAGE_1, // BPM
-        OMNIPAGE_COUNT
+        TPATSHORT_NONE,
+        TPATSHORT_RAND,
+        TPATSHORT_HELDSTEP
     };
-
-    const int stepOnRootColor = 0xA2A2FF;
-    const int stepOnScaleColor = 0x000090;
-
-    const int stepOffRootColor = RED;
-    const int stepOffScaleColor = DKRED;
 
     OmniTransposePattern::OmniTransposePattern()
     {
         heldKey16_ = -1;
-
     }
 
     OmniTransposePattern::~OmniTransposePattern()
     {
     }
 
+    void OmniTransposePattern::onUIEnabled()
+    {
+        heldKey16_ = -1;
+        patShortcut_ = TPATSHORT_NONE;
+        messageTextTimer = 0;
+    }
+
     void OmniTransposePattern::reset()
     {
         transpPos_ = 0;
+    }
+
+    void OmniTransposePattern::copyStep(uint8_t keyIndex, TransposePattern *tPat)
+    {
+        if(keyIndex < 0 || keyIndex >= 16) return;
+
+        transpCopyBuffer_ = tPat->pat[keyIndex];
+    }
+    void OmniTransposePattern::cutStep(uint8_t keyIndex, TransposePattern *tPat)
+    {
+        if(keyIndex < 0 || keyIndex >= 16) return;
+
+        copyStep(keyIndex, tPat);
+        tPat->pat[keyIndex] = 0;
+    }
+    void OmniTransposePattern::pasteStep(uint8_t keyIndex, TransposePattern *tPat)
+    {
+        if (keyIndex < 0 || keyIndex >= 16)
+            return;
+
+        tPat->pat[keyIndex] = transpCopyBuffer_;
+    }
+
+    bool OmniTransposePattern::getEncoderSelect()
+    {
+        return heldKey16_ < 0;
     }
 
     int16_t OmniTransposePattern::applyTranspPattern(int16_t noteNumber, TransposePattern *tPat)
@@ -50,13 +77,31 @@ namespace FormOmni
         // auto page = params->getSelPage();
         auto param = params->getSelParam();
 
-        if (heldKey16_ < 0)
+        uint8_t shortcutMode = getShortcutMode();
+
+        // if(omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE && patShortcut_ == TPATSHORT_NONE || patShortcut_ == TPATSHORT_NONE)
+        // {
+
+        // }
+        // if(omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE && patShortcut_ == TPATSHORT_HELDSTEP)
+        // {
+
+        // }
+        // if(omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE && patShortcut_ == TPATSHORT_NONE)
+        // {
+
+        // }
+
+        if (patShortcut_ != TPATSHORT_HELDSTEP)
         {
-            auto modLengthColor = (funcKeyModLength_ && blinkState) ? LEDOFF : FUNKONE;
-            strip.setPixelColor(3, modLengthColor);
+            auto randShortColor = (patShortcut_ == TPATSHORT_RAND && blinkState) ? LEDOFF : FUNKONE;
+            strip.setPixelColor(3, randShortColor);
+
+            // Clear pattern
+            strip.setPixelColor(10, RED);
 
             // Function Keys
-            if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
+            if (shortcutMode == FORMSHORTCUT_F3)
             {
                 auto f3Color = blinkState ? LEDOFF : FUNKTHREE;
                 strip.setPixelColor(1, f3Color);
@@ -64,14 +109,14 @@ namespace FormOmni
             }
             else
             {
-                auto f1Color = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && blinkState) ? LEDOFF : FUNKONE;
+                auto f1Color = (shortcutMode == FORMSHORTCUT_F1 && blinkState) ? LEDOFF : FUNKONE;
                 strip.setPixelColor(1, f1Color);
 
-                auto f2Color = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && blinkState) ? LEDOFF : FUNKTWO;
+                auto f2Color = (shortcutMode == FORMSHORTCUT_F2 && blinkState) ? LEDOFF : FUNKTWO;
                 strip.setPixelColor(2, f2Color);
             }
         }
-        else // Key 16 is held, quick change value
+        else if(patShortcut_ == TPATSHORT_HELDSTEP)// Key 16 is held, quick change value
         {
             const uint32_t vcolor = 0x101010;
             const uint32_t vcolor2 = 0xD0D0D0;
@@ -128,139 +173,253 @@ namespace FormOmni
         int thisKey = e.key();
         auto param = params->getSelParam();
 
-        if (e.down() && heldKey16_ < 0 && thisKey == 3)
-        {
-            funcKeyModLength_ = true;
-        }
+        uint8_t shortcutMode = getShortcutMode();
 
-        if (!e.down() && thisKey == 3)
+        // Update the shortcuts
+        switch (shortcutMode)
         {
-            funcKeyModLength_ = false;
-        }
-
-        if (omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE || heldKey16_ >= 0)
+        case FORMSHORTCUT_NONE:
         {
-            if (e.down())
+            switch (patShortcut_)
+            {
+            case TPATSHORT_NONE:
+                if (e.down() && thisKey == 3)
+                {
+                    patShortcut_ = TPATSHORT_RAND;
+                }
+                else if (thisKey == 10)
+                {
+                    tPat->Reinit();
+                    headerMessage_ = "Clear Pat";
+                    showMessage();
+                }
+                if (e.down() && thisKey >= 11)
+                {
+                    params->setSelParam(thisKey - 11);
+                    heldKey16_ = thisKey - 11;
+                    patShortcut_ = TPATSHORT_HELDSTEP;
+                }
+                break;
+            case TPATSHORT_RAND:
+            {
+                if (e.down() && thisKey >= 11)
+                {
+                    tPat->pat[thisKey - 11] = rand() % 12;
+                    params->setSelParam(thisKey - 11);
+                    heldKey16_ = thisKey - 11;
+                }
+                if (!e.down() && thisKey == 3)
+                    patShortcut_ = TPATSHORT_NONE;
+            }
+            break;
+            case TPATSHORT_HELDSTEP:
             {
                 // Select the transpose value while key is held
                 if (heldKey16_ >= 0 && thisKey > 0 && thisKey < 11)
                 {
                     tPat->pat[heldKey16_] = thisKey - 1;
-                    transpCopyBuffer_ = thisKey - 1;
                 }
-                // Select step
-                if (thisKey >= 11)
+                else if (e.down() && thisKey >= 11)
                 {
-                    if (param == 16 || funcKeyModLength_)
-                    {
-                        tPat->len = thisKey - 11;
-
-                        heldKey16_ = -1;
-                    }
-                    else
-                    {
-                        transpCopyBuffer_ = tPat->pat[thisKey - 11];
-
-                        params->setSelParam(thisKey - 11);
-                        heldKey16_ = thisKey - 11;
-                    }
+                    params->setSelParam(thisKey - 11);
+                    heldKey16_ = thisKey - 11;
                 }
-            }
-            else
-            {
-                if (thisKey >= 11 && thisKey - 11 == heldKey16_)
+                else if (!e.down() && thisKey >= 11 && thisKey - 11 == heldKey16_)
                 {
+                    patShortcut_ = TPATSHORT_NONE;
                     heldKey16_ = -1;
                 }
             }
+            break;
+            }
+
+            if (!e.down() && thisKey >= 11 && thisKey - 11 == heldKey16_)
+            {
+                heldKey16_ = -1;
+            }
         }
-        else if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
+        break;
+        case FORMSHORTCUT_F1:
+        case FORMSHORTCUT_F2:
+        case FORMSHORTCUT_F3:
+        {
+            heldKey16_ = -1;
+            patShortcut_ = TPATSHORT_NONE;
+        }
+        break;
+        }
+        
+        if (shortcutMode == FORMSHORTCUT_F1)
         {
             if (e.down())
             {
                 if (thisKey >= 11)
                 {
-                    tPat->pat[thisKey - 11] = 0;
-                    transpCopyBuffer_ = 0;
+                    // Copy then paste
+                    if (omxFormGlobal.shortcutPaste == false)
+                    {
+                        copyStep(thisKey - 11, tPat);
+                        omxFormGlobal.shortcutPaste = true;
+                        // headerMessage_ = "Copied: " + String(thisKey - 11 + 1);
+                    }
+                    else
+                    {
+                        pasteStep(thisKey - 11, tPat);
+                        // headerMessage_ = "Pasted: " + String(thisKey - 11 + 1);
+                    }
+
+
+                    // tPat->pat[thisKey - 11] = 0;
+                    // transpCopyBuffer_ = 0;
 
                     params->setSelParam(thisKey - 11);
 
-                    omxDisp.displayMessage("Reset: " + String(thisKey - 11 + 1));
+                    // headerMessage_ = "Reset: " + String(thisKey - 11 + 1);
+                    // showMessage();
                 }
             }
         }
-        else if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
+        else if (shortcutMode == FORMSHORTCUT_F2)
         {
             if (e.down())
             {
+                // Cut then paste
                 if (thisKey >= 11)
                 {
-                    tPat->pat[thisKey - 11] = transpCopyBuffer_;
+                    if (omxFormGlobal.shortcutPaste == false)
+                    {
+                        cutStep(thisKey - 11, tPat);
+                        omxFormGlobal.shortcutPaste = true;
+                        // headerMessage_ = "Cut: " + String(thisKey - 11 + 1);
+                    }
+                    else
+                    {
+                        pasteStep(thisKey - 11, tPat);
+                        // headerMessage_ = "Pasted: " + String(thisKey - 11 + 1);
+                    }
+
+                    // tPat->pat[thisKey - 11] = transpCopyBuffer_;
 
                     params->setSelParam(thisKey - 11);
 
-                    omxDisp.displayMessage("Pasted: " + String(thisKey - 11 + 1));
+                    // headerMessage_ = "Pasted: " + String(thisKey - 11 + 1);
+                    // showMessage();
                 }
             }
         }
-        else if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
+        else if (shortcutMode == FORMSHORTCUT_F3)
         {
             if (e.down())
             {
+                // Set length
                 if (thisKey >= 11)
                 {
-                    transpCopyBuffer_ = rand() % 12;
-                    tPat->pat[thisKey - 11] = transpCopyBuffer_;
+                    tPat->len = thisKey - 11;
+                    heldKey16_ = -1;
 
-                    params->setSelParam(thisKey - 11);
-
-                    omxDisp.displayMessage("Random: " + String(thisKey - 11 + 1));
+                    headerMessage_ = "Length: " + String(tPat->len + 1);
+                    showMessage();
                 }
             }
         }
+        // else if (shortcutMode == FORMSHORTCUT_F3)
+        // {
+        //     if (e.down())
+        //     {
+        //         // Set length
+        //         if (thisKey >= 11)
+        //         {
+        //             tPat->len = thisKey - 11;
+        //             heldKey16_ = -1;
+
+        //             // transpCopyBuffer_ = rand() % 12;
+        //             // tPat->pat[thisKey - 11] = transpCopyBuffer_;
+
+        //             // params->setSelParam(thisKey - 11);
+
+        //             headerMessage_ = "Legnth: " + String(tPat->len + 1);
+        //             showMessage();
+        //         }
+        //     }
+        // }
     }
 
     void OmniTransposePattern::onKeyHeldUpdate(OMXKeypadEvent e, TransposePattern *tPat)
     {
     }
+
+    void OmniTransposePattern::loopUpdate()
+    {
+        if (messageTextTimer > 0)
+        {
+            messageTextTimer -= sysSettings.timeElasped;
+            if (messageTextTimer <= 0)
+            {
+                omxDisp.setDirty();
+                omxLeds.setDirty();
+                messageTextTimer = 0;
+            }
+        }
+    }
+
+    uint8_t OmniTransposePattern::getShortcutMode()
+    {
+        uint8_t shortcutMode = omxFormGlobal.shortcutMode;
+
+        // don't switch shortcut while holding step
+        if (patShortcut_ == TPATSHORT_HELDSTEP)
+        {
+            shortcutMode = FORMSHORTCUT_NONE;
+        }
+
+        return shortcutMode;
+    }
+
+    void OmniTransposePattern::showMessage()
+    {
+        const uint8_t secs = 5;
+        messageTextTimer = secs * 100000;
+        omxDisp.setDirty();
+    }
+
     void OmniTransposePattern::onDisplayUpdate(ParamManager *params, TransposePattern *tPat, bool encoderSelect)
     {
         bool useLabelHeader = false;
 
-        // if (messageTextTimer > 0)
-        // {
-        //     tempStrings[0] = headerMessage_;
-        //     useLabelHeader = true;
-        // }
-
-        if (!useLabelHeader && omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE)
+        if (messageTextTimer > 0)
         {
-            if (funcKeyModLength_)
-            {
-                useLabelHeader = true;
-
-                tempStrings[0] = "Set Length";
-            }
+            tempStrings[0] = headerMessage_;
+            useLabelHeader = true;
         }
 
-        if (!useLabelHeader && omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
-        {
-            useLabelHeader = true;
+        uint8_t shortcutMode = getShortcutMode();
 
-            if (omxFormGlobal.shortcutMode  == FORMSHORTCUT_F1)
+        if (!useLabelHeader)
+        {
+            if (shortcutMode == FORMSHORTCUT_NONE && patShortcut_ == TPATSHORT_RAND)
             {
-                tempStrings[0] = "Reset";
-                // omxDisp.dispGenericModeLabel("Reset", params_.getNumPages(), params_.getSelPage());
-            }
-            else if (omxFormGlobal.shortcutMode  == FORMSHORTCUT_F2)
-            {
-                tempStrings[0] = "Paste";
-                // omxDisp.dispGenericModeLabel("Paste", params_.getNumPages(), params_.getSelPage());
-            }
-            else if (omxFormGlobal.shortcutMode  == FORMSHORTCUT_F3)
-            {
+                useLabelHeader = true;
                 tempStrings[0] = "Random";
-                // omxDisp.dispGenericModeLabel("Random", params_.getNumPages(), params_.getSelPage());
+            }
+            // else if (shortcutMode == FORMSHORTCUT_NONE && patShortcut_ == TPATSHORT_HELDSTEP)
+            // {
+            //     useLabelHeader = true;
+            //     tempStrings[0] = "Transpose";
+            // }
+            else if (shortcutMode == FORMSHORTCUT_F1)
+            {
+                useLabelHeader = true;
+                tempStrings[0] = omxFormGlobal.shortcutPaste ? "Paste" : "Copy";
+            }
+            else if (shortcutMode == FORMSHORTCUT_F2)
+            {
+                useLabelHeader = true;
+                tempStrings[0] = omxFormGlobal.shortcutPaste ? "Paste" : "Cut";
+            }
+            else if (shortcutMode == FORMSHORTCUT_F3)
+            {
+                useLabelHeader = true;
+                tempStrings[0] = "Set Length";
             }
         }
 
@@ -299,6 +458,7 @@ namespace FormOmni
     void OmniTransposePattern::onEncoderChangedSelectParam(Encoder::Update enc, TransposePattern *tPat)
     {
     }
+
     void OmniTransposePattern::onEncoderChangedEditParam(Encoder::Update enc, uint8_t selParam, TransposePattern *tPat)
     {
         int8_t amt = enc.accel(1);

@@ -226,7 +226,14 @@ namespace FormOmni
 
     bool FormMachineOmni::getEncoderSelect()
     {
-	    return omxFormGlobal.encoderSelect && !midiSettings.midiAUX && !stepHeld_;
+        bool shouldSelect = omxFormGlobal.encoderSelect;
+
+        if(omniUiMode_ == OMNIUIMODE_TRANSPOSE)
+        {
+            shouldSelect = transpPat_.getEncoderSelect();
+        }
+
+	    return omxFormGlobal.encoderSelect && !midiSettings.midiAUX && !stepHeld_ && shouldSelect;
     }
 
     void FormMachineOmni::setTest()
@@ -283,6 +290,8 @@ namespace FormOmni
         firstLoop_ = true;
         prevCondWasTrue_ = false;
         neighborPrevTrigWasTrue_ = false;
+
+        transpPat_.reset();
 
         if (omxFormGlobal.isPlaying)
         {
@@ -604,6 +613,7 @@ namespace FormOmni
                     // omxDisp.displayMessage("Step 1");
                     break;
                 case OMNIPAGE_TPAT:
+                    transpPat_.onUIEnabled();
                     // omxDisp.displayMessage("Step 1");
                     break;
                 }
@@ -714,6 +724,10 @@ namespace FormOmni
 
     void FormMachineOmni::onUIModeChanged(uint8_t prevMode, uint8_t newMode)
     {
+        if(newMode == OMNIUIMODE_TRANSPOSE)
+        {
+            transpPat_.onUIEnabled();
+        }
         // Tell Note editor it's been started for step mode
     }
 
@@ -1208,7 +1222,9 @@ namespace FormOmni
 
     void FormMachineOmni::loopUpdate()
     {
+        transpPat_.loopUpdate();
     }
+
     bool FormMachineOmni::updateLEDs()
     {
         switch (omniUiMode_)

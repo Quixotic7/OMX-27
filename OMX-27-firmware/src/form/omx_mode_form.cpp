@@ -426,6 +426,11 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 		}
 	}
 
+	for(auto machine : machines_)
+	{
+		machine->loopUpdate();
+	}
+
 	// Serial.println("LoopUpdate complete");
 }
 
