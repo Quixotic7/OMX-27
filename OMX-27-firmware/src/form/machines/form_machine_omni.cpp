@@ -105,6 +105,8 @@ namespace FormOmni
             trackParams_.addPage(17); // OMNIPAGE_TPAT, // SendMidi, SendCV
 
             tPatParams_.addPage(17);
+
+            paramsInit_ = true;
         }
 
         resetPlayback();
