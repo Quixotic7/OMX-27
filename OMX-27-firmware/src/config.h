@@ -391,6 +391,8 @@ extern const char *mfxPassthroughEditMsg;
 extern const char *exitMsg;
 extern const char *paramOffMsg;
 extern const char *paramOnMsg;
+extern const char *bool2lightswitchMsg[];
+extern const char *bool2Msg[];
 
 extern const char *modes[];
 extern const char *macromodes[];

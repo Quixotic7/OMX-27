@@ -34,6 +34,10 @@ namespace FormOmni
 
     const char* kPotMode[] = {"CC Step", "CC Fade"};
 
+    const char* kTranspModeMsg[] = {"GINT", "SEMI", "LINT"};
+    const char* kTranspModeLongMsg[] = {"GBL INTERVAL", "SEMITONES", "LOCAL INTERVAL"};
+
+
     // kSeqRates[] = {1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64};
     // 1, 2, 3, 4, 8, 16, 32, 64
     const uint8_t kRateShortcuts[] = {0, 1, 2, 3, 6, 9, 12, 15};
@@ -535,6 +539,10 @@ namespace FormOmni
         }
         else if (seq_.transposeMode == TRANPOSEMODE_INTERVAL)
         {
+            noteNumber = omxFormGlobal.musicScale->offsetNoteByIntervalInScale(noteNumber, intervalMod);
+        }
+        else if (seq_.transposeMode == TRANPOSEMODE_LOCALINTERVAL)
+        {
             noteNumber = omxFormGlobal.musicScale->offsetNoteByInterval(noteNumber, intervalMod);
         }
 
@@ -641,40 +649,51 @@ namespace FormOmni
 
             trackParams_.changeParam(enc.dir());
 
-            if (trackParams_.getSelPage() != prevPage)
+            int8_t newPage = trackParams_.getSelPage();
+
+            if(prevPage == OMNIPAGE_STEPPOTS && newPage == OMNIPAGE_GBL1)
             {
-                switch (trackParams_.getSelPage())
-                {
-                case OMNIPAGE_STEP1:
-                    omxDisp.displayMessage("Step 1");
-                    break;
-                case OMNIPAGE_STEPCONDITION:
-                    omxDisp.displayMessage("Step Cond");
-                    break;
-                case OMNIPAGE_STEPNOTES:
-                    omxDisp.displayMessage("Step Notes");
-                    break;
-                case OMNIPAGE_STEPPOTS:
-                    omxDisp.displayMessage("Step Pots");
-                    break;
-                case OMNIPAGE_GBL1:
-                    omxDisp.displayMessage("Track 1");
-                    break;
-                case OMNIPAGE_1:
-                    // omxDisp.displayMessage("Step 1");
-                    break;
-                case OMNIPAGE_2:
-                    // omxDisp.displayMessage("Step 1");
-                    break;
-                case OMNIPAGE_3:
-                    // omxDisp.displayMessage("Step 1");
-                    break;
-                case OMNIPAGE_TPAT:
-                    transpPat_.onUIEnabled();
-                    // omxDisp.displayMessage("Step 1");
-                    break;
-                }
+                omxDisp.displayMessage("Step Params");
             }
+            else if(prevPage == OMNIPAGE_GBL1 && newPage == OMNIPAGE_STEPPOTS)
+            {
+                omxDisp.displayMessage("Track Params");
+            }
+
+            // if (trackParams_.getSelPage() != prevPage)
+            // {
+            //     switch (trackParams_.getSelPage())
+            //     {
+            //     case OMNIPAGE_STEP1:
+            //         omxDisp.displayMessage("Step 1");
+            //         break;
+            //     case OMNIPAGE_STEPCONDITION:
+            //         omxDisp.displayMessage("Step Cond");
+            //         break;
+            //     case OMNIPAGE_STEPNOTES:
+            //         omxDisp.displayMessage("Step Notes");
+            //         break;
+            //     case OMNIPAGE_STEPPOTS:
+            //         omxDisp.displayMessage("Step Pots");
+            //         break;
+            //     case OMNIPAGE_GBL1:
+            //         omxDisp.displayMessage("Track 1");
+            //         break;
+            //     case OMNIPAGE_1:
+            //         // omxDisp.displayMessage("Step 1");
+            //         break;
+            //     case OMNIPAGE_2:
+            //         // omxDisp.displayMessage("Step 1");
+            //         break;
+            //     case OMNIPAGE_3:
+            //         // omxDisp.displayMessage("Step 1");
+            //         break;
+            //     case OMNIPAGE_TPAT:
+            //         transpPat_.onUIEnabled();
+            //         // omxDisp.displayMessage("Step 1");
+            //         break;
+            //     }
+            // }
         }
         break;
         case OMNIUIMODE_TRANSPOSE:
@@ -1686,7 +1705,9 @@ namespace FormOmni
             }
             else if (param == 1)
             {
-                seq_.transposeMode = constrain(seq_.transposeMode + amtSlow, 0, 1);
+                seq_.transposeMode = constrain(seq_.transposeMode + amtSlow, 0, TRANPOSEMODE_COUNT - 1);
+
+				omxDisp.displayMessage(kTranspModeLongMsg[seq_.transposeMode]);
             }
             else if (param == 2)
             {
@@ -1906,14 +1927,14 @@ namespace FormOmni
                 auto track = getTrack();
 
                 omxDisp.setLegend(0, "TPOS", 100);
-                omxDisp.setLegend(1, "TYPE", seq_.transposeMode == 0 ? "INTR" : "SEMI");
-                omxDisp.setLegend(2, "TRIP", track->tripletMode == 0 ? "OFF" : "ON");
+                omxDisp.setLegend(1, "TYPE", kTranspModeMsg[seq_.transposeMode]);
+                omxDisp.setLegend(2, "TRIP", bool2lightswitchMsg[track->tripletMode]);
             }
             break;
             case OMNIPAGE_3: // SendMidi, SendCV
             {
-                omxDisp.setLegend(0, "MIDI", seq_.sendMidi ? "SEND" : "OFF");
-                omxDisp.setLegend(1, "CV", seq_.sendCV ? "SEND" : "OFF");
+                omxDisp.setLegend(0, "MIDI", seq_.sendMidi ? "SEND" : paramOffMsg);
+                omxDisp.setLegend(1, "CV", seq_.sendCV ? "SEND" : paramOffMsg);
             }
             break;
             

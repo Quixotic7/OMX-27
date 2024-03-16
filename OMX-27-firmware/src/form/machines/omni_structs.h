@@ -6,8 +6,9 @@ namespace FormOmni
 
     enum TransposeMode
     {
-        TRANPOSEMODE_INTERVAL, // Transpose patterns and values are in intervals of current scale
-        TRANPOSEMODE_SEMITONE, // Transpose patterns and values are in semitones
+        TRANPOSEMODE_INTERVAL,      // Transpose patterns and values are in intervals of current scale and root
+        TRANPOSEMODE_SEMITONE,      // Transpose patterns and values are in semitones
+        TRANPOSEMODE_LOCALINTERVAL,  // Transpose patterns and values are in intervals of current scale, the step note is the root
         TRANPOSEMODE_COUNT
     };
 
@@ -239,7 +240,7 @@ namespace FormOmni
 
         int8_t transpose : 8; // +- 64, in intervals or semitones depending on transposeMode
         uint8_t rate : 5;
-        uint8_t transposeMode : 1; // Max 1, Intervals or semitones
+        uint8_t transposeMode : 2; // Max 2, Intervals, semitones, or step intervals
         uint8_t channel : 4;       // 0 - 15 , maps to channels 1 - 16
         uint8_t monoPhonic : 1;    // bool
         uint8_t mute : 1;          // bool

@@ -30,7 +30,14 @@ public:
 
 	int8_t getNoteByDegree(uint8_t degree, int8_t octave);
 	static uint8_t getDegreeFromNote(uint8_t noteNumber, int8_t rootNote, int8_t scalePatIndex);
+
+	// Uses scale pattern from the noteNumber to offset the note by an interval
+	// So the noteNumber becomes the scale root note
 	int8_t offsetNoteByInterval(int8_t noteNumber, int8_t interval);
+
+	// Offsets by interval, locking to current scale and root note
+	int8_t offsetNoteByIntervalInScale(int8_t noteNumber, int8_t interval);
+
 
 	// Returns a color for the note
 	int getScaleColor(uint8_t noteIndex);
