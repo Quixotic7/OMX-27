@@ -4,6 +4,9 @@
 const OMXMode DEFAULT_MODE = MODE_MIDI;
 const uint8_t EEPROM_VERSION = 37;
 
+const char* VERSION_STRING = "ALPHA";
+
+
 // v30 - adds storage to header for velocity
 // v31 - adds storage for drums
 // v32 - adds mfx chord saves

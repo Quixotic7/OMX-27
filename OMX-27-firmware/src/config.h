@@ -19,7 +19,7 @@
 const int MAJOR_VERSION = 1;
 const int MINOR_VERSION = 14;
 const int POINT_VERSION = 1;
-const char* VERSION_STRING = "ALPHA";
+extern const char* VERSION_STRING;
 
 // 1.13.2 - Adds CV Trigger modes for legato and regtrig
 // 1.13.3 - Bugfix for CV Trigger modes
