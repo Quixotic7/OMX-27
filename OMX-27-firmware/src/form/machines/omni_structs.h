@@ -81,7 +81,7 @@ namespace FormOmni
         uint8_t vel : 7;       // 0 - 127
         int8_t nudge : 7;      // Nudge note back or forward. Range is +- 60, displayed as -100% to +100%, , displ
         uint8_t len : 5;       // [0]0.25 - 64th note, [1]0.5 - 32nd note, [2]0.75, [3]1 - 16 steps
-        uint8_t func : 5;      // StepFunc 7 or jump to specific step + 16 max 23
+        uint8_t func : 7;      // Off, Reset, Forward, Reverse, Jump Rand, Rand, Jump to specific step + 16 max 23
         uint8_t prob : 7;      // 0 - 100% Chance
         uint8_t condition : 6; // 0 - 36, 1:2, 2:2, etc, add Fill, !Fill, Pre, !Pre, Nei, !Nei, 1st, !1st, 
         uint8_t accumTPat : 3; // 0 for off, 1-4 to accumulate the transpose pattern, max 4

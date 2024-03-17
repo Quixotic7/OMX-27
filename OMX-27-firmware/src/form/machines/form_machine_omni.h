@@ -74,6 +74,8 @@ namespace FormOmni
 
         void setPotPickups(uint8_t page);
 
+        void resetPlayback(bool resetTickCounters);
+
         // returns true if should draw generic page
         void editPage(uint8_t page, uint8_t param, int8_t amtSlow, int8_t amtFast);
         bool drawPage(uint8_t page, uint8_t selParam);
@@ -145,11 +147,15 @@ namespace FormOmni
         float getStepLenMult(uint8_t len);
         String getStepLenString(uint8_t len);
         float getGateMult(uint8_t gate);
+        uint8_t getRestartPos();
         const char* getCondChar(uint8_t condIndex);
 
 
         MidiNoteGroup step2NoteGroup(uint8_t noteIndex, Step *step);
         bool evaluateTrig(uint8_t stepIndex, Step *step);
+
+        // returns index of next step
+        int8_t processStepFunction(uint8_t functionIndex);
 
         int8_t applyTranspose(int noteNumber, Step *step, StepDynamic *stepDynamic);
         void triggerStep(Step *step, StepDynamic *stepDynamic);

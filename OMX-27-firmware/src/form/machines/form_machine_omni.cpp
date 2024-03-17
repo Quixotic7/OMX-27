@@ -87,7 +87,10 @@ namespace FormOmni
 
     // int sizeArray[sizeof(kTrigConditions)];
 
-    const char *kStepFuncs[7] = {"--", "1", ">>", "<<", "<>", "#?", "?"};
+    // Off, Reset, Forward, Reverse, Jump Rand, Rand, Jump to step
+    const char *kStepFuncs[7] = {"--", "RSET", ">>", "<<", "<>", "J?", "???"};
+
+    const int kStepFuncColors[7] = {RED, ORANGE, GREEN, DKYELLOW, MAGENTA, ROSE, DIMORANGE};
 
     // Global param management so pages are same across machines
     ParamManager trackParams_;
@@ -231,7 +234,10 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         case OMNIUIMODE_LENGTH:
-        case OMNIUIMODE_COUNT:
+            if (stepHeld_)
+            {
+                return true;
+            }
             return false;
         case OMNIUIMODE_TRANSPOSE:
         case OMNIUIMODE_STEP:
@@ -248,6 +254,12 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         case OMNIUIMODE_LENGTH:
+        {
+            if(stepHeld_)
+            {
+                return true;
+            }
+        }
             return false;
         case OMNIUIMODE_TRANSPOSE:
         case OMNIUIMODE_STEP:
@@ -320,10 +332,13 @@ namespace FormOmni
 
     void FormMachineOmni::resetPlayback()
     {
-        auto track = getTrack();
+        resetPlayback(true);
+    }
 
+    void FormMachineOmni::resetPlayback(bool resetTickCounters)
+    {
         // nextStepTime_ = seqConfig.lastClockMicros + ;
-        playingStep_ = track->playDirection == TRACKDIRECTION_FORWARD ? 0 : track->getLength() - 1;
+        playingStep_ = getRestartPos();
 
         grooveCounter_ = 0;
         playRateCounter_ = 0;
@@ -336,22 +351,25 @@ namespace FormOmni
         transpPat_.reset();
         seqDynamic_.Reset();
 
-        if (omxFormGlobal.isPlaying)
+        if (resetTickCounters)
         {
-            ticksTilNext16Trigger_ = 0;
-            ticksTilNextTrigger_ = ticksTilNext16Trigger_;
-            ticksTilNextTriggerRate_ = ticksTilNext16Trigger_;
-        }
-        else
-        {
-            ticksTilNextTrigger_ = 0;
-            ticksTilNext16Trigger_ = 0;
-            ticksTilNextTriggerRate_ = 0;
+
+            if (omxFormGlobal.isPlaying)
+            {
+                ticksTilNext16Trigger_ = 0;
+                ticksTilNextTrigger_ = ticksTilNext16Trigger_;
+                ticksTilNextTriggerRate_ = ticksTilNext16Trigger_;
+            }
+            else
+            {
+                ticksTilNextTrigger_ = 0;
+                ticksTilNext16Trigger_ = 0;
+                ticksTilNextTriggerRate_ = 0;
+            }
         }
 
         onRateChanged();
     }
-
 
     Track *FormMachineOmni::getTrack()
     {
@@ -548,6 +566,67 @@ namespace FormOmni
         return true;
     }
 
+    int8_t FormMachineOmni::processStepFunction(uint8_t functionIndex)
+    {
+        if(functionIndex >= STEPFUNC_COUNT)
+        {
+            auto track = getTrack();
+
+            uint8_t jumpStep = functionIndex - STEPFUNC_COUNT;
+
+            // Keep jump inside length
+            jumpStep = jumpStep % (track->len + 1);
+
+            return functionIndex - STEPFUNC_COUNT;
+        }
+
+        switch (functionIndex)
+        {
+            // No Function
+        case STEPFUNC_NONE:
+            return -1;
+        // Restarts to start step
+        case STEPFUNC_RESTART:
+            return -2;
+        // Sets track to play forward
+        case STEPFUNC_FWD:
+        {
+            auto track = getTrack();
+            track->playDirection = TRACKDIRECTION_FORWARD;
+        }
+            return -1;
+        // Sets track to play reverse
+        case STEPFUNC_REV:
+        {
+            auto track = getTrack();
+            track->playDirection = TRACKDIRECTION_REVERSE;
+        }
+            return -1;
+        // Reverses current direction of track
+        case STEPFUNC_PONG:
+        {
+            auto track = getTrack();
+            track->playDirection = track->playDirection == TRACKDIRECTION_FORWARD ? TRACKDIRECTION_REVERSE : TRACKDIRECTION_FORWARD;
+        }
+            return -1;
+        // Randomly jumps to a step
+        case STEPFUNC_RANDJUMP:
+        {
+            auto track = getTrack();
+            int8_t jumpstep = random(0, track->len);
+            return jumpstep;
+        }
+        // Randomly does a function or NONE
+        case STEPFUNC_RAND:
+        {
+            uint8_t randFunc = random(0, STEPFUNC_RANDJUMP);
+            return processStepFunction(randFunc);
+        }
+        }
+
+        return -1;
+    }
+
     int8_t FormMachineOmni::applyTranspose(int noteNumber, Step *step, StepDynamic *stepDynamic)
     {
         // Apply global transpose
@@ -595,7 +674,8 @@ namespace FormOmni
         if(context_ == nullptr || noteOnFuncPtr == nullptr)
             return;
 
-        if((bool)step->mute) return;
+        // handled in evaluateStep()
+        // if((bool)step->mute) return;
 
         // Micros now = micros();
 
@@ -1014,6 +1094,8 @@ namespace FormOmni
             triggeredNotes_.clear();
         }
 
+        bool resetAfterThisTrig = false;
+
         // can trigger twice in once clock if note is fully nudged
         while(ticksTilNextTrigger_ <= 0)
         {
@@ -1060,9 +1142,32 @@ namespace FormOmni
                 break;
             }
 
+            bool shouldTriggerStep = evaluateTrig(playingStep_, currentStep);
+
+            int8_t functionStep = -1;
+
+            if(shouldTriggerStep)
+            {
+                functionStep = processStepFunction(currentStep->func);
+            }
+
             int8_t directionIncrement = track->playDirection == TRACKDIRECTION_FORWARD ? 1 : -1;
 
-            uint8_t nextStepIndex = (playingStep_ + length + directionIncrement) % length;
+            uint8_t nextStepIndex;
+
+            if(functionStep == -2)
+            {
+                resetAfterThisTrig = true;
+                nextStepIndex = getRestartPos();
+            }
+            else if(functionStep == -1)
+            {
+                nextStepIndex = (playingStep_ + length + directionIncrement) % length;
+            }
+            else
+            {
+                nextStepIndex = functionStep;
+            }
 
             // Skip every 4th step
             if(track->tripletMode == 1)
@@ -1076,12 +1181,13 @@ namespace FormOmni
             // uint8_t nextStepIndex = (playingStep_ + directionIncrement) % length;
             auto nextStep = &track->steps[nextStepIndex];
 
-            if(evaluateTrig(playingStep_, currentStep))
+            if(shouldTriggerStep)
             {
                 auto trackDynamic = getDynamicTrack();
                 auto dynamicStep = &trackDynamic->steps[playingStep_];
 
                 triggerStep(currentStep, dynamicStep);
+
                 lastTriggeredStepState_ = true;
             }
             else
@@ -1192,40 +1298,16 @@ namespace FormOmni
                 firstLoop_ = false;
             }
             playingStep_ = nextStepIndex;
+
+            if (resetAfterThisTrig)
+            {
+                resetPlayback(false);
+            }
         }
 
         ticksTilNextTrigger_--;
         ticksTilNext16Trigger_--;
         ticksTilNextTriggerRate_--;
-
-        // if (seqConfig.lastClockMicros >= nextStepTime_)
-        // {
-        //     // 96 ppq
-
-        //     auto track = getTrack();
-
-        //     uint8_t length = track->len + 1;
-
-
-        //     // uint8_t nextStepIndex = playingStep_ + 1 % length;
-
-        //     auto playingStep = &track->steps[playingStep_];
-        //     // auto nextStep = &track->steps[nextStepIndex];
-
-        //     triggerStep(playingStep);
-
-        //     nextStepTime_ = nextStepTime_ + clockConfig.ppqInterval * ticksPerStep_;
-        //     playingStep_ = (playingStep_ + 1) % length;
-        // }
-
-        // seqConfig.lastClockMicros = ;
-        // if(seqConfig.currentClockTick % 96 == 0)
-        // {
-
-        // }
-        // seqConfig.currentClockTick
-
-        // clockConfig.ppqInterval
     }
 
     void FormMachineOmni::onRateChanged()
@@ -1313,6 +1395,12 @@ namespace FormOmni
         return max(gate / 100.f * 2, 0.01f);
     }
 
+    uint8_t FormMachineOmni::getRestartPos()
+    {
+        auto track = getTrack();
+        return track->playDirection == TRACKDIRECTION_FORWARD ? 0 : track->getLength() - 1;
+    }
+
     const char *FormMachineOmni::getCondChar(uint8_t condIndex)
     {
         if(condIndex < 9)
@@ -1333,11 +1421,30 @@ namespace FormOmni
 
     bool FormMachineOmni::updateLEDs()
     {
+        bool blinkState = omxLeds.getBlinkState();
+
         switch (omniUiMode_)
         {
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         {
+            auto heldStep = getSelStep();
+
+            if(stepHeld_)
+            {
+                for (uint8_t i = 0; i < STEPFUNC_COUNT; i++)
+                {
+                    int keyColor = kStepFuncColors[i];
+
+                    if(i == heldStep->func)
+                    {
+                        keyColor = blinkState ? LEDOFF : keyColor;
+                    }
+
+                    strip.setPixelColor(1 + i, keyColor);
+                }
+            }
+
             auto track = getTrack();
 
             for (uint8_t i = 0; i < 16; i++)
@@ -1346,6 +1453,12 @@ namespace FormOmni
                 bool isInLen = stepIndex <= track->len;
                 auto step = &track->steps[stepIndex];
                 int keyColor = (step->mute || !isInLen) ? LEDOFF : (step->hasNotes() ? LTBLUE : DKBLUE);
+
+                if (stepHeld_ && heldStep->func >= STEPFUNC_COUNT && (heldStep->func - STEPFUNC_COUNT) == stepIndex)
+                {
+                    keyColor = LTYELLOW;
+                }
+
                 strip.setPixelColor(11 + i, keyColor);
             }
 
@@ -1421,88 +1534,122 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         {
-            switch (omxFormGlobal.shortcutMode)
+            if (stepHeld_)
             {
-            case FORMSHORTCUT_NONE:
-            {
-                if (thisKey >= 11 && thisKey < 27)
+                // Shortcut to set function
+                if (e.down() && thisKey >= 1 && thisKey <= STEPFUNC_COUNT)
                 {
-                    if (e.quickClicked())
+                    auto step = getSelStep();
+
+                    step->func = thisKey - 1;
+                    omxDisp.displayMessage(kStepFuncs[step->func]);
+                }
+                // Shortcut to jump to another step
+                else if (e.down() && thisKey >= 11)
+                {
+                    uint8_t jumpStep = key16toStep(thisKey - 11);
+
+                    // Conditional might be unneeded, this should never be false
+                    if (jumpStep != selStep_)
+                    {
+                        auto step = getSelStep();
+
+                        step->func = jumpStep + STEPFUNC_COUNT;
+
+                        omxDisp.displayMessage("Jump to " + String(jumpStep + 1));
+                    }
+                }
+                // Release the held step key
+                if (!e.down() && thisKey >= 11)
+                {
+                    stepReleased(thisKey - 11);
+                }
+            }
+            else
+            {
+                switch (omxFormGlobal.shortcutMode)
+                {
+                case FORMSHORTCUT_NONE:
+                {
+                    if (thisKey >= 11 && thisKey < 27)
+                    {
+                        if (e.quickClicked())
+                        {
+                            auto track = getTrack();
+
+                            selStep(thisKey - 11);
+                            stepReleased(thisKey - 11);
+                            uint8_t stepIndex = key16toStep(thisKey - 11);
+                            track->steps[stepIndex].mute = !track->steps[stepIndex].mute;
+                        }
+                        else if (e.down())
+                        {
+                            selStep(thisKey - 11);
+                            stepHeld(thisKey - 11);
+                        }
+                        else
+                        {
+                            stepReleased(thisKey - 11);
+                        }
+                    }
+                }
+                break;
+                case FORMSHORTCUT_AUX:
+                    break;
+                case FORMSHORTCUT_F1:
+                    if (e.down() && thisKey == 0)
+                    {
+                        changeUIMode(OMNIUIMODE_NOTEEDIT, false);
+                        omxFormGlobal.auxBlock = true;
+                        return true;
+                    }
+                    // Copy Paste
+                    else if (e.down() && thisKey >= 11 && thisKey < 27)
+                    {
+                        if (omxFormGlobal.shortcutPaste == false)
+                        {
+                            copyStep(thisKey - 11);
+                            omxFormGlobal.shortcutPaste = true;
+                        }
+                        else
+                        {
+                            pasteStep(thisKey - 11);
+                        }
+                    }
+                    break;
+                case FORMSHORTCUT_F2:
+                    // Cut Paste
+                    if (e.down() && thisKey >= 11 && thisKey < 27)
+                    {
+                        if (omxFormGlobal.shortcutPaste == false)
+                        {
+                            cutStep(thisKey - 11);
+                            omxFormGlobal.shortcutPaste = true;
+                        }
+                        else
+                        {
+                            pasteStep(thisKey - 11);
+                        }
+                    }
+                    break;
+                case FORMSHORTCUT_F3:
+                    // Set track length
+                    if (e.down() && thisKey >= 3 && thisKey <= 10)
+                    {
+                        seq_.rate = kRateShortcuts[thisKey - 3];
+                        omxDisp.displayMessage("RATE 1:" + String(kSeqRates[seq_.rate]));
+                        onRateChanged();
+                    }
+                    if (e.down() && thisKey >= 11 && thisKey < 27)
                     {
                         auto track = getTrack();
 
-                        selStep(thisKey - 11);
-                        stepReleased(thisKey - 11);
-                        uint8_t stepIndex = key16toStep(thisKey - 11);
-                        track->steps[stepIndex].mute = !track->steps[stepIndex].mute;
+                        uint8_t pageKey = (thisKey - 11) + (16 * min(activePage_, kPageMax[zoomLevel_] - 1));
+                        track->len = pageKey * kZoomMults[zoomLevel_] + (kZoomMults[zoomLevel_] - 1);
+                        omxDisp.displayMessage("LENGTH " + String(track->getLength()));
                     }
-                    else if (e.down())
-                    {
-                        selStep(thisKey - 11);
-                        stepHeld(thisKey - 11);
-                    }
-                    else
-                    {
-                        stepReleased(thisKey - 11);
-                    }
+                    break;
                 }
-            }
-            break;
-            case FORMSHORTCUT_AUX:
-                break;
-            case FORMSHORTCUT_F1:
-                if(e.down() && thisKey == 0)
-                {
-                    changeUIMode(OMNIUIMODE_NOTEEDIT, false);
-                    omxFormGlobal.auxBlock = true;
-                    return true;
-                }
-                // Copy Paste
-                else if (e.down() && thisKey >= 11 && thisKey < 27)
-                {
-                    if (omxFormGlobal.shortcutPaste == false)
-                    {
-                        copyStep(thisKey - 11);
-                        omxFormGlobal.shortcutPaste = true;
-                    }
-                    else
-                    {
-                        pasteStep(thisKey - 11);
-                    }
-                }
-                break;
-            case FORMSHORTCUT_F2:
-                // Cut Paste
-                if (e.down() && thisKey >= 11 && thisKey < 27)
-                {
-                    if (omxFormGlobal.shortcutPaste == false)
-                    {
-                        cutStep(thisKey - 11);
-                        omxFormGlobal.shortcutPaste = true;
-                    }
-                    else
-                    {
-                        pasteStep(thisKey - 11);
-                    }
-                }
-                break;
-            case FORMSHORTCUT_F3:
-                // Set track length
-                if(e.down() && thisKey >= 3 && thisKey <= 10)
-                {
-                    seq_.rate = kRateShortcuts[thisKey - 3];
-                    omxDisp.displayMessage("RATE 1:" + String(kSeqRates[seq_.rate]));
-                    onRateChanged();
-                }
-                if (e.down() && thisKey >= 11 && thisKey < 27)
-                {
-                    auto track = getTrack();
-
-                    uint8_t pageKey = (thisKey - 11) + (16 * min(activePage_, kPageMax[zoomLevel_] - 1));
-                    track->len = pageKey * kZoomMults[zoomLevel_] + (kZoomMults[zoomLevel_] - 1);
-                    omxDisp.displayMessage("LENGTH " + String(track->getLength()));
-                }
-                break;
             }
         }
         break;
@@ -1638,7 +1785,7 @@ namespace FormOmni
             }
             else if (param == 2)
             {
-                selStep->func = constrain(selStep->func + amtSlow, 0, 22);
+                selStep->func = constrain(selStep->func + amtSlow, 0, STEPFUNC_COUNT + 64 - 1);
             }
             else if (param == 3)
             {
@@ -1891,9 +2038,9 @@ namespace FormOmni
             omxDisp.setLegend(0, "CHC%", selStep->prob);
             omxDisp.setLegend(1, "COND", getCondChar(selStep->condition));
 
-            if (selStep->func >= 7)
+            if (selStep->func >= STEPFUNC_COUNT)
             {
-                omxDisp.setLegend(2, "FUNC", "J" + String(selStep->func - 7 + 1));
+                omxDisp.setLegend(2, "FUNC", "J" + String(selStep->func - STEPFUNC_COUNT + 1));
             }
             else
             {
