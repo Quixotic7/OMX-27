@@ -46,8 +46,8 @@ namespace FormOmni
     {
         STEPFUNC_NONE,     // No Function
         STEPFUNC_RESTART,  // Restarts to start step
-        STEPFUNC_FWD,      // Sets track to play forward
         STEPFUNC_REV,      // Sets track to play backward
+        STEPFUNC_FWD,      // Sets track to play forward
         STEPFUNC_PONG,     // Reverses current direction of track
         STEPFUNC_RANDJUMP, // Randomly jumps to a step
         STEPFUNC_RAND,     // Randomly does a function or NONE

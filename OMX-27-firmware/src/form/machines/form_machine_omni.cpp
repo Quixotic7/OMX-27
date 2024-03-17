@@ -88,9 +88,9 @@ namespace FormOmni
     // int sizeArray[sizeof(kTrigConditions)];
 
     // Off, Reset, Forward, Reverse, Jump Rand, Rand, Jump to step
-    const char *kStepFuncs[7] = {"--", "RSET", ">>", "<<", "<>", "J?", "???"};
+    const char *kStepFuncs[7] = {"--", "RSET", "<<", ">>", "<>", "J?", "???"};
 
-    const int kStepFuncColors[7] = {RED, ORANGE, GREEN, DKYELLOW, MAGENTA, ROSE, DIMORANGE};
+    const int kStepFuncColors[7] = {RED, ORANGE, DKYELLOW, GREEN, MAGENTA, ROSE, DIMORANGE};
 
     // Global param management so pages are same across machines
     ParamManager trackParams_;
@@ -366,9 +366,9 @@ namespace FormOmni
                 ticksTilNext16Trigger_ = 0;
                 ticksTilNextTriggerRate_ = 0;
             }
-        }
 
-        onRateChanged();
+            onRateChanged();
+        }
     }
 
     Track *FormMachineOmni::getTrack()
@@ -577,7 +577,7 @@ namespace FormOmni
             // Keep jump inside length
             jumpStep = jumpStep % (track->len + 1);
 
-            return functionIndex - STEPFUNC_COUNT;
+            return jumpStep;
         }
 
         switch (functionIndex)
@@ -588,18 +588,18 @@ namespace FormOmni
         // Restarts to start step
         case STEPFUNC_RESTART:
             return -2;
-        // Sets track to play forward
-        case STEPFUNC_FWD:
-        {
-            auto track = getTrack();
-            track->playDirection = TRACKDIRECTION_FORWARD;
-        }
-            return -1;
         // Sets track to play reverse
         case STEPFUNC_REV:
         {
             auto track = getTrack();
             track->playDirection = TRACKDIRECTION_REVERSE;
+        }
+            return -1;
+        // Sets track to play forward
+        case STEPFUNC_FWD:
+        {
+            auto track = getTrack();
+            track->playDirection = TRACKDIRECTION_FORWARD;
         }
             return -1;
         // Reverses current direction of track
