@@ -81,6 +81,8 @@ namespace FormOmni
         Track *getTrack();
         Step *getSelStep();
 
+        ParamManager *getParams();
+
         TrackDynamic *getDynamicTrack();
 
         uint8_t key16toStep(uint8_t key16);

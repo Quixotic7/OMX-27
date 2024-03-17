@@ -62,6 +62,15 @@ namespace FormOmni
         tPat->pat[keyIndex] = transpCopyBuffer_;
     }
 
+    void OmniTransposePattern::fullRandomize(TransposePattern *tPat)
+    {
+        for(uint8_t i = 0; i < 16; i++)
+        {
+            tPat->pat[i] = random(-12, 12);
+            tPat->len = random(1, 15);
+        }
+    }
+
     bool OmniTransposePattern::getEncoderSelect()
     {
         return heldKey16_ < 0;
@@ -114,6 +123,8 @@ namespace FormOmni
             auto randShortColor = (patShortcut_ == TPATSHORT_RAND && blinkState) ? LEDOFF : FUNKONE;
             strip.setPixelColor(3, randShortColor);
 
+            // Full Randomize
+            strip.setPixelColor(9, ORANGE);
             // Clear pattern
             strip.setPixelColor(10, RED);
 
@@ -204,6 +215,12 @@ namespace FormOmni
                 {
                     patShortcut_ = TPATSHORT_RAND;
                 }
+                else if (thisKey == 9)
+                {
+                    fullRandomize(tPat);
+                    headerMessage_ = "Everything is RAND";
+                    showMessage();
+                }
                 else if (thisKey == 10)
                 {
                     tPat->Reinit();
@@ -221,7 +238,7 @@ namespace FormOmni
             {
                 if (e.down() && thisKey >= 11)
                 {
-                    tPat->pat[thisKey - 11] = rand() % 12;
+                    tPat->pat[thisKey - 11] = random(-12, 12);
                     params->setSelParam(thisKey - 11);
                     heldKey16_ = thisKey - 11;
                 }

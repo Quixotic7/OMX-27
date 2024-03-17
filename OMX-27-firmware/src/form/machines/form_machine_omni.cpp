@@ -16,11 +16,15 @@ namespace FormOmni
         OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
         OMNIPAGE_STEPNOTES,
         OMNIPAGE_STEPPOTS, 
-        OMNIPAGE_GBL1, // BPM
-        OMNIPAGE_1,    // Velocity, Channel, Rate, Gate
-        OMNIPAGE_2,    // Transpose, TransposeMode
-        OMNIPAGE_3,    // SendMidi, SendCV
+        OMNIPAGE_TRACK, // Length, MidiFX
+        OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode, 
+        OMNIPAGE_SEQMIX, // Mute, Solo, Gate
+        OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat, 
+        OMNIPAGE_SEQMIDI, // Midi Chan, MonoPhonic, SendMidi, SendCV
+        OMNIPAGE_TIMINGS, // BPM, Rate, Swing, Swing Division
+        OMNIPAGE_SCALE,
         OMNIPAGE_TPAT, // SendMidi, SendCV
+        OMNIPAGE_NAV,  // Page, Zoom, UI Mode
         OMNIPAGE_COUNT
     };
 
@@ -35,8 +39,9 @@ namespace FormOmni
     const char* kPotMode[] = {"CC Step", "CC Fade"};
 
     const char* kTranspModeMsg[] = {"GINT", "SEMI", "LINT"};
-    const char* kTranspModeLongMsg[] = {"GBL INTERVAL", "SEMITONES", "LOCAL INTERVAL"};
+    const char* kTranspModeLongMsg[] = {"GBL INTERVAL", "SEMITONES", "LOC INTERVAL"};
 
+    const char* kTrackModeMsg[] = {"NONE", "PONG", "RAND", "RND2", "SHUF", "SHLD"};
 
     // kSeqRates[] = {1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64};
     // 1, 2, 3, 4, 8, 16, 32, 64
@@ -86,7 +91,7 @@ namespace FormOmni
 
     // Global param management so pages are same across machines
     ParamManager trackParams_;
-    ParamManager noteParams_;
+    ParamManager stepParams_;
     ParamManager tPatParams_;
 
     bool paramsInit_ = false;
@@ -98,15 +103,23 @@ namespace FormOmni
     {
         if (!paramsInit_)
         {
-            trackParams_.addPage(4);  // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
-            trackParams_.addPage(4);  // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
-            trackParams_.addPage(7);  // OMNIPAGE_STEPNOTES,
-            trackParams_.addPage(7);  // OMNIPAGE_STEPPOTS,
-            trackParams_.addPage(4);  // OMNIPAGE_GBL1, // BPM
-            trackParams_.addPage(4);  // OMNIPAGE_1,    // Velocity, Channel, Rate, Gate
-            trackParams_.addPage(4);  // OMNIPAGE_2,    // Transpose, TransposeMode
-            trackParams_.addPage(4);  // OMNIPAGE_3,    // SendMidi, SendCV
+            trackParams_.addPage(4); // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
+            trackParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
+            trackParams_.addPage(7); // OMNIPAGE_STEPNOTES,
+            trackParams_.addPage(7); // OMNIPAGE_STEPPOTS,
+            trackParams_.addPage(4); // OMNIPAGE_TRACK, // Length, MidiFX
+            trackParams_.addPage(4); // OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode,
+            trackParams_.addPage(4); // OMNIPAGE_SEQMIX, // Mute, Solo, Gate
+            trackParams_.addPage(4); // OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat,
+            trackParams_.addPage(4); // OMNIPAGE_SEQMIDI, // Midi Chan, MonoPhonic, SendMidi, SendCV
+            trackParams_.addPage(4); // OMNIPAGE_TIMINGS, // BPM, Rate, Swing, Swing Division
+            trackParams_.addPage(4); // OMNIPAGE_SCALE,
             trackParams_.addPage(17); // OMNIPAGE_TPAT, // SendMidi, SendCV
+
+            stepParams_.addPage(4); // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
+            stepParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
+            stepParams_.addPage(7); // OMNIPAGE_STEPNOTES,
+            stepParams_.addPage(7); // OMNIPAGE_STEPPOTS,
 
             tPatParams_.addPage(17);
 
@@ -127,9 +140,38 @@ namespace FormOmni
         return clone;
     }
 
+    ParamManager *FormMachineOmni::getParams()
+    {
+        switch (omniUiMode_)
+        {
+        case OMNIUIMODE_CONFIG:
+        case OMNIUIMODE_MIX:
+        {
+            if(stepHeld_)
+            {
+                return &stepParams_;
+            }
+            else
+            {
+                return &trackParams_;
+            }
+        }
+        break;
+        case OMNIUIMODE_LENGTH:
+        break;
+        case OMNIUIMODE_TRANSPOSE:
+            return &tPatParams_;
+        case OMNIUIMODE_STEP:
+        case OMNIUIMODE_NOTEEDIT:
+        break;
+        }
+
+        return &trackParams_;
+    }
+
     void FormMachineOmni::onSelected()
     {
-        setPotPickups(OMNIPAGE_GBL1);
+        setPotPickups(OMNIPAGE_NAV);
     }
 
     void FormMachineOmni::setPotPickups(uint8_t page)
@@ -152,21 +194,13 @@ namespace FormOmni
             break;
         case OMNIPAGE_STEPPOTS:
             break;
-        case OMNIPAGE_GBL1:
+        case OMNIPAGE_NAV:
         {
             omxFormGlobal.potPickups[0].SetValRemap(activePage_, 0, kPageMax[zoomLevel_] - 1);
             omxFormGlobal.potPickups[1].SetValRemap(zoomLevel_, 0, 2);
             omxFormGlobal.potPickups[4].SetValRemap(omniUiMode_, 0, OMNIUIMODE_COUNT - 1);
         }
         break;
-        case OMNIPAGE_1:
-            break;
-        case OMNIPAGE_2:
-            break;
-        case OMNIPAGE_3:
-            break;
-        case OMNIPAGE_TPAT:
-            break;
         };
     }
 
@@ -376,7 +410,7 @@ namespace FormOmni
             uint8_t stepIndex = key16toStep(key16Index);
             if(selStep_ == stepIndex)
             {
-                setPotPickups(OMNIPAGE_GBL1);
+                setPotPickups(OMNIPAGE_NAV);
                 stepHeld_ = false;
             }
         }
@@ -645,55 +679,62 @@ namespace FormOmni
         case OMNIUIMODE_MIX:
         case OMNIUIMODE_LENGTH:
         {
-            int8_t prevPage = trackParams_.getSelPage();
-
-            trackParams_.changeParam(enc.dir());
-
-            int8_t newPage = trackParams_.getSelPage();
-
-            if(prevPage == OMNIPAGE_STEPPOTS && newPage == OMNIPAGE_GBL1)
+            if (stepHeld_)
             {
-                omxDisp.displayMessage("Step Params");
+                stepParams_.changeParam(enc.dir());
             }
-            else if(prevPage == OMNIPAGE_GBL1 && newPage == OMNIPAGE_STEPPOTS)
+            else
             {
-                omxDisp.displayMessage("Track Params");
-            }
+                int8_t prevPage = trackParams_.getSelPage();
 
-            // if (trackParams_.getSelPage() != prevPage)
-            // {
-            //     switch (trackParams_.getSelPage())
-            //     {
-            //     case OMNIPAGE_STEP1:
-            //         omxDisp.displayMessage("Step 1");
-            //         break;
-            //     case OMNIPAGE_STEPCONDITION:
-            //         omxDisp.displayMessage("Step Cond");
-            //         break;
-            //     case OMNIPAGE_STEPNOTES:
-            //         omxDisp.displayMessage("Step Notes");
-            //         break;
-            //     case OMNIPAGE_STEPPOTS:
-            //         omxDisp.displayMessage("Step Pots");
-            //         break;
-            //     case OMNIPAGE_GBL1:
-            //         omxDisp.displayMessage("Track 1");
-            //         break;
-            //     case OMNIPAGE_1:
-            //         // omxDisp.displayMessage("Step 1");
-            //         break;
-            //     case OMNIPAGE_2:
-            //         // omxDisp.displayMessage("Step 1");
-            //         break;
-            //     case OMNIPAGE_3:
-            //         // omxDisp.displayMessage("Step 1");
-            //         break;
-            //     case OMNIPAGE_TPAT:
-            //         transpPat_.onUIEnabled();
-            //         // omxDisp.displayMessage("Step 1");
-            //         break;
-            //     }
-            // }
+                trackParams_.changeParam(enc.dir());
+
+                int8_t newPage = trackParams_.getSelPage();
+
+                if (prevPage == OMNIPAGE_STEPPOTS && newPage == OMNIPAGE_TRACK)
+                {
+                    omxDisp.displayMessage("Track Params");
+                }
+                else if (prevPage == OMNIPAGE_TRACK && newPage == OMNIPAGE_STEPPOTS)
+                {
+                    omxDisp.displayMessage("Step Params");
+                }
+
+                // if (trackParams_.getSelPage() != prevPage)
+                // {
+                //     switch (trackParams_.getSelPage())
+                //     {
+                //     case OMNIPAGE_STEP1:
+                //         omxDisp.displayMessage("Step 1");
+                //         break;
+                //     case OMNIPAGE_STEPCONDITION:
+                //         omxDisp.displayMessage("Step Cond");
+                //         break;
+                //     case OMNIPAGE_STEPNOTES:
+                //         omxDisp.displayMessage("Step Notes");
+                //         break;
+                //     case OMNIPAGE_STEPPOTS:
+                //         omxDisp.displayMessage("Step Pots");
+                //         break;
+                //     case OMNIPAGE_GBL1:
+                //         omxDisp.displayMessage("Track 1");
+                //         break;
+                //     case OMNIPAGE_1:
+                //         // omxDisp.displayMessage("Step 1");
+                //         break;
+                //     case OMNIPAGE_2:
+                //         // omxDisp.displayMessage("Step 1");
+                //         break;
+                //     case OMNIPAGE_3:
+                //         // omxDisp.displayMessage("Step 1");
+                //         break;
+                //     case OMNIPAGE_TPAT:
+                //         transpPat_.onUIEnabled();
+                //         // omxDisp.displayMessage("Step 1");
+                //         break;
+                //     }
+                // }
+            }
         }
         break;
         case OMNIUIMODE_TRANSPOSE:
@@ -716,8 +757,10 @@ namespace FormOmni
         int amtSlow = enc.accel(1);
         int amtFast = enc.accel(5);
 
-        int8_t selPage = trackParams_.getSelPage();
-        int8_t selParam = trackParams_.getSelParam();
+        auto params = getParams();
+
+        int8_t selPage = params->getSelPage();
+        int8_t selParam = params->getSelParam();
 
         switch (omniUiMode_)
         {
@@ -726,32 +769,11 @@ namespace FormOmni
         {
             switch (selPage)
             {
-            case OMNIPAGE_STEP1:
-                editPage(OMNIPAGE_STEP1, selParam, amtSlow, amtFast);
-                break;
-            case OMNIPAGE_STEPCONDITION:
-                editPage(OMNIPAGE_STEPCONDITION, selParam, amtSlow, amtFast);
-                break;
-            case OMNIPAGE_STEPNOTES:
-                editPage(OMNIPAGE_STEPNOTES, selParam, amtSlow, amtFast);
-                break;
-            case OMNIPAGE_STEPPOTS:
-                editPage(OMNIPAGE_STEPPOTS, selParam, amtSlow, amtFast);
-                break;
-            case OMNIPAGE_GBL1: // BPM
-                editPage(OMNIPAGE_GBL1, selParam, amtSlow, amtFast);
-                break;
-            case OMNIPAGE_1: // Velocity, Channel, Rate, Gate
-                editPage(OMNIPAGE_1, selParam, amtSlow, amtFast);
-                break;
-            case OMNIPAGE_2: // Transpose, TransposeMode
-                editPage(OMNIPAGE_2, selParam, amtSlow, amtFast);
-                break;
-            case OMNIPAGE_3: // SendMidi, SendCV
-                editPage(OMNIPAGE_3, selParam, amtSlow, amtFast);
-                break;
             case OMNIPAGE_TPAT: // SendMidi, SendCV
                 transpPat_.onEncoderChangedEditParam(enc, selParam, &seq_.transposePattern);
+                break;
+            default:
+                editPage(selPage, selParam, amtSlow, amtFast);
                 break;
             }
         }
@@ -822,7 +844,7 @@ namespace FormOmni
 
         if (stepHeld_)
         {
-            auto page = trackParams_.getSelPage();
+            auto page = stepParams_.getSelPage();
 
             switch (page)
             {
@@ -863,16 +885,16 @@ namespace FormOmni
                 break;
             case OMNIPAGE_STEPPOTS:
                 break;
-            case OMNIPAGE_GBL1:
-                break;
-            case OMNIPAGE_1:
-                break;
-            case OMNIPAGE_2:
-                break;
-            case OMNIPAGE_3:
-                break;
-            case OMNIPAGE_TPAT:
-                break;
+            // case OMNIPAGE_GBL1:
+            //     break;
+            // case OMNIPAGE_1:
+            //     break;
+            // case OMNIPAGE_2:
+            //     break;
+            // case OMNIPAGE_3:
+            //     break;
+            // case OMNIPAGE_TPAT:
+            //     break;
             };
         }
         else
@@ -1386,7 +1408,7 @@ namespace FormOmni
                 else if (thisKey >= 13 && thisKey < 19)
                 {
                     changeUIMode(thisKey - 13, false);
-                    setPotPickups(OMNIPAGE_GBL1);
+                    setPotPickups(OMNIPAGE_NAV);
                     return true;
                 }
             }
@@ -1639,12 +1661,11 @@ namespace FormOmni
         {
             auto selStep = getSelStep();
 
-            if(param == 5)
+            if (param == 5)
             {
                 seq_.potMode = constrain(seq_.potMode + amtSlow, 0, 1);
-
             }
-            else if(param == 6)
+            else if (param == 6)
             {
                 seq_.potBank = constrain(seq_.potBank + amtSlow, 0, NUM_CC_BANKS - 1);
             }
@@ -1654,27 +1675,8 @@ namespace FormOmni
             }
         }
         break;
-        case OMNIPAGE_GBL1:
-        {
-            auto track = getTrack();
-
-            if (param == 0)
-            {
-                track->swing = constrain(track->swing + amtFast, -100, 100);
-            }
-            else if (param == 1)
-            {
-                track->swingDivision = constrain(track->swingDivision + amtSlow, 0, 1);
-            }
-            else if (param == 2)
-            {
-            }
-            else if (param == 3)
-            {
-            }
-        }
-        break;
-        case OMNIPAGE_1:
+        // Length, MidiFX
+        case OMNIPAGE_TRACK:
         {
             auto track = getTrack();
 
@@ -1684,20 +1686,49 @@ namespace FormOmni
             }
             else if (param == 1)
             {
-                seq_.channel = constrain(seq_.channel + amtSlow, 0, 15);
+                track->midiFx = constrain(track->midiFx + amtSlow, 0, 6);
+            }
+        }
+        break;
+        // Triplet Mode, Direction, Mode,
+        case OMNIPAGE_TRACKMODES:
+        {
+            auto track = getTrack();
+
+            if (param == 0)
+            {
+                track->tripletMode = constrain(track->tripletMode + amtSlow, 0, 1);
+                onRateChanged();
+            }
+            else if (param == 1)
+            {
+                track->playDirection = constrain(track->playDirection + amtSlow, 0, 1);
             }
             else if (param == 2)
             {
-                seq_.rate = constrain(seq_.rate + amtSlow, 0, kNumSeqRates - 1);
-                onRateChanged();
+                track->playMode = constrain(track->playMode + amtSlow, 0, TRACKMODE_COUNT - 1);
             }
-            else if (param == 3)
+        }
+        break;
+        // Mute, Solo, Gate
+        case OMNIPAGE_SEQMIX:
+        {
+            if (param == 0)
+            {
+                seq_.mute = constrain(seq_.mute + amtSlow, 0, 1);
+            }
+            else if (param == 1)
+            {
+                seq_.solo = constrain(seq_.solo + amtSlow, 0, 1);
+            }
+            else if (param == 2)
             {
                 seq_.gate = constrain(seq_.gate + amtFast, 0, 100);
             }
         }
         break;
-        case OMNIPAGE_2:
+        // Transpose, Transpose Mode, Apply Transpose Pat,
+        case OMNIPAGE_SEQTPOSE:
         {
             if (param == 0)
             {
@@ -1706,35 +1737,121 @@ namespace FormOmni
             else if (param == 1)
             {
                 seq_.transposeMode = constrain(seq_.transposeMode + amtSlow, 0, TRANPOSEMODE_COUNT - 1);
-
-				omxDisp.displayMessage(kTranspModeLongMsg[seq_.transposeMode]);
+                omxDisp.displayMessage(kTranspModeLongMsg[seq_.transposeMode]);
             }
             else if (param == 2)
             {
-                auto track = getTrack();
-                track->tripletMode = constrain(track->tripletMode + amtSlow, 0, 1);
-                onRateChanged();
-            }
-            else if (param == 3)
-            {
+                seq_.applyTransPat = constrain(seq_.applyTransPat + amtSlow, 0, 1);
             }
         }
         break;
-        case OMNIPAGE_3:
+        // Midi Chan, MonoPhonic, SendMidi, SendCV
+        case OMNIPAGE_SEQMIDI:
         {
             if (param == 0)
             {
-                seq_.sendMidi = constrain(seq_.sendMidi + amtSlow, 0, 1);
+                seq_.channel = constrain(seq_.channel + amtSlow, 0, 15);
             }
             else if (param == 1)
             {
-                seq_.sendCV = constrain(seq_.sendCV + amtSlow, 0, 1);
+                seq_.monoPhonic = constrain(seq_.monoPhonic + amtSlow, 0, 1);
             }
             else if (param == 2)
             {
+                seq_.sendMidi = constrain(seq_.sendMidi + amtSlow, 0, 1);
             }
             else if (param == 3)
             {
+                seq_.sendCV = constrain(seq_.sendCV + amtSlow, 0, 1);
+            }
+        }
+        break;
+        // BPM, Rate, Swing, Swing Division
+        case OMNIPAGE_TIMINGS:
+        {
+            auto track = getTrack();
+
+            if (param == 0)
+            {
+                clockConfig.newtempo = constrain(clockConfig.clockbpm + amtFast, 40, 300);
+                if (clockConfig.newtempo != clockConfig.clockbpm)
+                {
+                    // SET TEMPO HERE
+                    clockConfig.clockbpm = clockConfig.newtempo;
+                    omxUtil.resetClocks();
+                }
+            }
+            else if (param == 1)
+            {
+                seq_.rate = constrain(seq_.rate + amtSlow, 0, kNumSeqRates - 1);
+                onRateChanged();
+            }
+            else if (param == 2)
+            {
+                track->swing = constrain(track->swing + amtFast, -100, 100);
+            }
+            else if (param == 3)
+            {
+                track->swingDivision = constrain(track->swingDivision + amtSlow, 0, 1);
+            }
+        }
+        break;
+        case OMNIPAGE_SCALE:
+        {
+            if (param == 0)
+            {
+                int prevRoot = scaleConfig.scaleRoot;
+                scaleConfig.scaleRoot = constrain(scaleConfig.scaleRoot + amtSlow, 0, 12 - 1);
+                if (prevRoot != scaleConfig.scaleRoot)
+                {
+                    omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
+                }
+            }
+            if (param == 1)
+            {
+                int prevPat = scaleConfig.scalePattern;
+                scaleConfig.scalePattern = constrain(scaleConfig.scalePattern + amtSlow, -1, omxFormGlobal.musicScale->getNumScales() - 1);
+
+                if (prevPat != scaleConfig.scalePattern)
+                {
+                    omxDisp.displayMessage(omxFormGlobal.musicScale->getScaleName(scaleConfig.scalePattern));
+                    omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
+
+                    if (scaleConfig.scalePattern < 0)
+                    {
+                        // record locked and grouped states, then set the current lockScale and group16 to off
+                        if (prevPat >= 0)
+                        {
+                            scaleConfig.lockedState = scaleConfig.lockScale;
+                            scaleConfig.group16state = scaleConfig.group16;
+                        }
+                        scaleConfig.lockScale = false;
+                        scaleConfig.group16 = false;
+                    }
+                    else
+                    {
+                        // restore locked and grouped states if the scale was previously set to off
+                        if (prevPat < 0)
+                        {
+                            scaleConfig.lockScale = scaleConfig.lockedState;
+                            scaleConfig.group16 = scaleConfig.group16state;
+                        }
+                    }
+                }
+            }
+            if (param == 2)
+            {
+                if (scaleConfig.scalePattern >= 0)
+                {
+                    scaleConfig.lockScale = constrain(scaleConfig.lockScale + amtSlow, 0, 1);
+                }
+            }
+            if (param == 3)
+            {
+                if (scaleConfig.scalePattern >= 0)
+                {
+                    scaleConfig.group16 = constrain(scaleConfig.group16 + amtSlow, 0, 1);
+                }
             }
         }
         break;
@@ -1849,6 +1966,70 @@ namespace FormOmni
             // omxDisp.setLegend(3, "CC4", selStep->potVals[3] < 0, selStep->potVals[3]);
         }
             return false;
+        // Length, MidiFX
+        case OMNIPAGE_TRACK:
+        {
+            auto track = getTrack();
+
+            omxDisp.setLegend(0, "LEN", track->len + 1);
+            omxDisp.setLegend(1, "MFX", track->midiFx == 0, track->midiFx);
+        }
+            return true;
+        // Triplet Mode, Direction, Mode,
+        case OMNIPAGE_TRACKMODES:
+        {
+            auto track = getTrack();
+
+            omxDisp.setLegend(0, "TRIP", bool2lightswitchMsg[track->tripletMode]);
+            omxDisp.setLegend(1, "DIR", track->playDirection == TRACKDIRECTION_FORWARD ? ">>" : "<<");
+            omxDisp.setLegend(2, "MODE", kTrackModeMsg[track->playMode]);
+        }
+            return true;
+        // Mute, Solo, Gate
+        case OMNIPAGE_SEQMIX:
+        {
+            omxDisp.setLegend(0, "MUTE", seq_.mute == 1);
+            omxDisp.setLegend(1, "SOLO", seq_.solo == 1);
+            uint8_t gateMult = getGateMult(seq_.gate) * 100;
+            omxDisp.setLegend(2, "GATE", gateMult);
+        }
+            return true;
+        // Transpose, Transpose Mode, Apply Transpose Pat,
+        case OMNIPAGE_SEQTPOSE:
+        {
+            omxDisp.setLegend(0, "TPOS", seq_.transpose);
+            omxDisp.setLegend(1, "TYPE", kTranspModeMsg[seq_.transposeMode]);
+            omxDisp.setLegend(2, "TPAT", seq_.applyTransPat == 1);
+        }
+            return true;
+        // Midi Chan, MonoPhonic, SendMidi, SendCV
+        case OMNIPAGE_SEQMIDI:
+        {
+            omxDisp.setLegend(0, "CHAN", seq_.channel + 1);
+            omxDisp.setLegend(1, "MONO", seq_.monoPhonic == 1 ? "MONO" : "POLY");
+            omxDisp.setLegend(2, "MIDI", seq_.sendMidi ? "SEND" : paramOffMsg);
+            omxDisp.setLegend(3, "CV", seq_.sendCV ? "SEND" : paramOffMsg);
+        }
+            return true;
+        // BPM, Rate, Swing, Swing Division
+        case OMNIPAGE_TIMINGS:
+        {
+            auto track = getTrack();
+
+            omxDisp.setLegend(0, "BPM", (uint16_t)clockConfig.clockbpm);
+            omxDisp.setLegend(1, "RATE", "1/" + String(kSeqRates[seq_.rate]));
+            omxDisp.setLegend(2, "SWNG", track->swing);
+            omxDisp.setLegend(3, "S-DV", track->swingDivision == 0 ? "16th" : "8th");
+        }
+            return true;
+        case OMNIPAGE_SCALE:
+        {
+            omxDisp.setLegend(0, "ROOT", omxFormGlobal.musicScale->getNoteName(scaleConfig.scaleRoot));
+            omxDisp.setLegend(1, "SCALE", scaleConfig.scalePattern < 0, scaleConfig.scalePattern);
+            omxDisp.setLegend(2, "LOCK", scaleConfig.lockScale);
+            omxDisp.setLegend(3, "GROUP", scaleConfig.group16);
+        }
+            return true;
         case OMNIPAGE_TPAT:
         {
             transpPat_.onDisplayUpdate(omniUiMode_ == OMNIUIMODE_TRANSPOSE ? &tPatParams_ : &trackParams_, &seq_.transposePattern, getEncoderSelect());
@@ -1872,73 +2053,20 @@ namespace FormOmni
             int8_t selPage = trackParams_.getSelPage();
             int8_t selParam = trackParams_.getSelParam();
 
-            bool drawGeneric = true;
+            // bool drawGeneric = true;
 
-            switch (selPage)
-            {
-            case OMNIPAGE_STEP1:
-            case OMNIPAGE_STEPCONDITION:
-            case OMNIPAGE_STEPNOTES:
-            case OMNIPAGE_STEPPOTS:
-            case OMNIPAGE_TPAT: // SendMidi, SendCV
-                drawGeneric = drawPage(selPage, selParam);
-                break;
-            case OMNIPAGE_GBL1: // BPM
-            {
-                // auto selStep = getSelStep();
+            // switch (selPage)
+            // {
+            // case OMNIPAGE_STEP1:
+            // case OMNIPAGE_STEPCONDITION:
+            // case OMNIPAGE_STEPNOTES:
+            // case OMNIPAGE_STEPPOTS:
+            // case OMNIPAGE_TPAT: // SendMidi, SendCV
+            //     drawGeneric = drawPage(selPage, selParam);
+            //     break;
+            // }
 
-                // int8_t nudgePerc = (selStep->nudge / 60.0f) * 100;
-                // omxDisp.setLegend(0, "NUDG", nudgePerc);
-
-                // float stepLenMult = getStepLenMult(selStep->len);
-
-                // if(stepLenMult < 1.0f)
-                // {
-                //     omxDisp.setLegend(1, "LEN", String(stepLenMult,2));
-                // }
-                // else if(stepLenMult > 16)
-                // {
-                //     uint8_t bar = stepLenMult / 16.0f;
-                //     omxDisp.setLegend(1, "LEN", String(bar)+"br");
-                // }
-                // else
-                // {
-                //     omxDisp.setLegend(1, "LEN", String(stepLenMult, 0));
-                // }
-
-                auto track = getTrack();
-
-                omxDisp.setLegend(0, "SWNG", track->swing);
-                omxDisp.setLegend(1, "S-DV", track->swingDivision == 0 ? "16th" : "8th");
-            }
-            break;
-            case OMNIPAGE_1: // Velocity, Channel, Rate, Gate
-            {
-                auto track = getTrack();
-                omxDisp.setLegend(0, "LEN", track->len + 1);
-                omxDisp.setLegend(1, "CHAN", seq_.channel + 1);
-                omxDisp.setLegend(2, "RATE", "1/" + String(kSeqRates[seq_.rate]));
-                uint8_t gateMult = getGateMult(seq_.gate) * 100;
-                omxDisp.setLegend(3, "GATE", gateMult);
-            }
-            break;
-            case OMNIPAGE_2: // Transpose, TransposeMode
-            {
-                auto track = getTrack();
-
-                omxDisp.setLegend(0, "TPOS", 100);
-                omxDisp.setLegend(1, "TYPE", kTranspModeMsg[seq_.transposeMode]);
-                omxDisp.setLegend(2, "TRIP", bool2lightswitchMsg[track->tripletMode]);
-            }
-            break;
-            case OMNIPAGE_3: // SendMidi, SendCV
-            {
-                omxDisp.setLegend(0, "MIDI", seq_.sendMidi ? "SEND" : paramOffMsg);
-                omxDisp.setLegend(1, "CV", seq_.sendCV ? "SEND" : paramOffMsg);
-            }
-            break;
-            
-            }
+            bool drawGeneric = drawPage(selPage, selParam);
 
             if(drawGeneric)
             {

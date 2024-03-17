@@ -56,5 +56,6 @@ namespace FormOmni
         void copyStep(uint8_t keyIndex, TransposePattern *tPat);
         void cutStep(uint8_t keyIndex, TransposePattern *tPat);
         void pasteStep(uint8_t keyIndex, TransposePattern *tPat);
+        void fullRandomize(TransposePattern *tPat);
     };
 }

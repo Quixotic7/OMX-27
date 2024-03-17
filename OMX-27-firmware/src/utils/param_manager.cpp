@@ -40,7 +40,7 @@ void ParamManager::setPageEnabled(uint8_t pageIndex, bool enablePage)
 	{
 		for (int8_t i = pageIndex - 1; i >= 0; i--)
 		{
-			if (pageConfigs[i].enabled)
+			if (pageConfigs[i].enabled == 1)
 			{
 				selectedPage = i;
 				return;
@@ -49,7 +49,7 @@ void ParamManager::setPageEnabled(uint8_t pageIndex, bool enablePage)
 
 		for (int8_t i = pageIndex + 1; i < numberOfPages; i++)
 		{
-			if (pageConfigs[i].enabled)
+			if (pageConfigs[i].enabled == 1)
 			{
 				selectedPage = i;
 				return;
@@ -75,7 +75,7 @@ bool ParamManager::isFirstPage(int8_t pageIndex)
 
 	for (int8_t i = pageIndex - 1; i >= 0; i--)
 	{
-		if (pageConfigs[i].enabled)
+		if (pageConfigs[i].enabled == 1)
 		{
 			return false;
 		}
@@ -90,7 +90,7 @@ bool ParamManager::isLastPage(int8_t pageIndex)
 
 	for (int8_t i = pageIndex + 1; i < numberOfPages; i++)
 	{
-		if (pageConfigs[i].enabled)
+		if (pageConfigs[i].enabled == 1)
 		{
 			return false;
 		}
@@ -157,7 +157,7 @@ void ParamManager::incrementPage()
 
 	for (int8_t i = selectedPage + 1; i < numberOfPages; i++)
 	{
-		if (pageConfigs[i].enabled)
+		if (pageConfigs[i].enabled == 1)
 		{
 			selectedPage = i;
 			foundEnabledPage = true;
@@ -191,7 +191,7 @@ void ParamManager::decrementPage()
 
 	for (int8_t i = selectedPage - 1; i >= 0; i--)
 	{
-		if (pageConfigs[i].enabled)
+		if (pageConfigs[i].enabled == 1)
 		{
 			selectedPage = i;
 			foundEnabledPage = true;
