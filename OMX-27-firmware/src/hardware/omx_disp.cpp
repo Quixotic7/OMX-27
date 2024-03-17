@@ -40,7 +40,7 @@ void OmxDisp::drawStartupScreen()
 	drawLoading();
 	// Display version
     display.clearDisplay();
-    displayMessageTimed("v" + String(MAJOR_VERSION) + "." + String(MINOR_VERSION) + "." + String(POINT_VERSION), 1);
+    displayMessageTimed(String(VERSION_STRING) + String(MAJOR_VERSION) + "." + String(MINOR_VERSION) + "." + String(POINT_VERSION), 1);
     display.display();
 }
 
