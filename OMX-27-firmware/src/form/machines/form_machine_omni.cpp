@@ -142,31 +142,33 @@ namespace FormOmni
 
     ParamManager *FormMachineOmni::getParams()
     {
-        switch (omniUiMode_)
-        {
-        case OMNIUIMODE_CONFIG:
-        case OMNIUIMODE_MIX:
-        {
-            if(stepHeld_)
-            {
-                return &stepParams_;
-            }
-            else
-            {
-                return &trackParams_;
-            }
-        }
-        break;
-        case OMNIUIMODE_LENGTH:
-        break;
-        case OMNIUIMODE_TRANSPOSE:
-            return &tPatParams_;
-        case OMNIUIMODE_STEP:
-        case OMNIUIMODE_NOTEEDIT:
-        break;
-        }
-
         return &trackParams_;
+
+        // switch (omniUiMode_)
+        // {
+        // case OMNIUIMODE_CONFIG:
+        // case OMNIUIMODE_MIX:
+        // {
+        //     if(stepHeld_)
+        //     {
+        //         return &stepParams_;
+        //     }
+        //     else
+        //     {
+        //         return &trackParams_;
+        //     }
+        // }
+        // break;
+        // case OMNIUIMODE_LENGTH:
+        // break;
+        // case OMNIUIMODE_TRANSPOSE:
+        //     return &tPatParams_;
+        // case OMNIUIMODE_STEP:
+        // case OMNIUIMODE_NOTEEDIT:
+        // break;
+        // }
+
+        // return &trackParams_;
     }
 
     void FormMachineOmni::onSelected()
