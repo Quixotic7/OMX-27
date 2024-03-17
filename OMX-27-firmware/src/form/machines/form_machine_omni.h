@@ -122,6 +122,17 @@ namespace FormOmni
         uint8_t lastTriggeredStepIndex_;
         bool lastTriggeredStepState_;
 
+        // Each slot points to a step index
+        // uint8_t shufflePattern[64];
+
+        std::vector<uint8_t> shuffleVec;
+
+        static inline bool
+		shuffleSortFunc(uint8_t a1, uint8_t a2)
+		{
+			return random(0,1) == 1;
+		}
+
         Micros nextStepTime_;
 
         Micros stepMicros_;
@@ -143,9 +154,11 @@ namespace FormOmni
         std::vector<MidiNoteGroup> noteOns_;
 
         void onRateChanged();
+        void onTrackLengthChanged();
 
         float getStepLenMult(uint8_t len);
         String getStepLenString(uint8_t len);
+
         float getGateMult(uint8_t gate);
         uint8_t getRestartPos();
         const char* getCondChar(uint8_t condIndex);
@@ -153,6 +166,9 @@ namespace FormOmni
 
         MidiNoteGroup step2NoteGroup(uint8_t noteIndex, Step *step);
         bool evaluateTrig(uint8_t stepIndex, Step *step);
+
+        int8_t processPlayMode(uint8_t currentStepIndex, uint8_t playmodeIndex);
+        void calculateShuffle();
 
         // returns index of next step
         int8_t processStepFunction(uint8_t functionIndex);

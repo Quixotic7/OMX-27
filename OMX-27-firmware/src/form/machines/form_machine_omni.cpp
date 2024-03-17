@@ -7,6 +7,7 @@
 #include "../../hardware/omx_leds.h"
 #include "omni_note_editor.h"
 #include <U8g2_for_Adafruit_GFX.h>
+#include <algorithm>
 
 namespace FormOmni
 {
@@ -299,6 +300,7 @@ namespace FormOmni
         track->steps[1].notes[0] = 64;
         track->steps[2].notes[0] = 67;
         track->steps[3].notes[0] = 71;
+        onTrackLengthChanged();
     }
 
     void FormMachineOmni::playBackStateChanged(bool newIsPlaying)
@@ -350,6 +352,8 @@ namespace FormOmni
 
         transpPat_.reset();
         seqDynamic_.Reset();
+
+        calculateShuffle();
 
         if (resetTickCounters)
         {
@@ -564,6 +568,97 @@ namespace FormOmni
 
         prevCondWasTrue_ = true;
         return true;
+    }
+
+    int8_t FormMachineOmni::processPlayMode(uint8_t currentStepIndex, uint8_t playmodeIndex)
+    {
+        switch (playmodeIndex)
+        {
+        case TRACKMODE_NONE:
+        return -1;
+        // Steps move forward and reverse on last step
+        case TRACKMODE_PONG:
+        {
+            auto track = getTrack();
+
+            if(currentStepIndex == 0)
+            {
+                track->playDirection = TRACKDIRECTION_FORWARD;
+            }
+            else if(currentStepIndex == track->len)
+            {
+                track->playDirection = TRACKDIRECTION_REVERSE;
+            }
+        }
+        return -1;
+        // Each step is randomly selected        
+        case TRACKMODE_RAND:
+        {
+            auto track = getTrack();
+            int8_t jumpstep = random(0, track->len);
+            return jumpstep;
+        }
+        break;
+        // Steps are randomly selected but won't play the same step twice
+        case TRACKMODE_RANDNODUPE:
+        {
+            auto track = getTrack();
+
+            if (track->len < 2)
+            {
+                return -1;
+            }
+
+            int8_t jumpstep = currentStepIndex;
+
+            while (jumpstep == currentStepIndex)
+            {
+                jumpstep = random(0, track->len);
+            }
+
+            return jumpstep;
+        }
+        break;
+        // Steps are randomly shuffled each time the pattern loops
+        case TRACKMODE_SHUFFLE:
+        // Steps are shuffled once when playback starts.
+        // For shuffle modes, steps will be reshuffled if the track length is changed
+        case TRACKMODE_SHUFFLE_HOLD:
+        {
+            auto track = getTrack();
+
+            if(track->getLength() != shuffleVec.size())
+            {
+                calculateShuffle();
+            }
+
+            // This shouldn't happen
+            if(currentStepIndex >= shuffleVec.size())
+            {
+                return -1;
+            }
+
+            return shuffleVec[currentStepIndex];
+        }
+        break;
+        }
+
+        return -1;
+    }
+
+    void FormMachineOmni::calculateShuffle()
+    {
+        shuffleVec.clear();
+
+        auto track = getTrack();
+
+        for(uint8_t i = 0; i < track->getLength(); i++)
+        {
+            shuffleVec.push_back(i);
+        }
+
+        // randomly sort
+        std::sort(shuffleVec.begin(), shuffleVec.end(), shuffleSortFunc);
     }
 
     int8_t FormMachineOmni::processStepFunction(uint8_t functionIndex)
@@ -1144,6 +1239,8 @@ namespace FormOmni
 
             bool shouldTriggerStep = evaluateTrig(playingStep_, currentStep);
 
+            int8_t playmodeStep = processPlayMode(playingStep_, track->playMode);
+
             int8_t functionStep = -1;
 
             if(shouldTriggerStep)
@@ -1155,15 +1252,26 @@ namespace FormOmni
 
             uint8_t nextStepIndex;
 
+            // -2 means reset next step
             if(functionStep == -2)
             {
                 resetAfterThisTrig = true;
                 nextStepIndex = getRestartPos();
             }
-            else if(functionStep == -1)
+            // -1 means normal advance
+            else if (functionStep == -1)
             {
-                nextStepIndex = (playingStep_ + length + directionIncrement) % length;
+                // Step functions supercede playmode functions
+                if (playmodeStep < 0)
+                {
+                    nextStepIndex = (playingStep_ + length + directionIncrement) % length;
+                }
+                else
+                {
+                    nextStepIndex = playmodeStep;
+                }
             }
+            // Step function is changing the next step
             else
             {
                 nextStepIndex = functionStep;
@@ -1293,6 +1401,12 @@ namespace FormOmni
             loopCounter_ = (loopCounter_ + 1) % track->getLength();
             if(loopCounter_ == 0)
             {
+                // Reshuffle every loop
+                if(track->playMode == TRACKMODE_SHUFFLE)
+                {
+                    calculateShuffle();
+                }
+
                 // 840 is evenly divisible by 8,7,6,5,4,3,2,1
                 loopCount_ = (loopCount_ + 1) % 840;
                 firstLoop_ = false;
@@ -1388,6 +1502,16 @@ namespace FormOmni
             return String(bar) + "br";
         }
         return String(stepLenMult, 0);
+    }
+
+    void FormMachineOmni::onTrackLengthChanged()
+    {
+        auto track = getTrack();
+
+        if(track->playMode == TRACKMODE_SHUFFLE || track->playMode == TRACKMODE_SHUFFLE_HOLD)
+        {
+            calculateShuffle();
+        }
     }
 
     float FormMachineOmni::getGateMult(uint8_t gate)
@@ -1646,6 +1770,7 @@ namespace FormOmni
 
                         uint8_t pageKey = (thisKey - 11) + (16 * min(activePage_, kPageMax[zoomLevel_] - 1));
                         track->len = pageKey * kZoomMults[zoomLevel_] + (kZoomMults[zoomLevel_] - 1);
+                        onTrackLengthChanged();
                         omxDisp.displayMessage("LENGTH " + String(track->getLength()));
                     }
                     break;
@@ -1832,6 +1957,7 @@ namespace FormOmni
             if (param == 0)
             {
                 track->len = constrain(track->len + amtSlow, 0, 63);
+                onTrackLengthChanged();
             }
             else if (param == 1)
             {
@@ -1855,7 +1981,13 @@ namespace FormOmni
             }
             else if (param == 2)
             {
+                uint8_t prevMode = track->playMode;
                 track->playMode = constrain(track->playMode + amtSlow, 0, TRACKMODE_COUNT - 1);
+
+                if(prevMode != track->playMode && track->playMode >= TRACKMODE_SHUFFLE)
+                {
+                    calculateShuffle();
+                }
             }
         }
         break;
