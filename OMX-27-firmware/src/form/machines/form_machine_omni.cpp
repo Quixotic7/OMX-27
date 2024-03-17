@@ -7,7 +7,7 @@
 #include "../../hardware/omx_leds.h"
 #include "omni_note_editor.h"
 #include <U8g2_for_Adafruit_GFX.h>
-#include <algorithm>
+// #include <algorithm>
 
 namespace FormOmni
 {
@@ -632,13 +632,20 @@ namespace FormOmni
                 calculateShuffle();
             }
 
-            // This shouldn't happen
-            if(currentStepIndex >= shuffleVec.size())
-            {
-                return -1;
-            }
+            // // This shouldn't happen
+            // if(currentStepIndex >= shuffleVec.size())
+            // {
+            //     return -1;
+            // }
 
-            return shuffleVec[currentStepIndex];
+            int8_t jumpStep = shuffleVec[shuffleCounter_];
+
+            // Increment the shuffle counter
+            int8_t directionIncrement = track->playDirection == TRACKDIRECTION_FORWARD ? 1 : -1;
+            uint8_t trackLen = track->getLength();
+            shuffleCounter_ = (shuffleCounter_ + trackLen + directionIncrement) % trackLen;
+
+            return jumpStep;
         }
         break;
         }
@@ -649,16 +656,37 @@ namespace FormOmni
     void FormMachineOmni::calculateShuffle()
     {
         shuffleVec.clear();
+        tempShuffleVec.clear();
 
         auto track = getTrack();
 
+        // Serial.println("calculateShuffle");
+
         for(uint8_t i = 0; i < track->getLength(); i++)
         {
-            shuffleVec.push_back(i);
+            tempShuffleVec.push_back(i);
         }
 
-        // randomly sort
-        std::sort(shuffleVec.begin(), shuffleVec.end(), shuffleSortFunc);
+        while (tempShuffleVec.size() > 0)
+        {
+            uint8_t randIndex = random(0, tempShuffleVec.size() - 1);
+            shuffleVec.push_back(tempShuffleVec[randIndex]);
+            tempShuffleVec.erase(tempShuffleVec.begin() + randIndex);
+        }
+
+        tempShuffleVec.clear();
+
+        // // randomly sort
+        // std::sort(shuffleVec.begin(), shuffleVec.end(), &FormMachineOmni::shuffleSortFunc);
+
+        // for(uint8_t step : shuffleVec)
+        // {
+        //     Serial.print(step);
+        //     Serial.print(" ");
+        // }
+        // Serial.print("\n");
+
+        shuffleCounter_ = 0;
     }
 
     int8_t FormMachineOmni::processStepFunction(uint8_t functionIndex)

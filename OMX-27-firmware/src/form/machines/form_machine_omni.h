@@ -116,6 +116,9 @@ namespace FormOmni
         // Counts from 0 to track length to determine when the track has looped
         uint8_t loopCounter_;
 
+        // Starts on playingStep_ but then counts from 0 to track length or in reverse depending on play direction
+        uint8_t shuffleCounter_;
+
         // Increments everytime track loops
         uint16_t loopCount_;
 
@@ -126,12 +129,13 @@ namespace FormOmni
         // uint8_t shufflePattern[64];
 
         std::vector<uint8_t> shuffleVec;
+        std::vector<uint8_t> tempShuffleVec;
 
-        static inline bool
-		shuffleSortFunc(uint8_t a1, uint8_t a2)
-		{
-			return random(0,1) == 1;
-		}
+        // static inline bool
+		// shuffleSortFunc(uint8_t a1, uint8_t a2)
+		// {
+		// 	return (rand() % 100) > 50;
+		// }
 
         Micros nextStepTime_;
 
