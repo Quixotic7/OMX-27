@@ -210,7 +210,7 @@ private:
 	// Static glue to link a pointer to a member function
 	static void onNotePostFXForwarder(void *context, MidiNoteGroup note)
 	{
-		Serial.println("onNotePostFXForwarder " + String(note.noteNumber));
+		// Serial.println("onNotePostFXForwarder " + String(note.noteNumber));
 		static_cast<OmxModeForm *>(context)->onNotePostFX(note);
 	}
 
