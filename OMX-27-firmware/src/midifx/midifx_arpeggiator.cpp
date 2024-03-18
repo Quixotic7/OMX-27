@@ -1914,7 +1914,11 @@ namespace midifx
         auto amtSlow = enc.accel(1);
         auto amtFast = enc.accel(5);
 
-        if (page == ARPPAGE_1) // Mode, Pattern, Reset mode, Chance
+        if (page == ARPPAGE_Chance)
+        {
+            chancePerc_ = constrain(chancePerc_ + amtFast, 0, 100);
+        }
+        else if (page == ARPPAGE_1) // Mode, Pattern, Reset mode, Chance
         {
             if (param == 0)
             {
