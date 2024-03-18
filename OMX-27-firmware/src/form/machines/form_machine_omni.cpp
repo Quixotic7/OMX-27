@@ -1757,6 +1757,22 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         {
+            // Double click to enter note edit
+            if (!e.down() && thisKey >= 11 && e.clicks() == 2)
+            {
+                auto track = getTrack();
+
+                selStep(thisKey - 11);
+                stepReleased(thisKey - 11);
+                uint8_t stepIndex = key16toStep(thisKey - 11);
+                // reverse effects of quick click mute
+                track->steps[stepIndex].mute = !track->steps[stepIndex].mute;
+
+                changeUIMode(OMNIUIMODE_NOTEEDIT, false);
+                omxFormGlobal.auxBlock = true;
+                return true;
+            }
+
             if (stepHeld_)
             {
                 // Shortcut to set mute
@@ -1805,6 +1821,7 @@ namespace FormOmni
                 {
                     if (thisKey >= 11 && thisKey < 27)
                     {
+                        // Shortcut to set mute, not sure this is needed here
                         if (e.quickClicked())
                         {
                             auto track = getTrack();
