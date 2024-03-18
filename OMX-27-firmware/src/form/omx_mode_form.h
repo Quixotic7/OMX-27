@@ -189,7 +189,9 @@ private:
 	bool onKeyUpdateSelMidiFX(OMXKeypadEvent e);
 	bool onKeyHeldSelMidiFX(OMXKeypadEvent e);
 
+	// Index 0-4 = MidiFX 1 - 5, >= 5 is off
     void seqNoteOn(MidiNoteGroup noteGroup, uint8_t midifx);
+	// Index 0-4 = MidiFX 1 - 5, >= 5 is off
     void seqNoteOff(MidiNoteGroup noteGroup, uint8_t midifx);
 
 	static void seqNoteOnForwarder(void *context, MidiNoteGroup note, uint8_t midifx)

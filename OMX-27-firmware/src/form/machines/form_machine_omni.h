@@ -55,8 +55,8 @@ namespace FormOmni
         OmniSeq seq_;
         OmniSeqDynamic seqDynamic_;
 
-        uint8_t selStep_;
-        bool stepHeld_;
+        uint8_t selStep_ = 0;
+        bool stepHeld_ = false;
 
         uint8_t activePage_ = 0;
         uint8_t zoomLevel_ = 0;
@@ -102,28 +102,28 @@ namespace FormOmni
 
         uint8_t playingStep_;
 
-        bool prevCondWasTrue_;
-        bool fillActive_;
-        bool firstLoop_;
+        bool prevCondWasTrue_ = false;
+        bool fillActive_ = false;
+        bool firstLoop_ = false;
 
-        bool setDirtyOnceMessageClears_;
+        bool setDirtyOnceMessageClears_ = false;
 
         // Counts from 0 to 16 during playback to determine groove
-        uint8_t grooveCounter_;
+        uint8_t grooveCounter_ = 0;
 
-        uint8_t playRateCounter_;
+        uint8_t playRateCounter_ = 0;
 
         // Counts from 0 to track length to determine when the track has looped
-        uint8_t loopCounter_;
+        uint8_t loopCounter_ = 0;
 
         // Starts on playingStep_ but then counts from 0 to track length or in reverse depending on play direction
-        uint8_t shuffleCounter_;
+        uint8_t shuffleCounter_ = 0;
 
         // Increments everytime track loops
-        uint16_t loopCount_;
+        uint16_t loopCount_ = 0;
 
-        uint8_t lastTriggeredStepIndex_;
-        bool lastTriggeredStepState_;
+        uint8_t lastTriggeredStepIndex_ = 0;
+        bool lastTriggeredStepState_ = false;
 
         // Each slot points to a step index
         // uint8_t shufflePattern[64];
@@ -141,21 +141,21 @@ namespace FormOmni
 
         Micros stepMicros_;
 
-        uint16_t ticksPerStep_;
+        uint16_t ticksPerStep_ = 24;
 
-        uint16_t omniTick_;
+        uint16_t omniTick_ = 0;
 
-        int16_t ticksTilNextTrigger_;
+        int16_t ticksTilNextTrigger_ = 0;
 
-        int16_t ticksTilNext16Trigger_; // Keeps track of ticks to quantized next 16th
+        int16_t ticksTilNext16Trigger_ = 0; // Keeps track of ticks to quantized next 16th
 
-        int16_t ticksTilNextTriggerRate_;
+        int16_t ticksTilNextTriggerRate_ = 0;
 
         float stepLengthMult_ = 1.0f; // 1 is a 16th note, 0.5 a 32nd note length, recalculated with the rate
 
         std::vector<MidiNoteGroup> triggeredNotes_;
 
-        std::vector<MidiNoteGroup> noteOns_;
+        std::vector<OmniNoteTracker> noteOns_;
 
         void onRateChanged();
         void onTrackLengthChanged();

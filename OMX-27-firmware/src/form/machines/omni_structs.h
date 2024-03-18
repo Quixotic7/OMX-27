@@ -54,6 +54,79 @@ namespace FormOmni
         STEPFUNC_COUNT
     };
 
+    struct OmniNoteTracker
+    {
+        uint8_t channel : 4;
+        uint8_t midiFXIndex : 3;        // MidiFX index, 0 for off, 1-5 for MidiFX Groups 1-5
+        uint8_t noteNumber = 0;
+        // uint8_t keyIndex = 0; // use if t
+        // uint8_t prevNoteNumber = 0; // note number before being modified by midiFX
+        // uint8_t velocity = 100;
+        float stepLength = 0; // fraction or multiplier of clockConfig.step_micros, 1 == 1 step
+        uint8_t sendMidi : 1;
+        uint8_t sendCV : 1;
+        uint32_t noteonMicros = 0;
+        // bool unknownLength = false;
+        // bool noteOff = false; // Set true if note off, corresponding note on should have stepLength of 0
+
+        OmniNoteTracker()
+        {
+            midiFXIndex;
+
+            channel = 0;
+            midiFXIndex = 0;
+            sendMidi = 1;
+            sendCV = 1;
+        }
+
+        // Set with full note non-bitmasked midifx version where 0-4 map to a MidiFX group and 255 is off
+        void setMidiFXIndex(uint8_t midiFX)
+        {
+            if(midiFX >= NUM_MIDIFX_GROUPS)
+            {
+                midiFXIndex = 0;
+            }
+            else
+            {
+                midiFXIndex = midiFX + 1;
+            }
+        }
+
+        // Returns full note non-bitmasked midifx version where 0-4 map to a MidiFX group and 255 is off
+        uint8_t getMidifFXIndex()
+        {
+            if(midiFXIndex == 0)
+            {
+                return 255;
+            }
+            return midiFXIndex - 1;
+        }
+
+        void setFromNoteGroup(MidiNoteGroup noteGroup)
+        {
+            channel = noteGroup.channel - 1;
+            noteNumber = noteGroup.noteNumber;
+            stepLength =noteGroup.stepLength;
+            sendMidi = noteGroup.sendMidi ? 1 : 0;
+            sendCV = noteGroup.sendCV ? 1 : 0;
+            noteonMicros = noteGroup.noteonMicros;
+        }
+
+        MidiNoteGroup toMidiNoteGroup()
+        {
+            MidiNoteGroup noteGroup;
+
+            noteGroup.channel = channel + 1;
+            noteGroup.noteNumber = noteNumber;
+            noteGroup.prevNoteNumber = noteNumber;
+            noteGroup.stepLength = stepLength;
+            noteGroup.sendMidi = sendMidi == 1 ? true : false;
+            noteGroup.sendCV = sendCV == 1 ? true : false;
+            noteGroup.noteonMicros = noteonMicros;
+            return noteGroup;
+        }
+    };
+
     // 96 pulse per quarter note
     // 24 pules per 16th note`
 

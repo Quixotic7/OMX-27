@@ -1206,7 +1206,28 @@ void OmxModeForm::SetScale(MusicScales *scale)
 void OmxModeForm::seqNoteOn(MidiNoteGroup noteGroup, uint8_t midifx)
 {
 	// Serial.println("seqNoteOn: " + String(noteGroup.noteNumber));
-	onNotePostFX(noteGroup);
+	// onNotePostFX(noteGroup);
+
+
+	// MidiNoteGroup noteGroup = omxUtil.midiNoteOn2(musicScale, keyIndex, midiSettings.defaultVelocity, sysSettings.midiChannel);
+
+	if (noteGroup.noteNumber == 255)
+		return;
+
+	// Serial.println("doNoteOn: " + String(noteGroup.noteNumber));
+
+	// noteGroup.unknownLength = true;
+	noteGroup.prevNoteNumber = noteGroup.noteNumber;
+
+	if (midifx < NUM_MIDIFX_GROUPS)
+	{
+		subModeMidiFx[midifx].noteInput(noteGroup);
+		// subModeMidiFx.noteInput(noteGroup);
+	}
+	else
+	{
+		onNotePostFX(noteGroup);
+	}
 }
 
 // Called via doNoteOnForwarder
@@ -1214,7 +1235,27 @@ void OmxModeForm::seqNoteOff(MidiNoteGroup noteGroup, uint8_t midifx)
 {
 	// Serial.println("seqNoteOff: " + String(noteGroup.noteNumber));
 
-	onNotePostFX(noteGroup);
+	// onNotePostFX(noteGroup);
+
+	// MidiNoteGroup noteGroup = omxUtil.midiNoteOff2(keyIndex, sysSettings.midiChannel);
+
+	if (noteGroup.noteNumber == 255)
+		return;
+
+	// Serial.println("doNoteOff: " + String(noteGroup.noteNumber));
+
+	// noteGroup.unknownLength = true;
+	noteGroup.prevNoteNumber = noteGroup.noteNumber;
+
+	if (midifx < NUM_MIDIFX_GROUPS)
+	{
+		subModeMidiFx[midifx].noteInput(noteGroup);
+		// subModeMidiFx.noteInput(noteGroup);
+	}
+	else
+	{
+		onNotePostFX(noteGroup);
+	}
 }
 
 // Called via doNoteOnForwarder

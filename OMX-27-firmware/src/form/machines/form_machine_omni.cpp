@@ -287,8 +287,12 @@ namespace FormOmni
         {
             shouldSelect = transpPat_.getEncoderSelect();
         }
+        else if (omniUiMode_ <= OMNIUIMODE_MIX)
+        {
+            shouldSelect = !stepHeld_;
+        }
 
-	    return omxFormGlobal.encoderSelect && !midiSettings.midiAUX && !stepHeld_ && shouldSelect;
+	    return omxFormGlobal.encoderSelect && !midiSettings.midiAUX && shouldSelect;
     }
 
     void FormMachineOmni::setTest()
@@ -326,7 +330,10 @@ namespace FormOmni
         {
             for(auto n : noteOns_)
             {
-                seqNoteOff(n, 255);
+                auto noteGroup = n.toMidiNoteGroup();
+                noteGroup.noteOff = true;
+                noteGroup.unknownLength = true;
+                seqNoteOff(noteGroup, n.getMidifFXIndex());
             }
             noteOns_.clear();
         }
@@ -834,6 +841,21 @@ namespace FormOmni
                     }
                 }
 
+                uint8_t mfxIndex = 255;
+
+                // Use the track midiFX, default
+                if(step->mfxIndex == 1)
+                {
+                    uint8_t trackMFX = getTrack()->midiFx;
+                    mfxIndex = trackMFX == 0 ? 255 : trackMFX - 1;
+                }
+                // Use the step's midiFX
+                else if(step->mfxIndex >= 2)
+                {
+                    mfxIndex = step->mfxIndex - 2;
+                }
+                // If step's mfxIndex is 0, mfxIndex will be 255 for off
+
                 if (!noteTriggeredOnSameStep)
                 {
                     // bool foundNoteToRemove = false;
@@ -843,7 +865,10 @@ namespace FormOmni
                         // remove matching note numbers
                         if (it->noteNumber == noteNumber)
                         {
-                            seqNoteOff(*it, 255);
+                            auto noteGroup = it->toMidiNoteGroup();
+                            noteGroup.noteOff = true;
+                            noteGroup.unknownLength = true;
+                            seqNoteOff(noteGroup, it->getMidifFXIndex());
                             // `erase()` invalidates the iterator, use returned iterator
                             it = noteOns_.erase(it);
                             // foundNoteToRemove = true;
@@ -858,9 +883,12 @@ namespace FormOmni
                 if(!noteTriggeredOnSameStep && noteOns_.size() < 16)
                 {
                     noteGroup.noteonMicros = seqConfig.lastClockMicros;
-                    seqNoteOn(noteGroup, 255);
+                    seqNoteOn(noteGroup, mfxIndex);
                     triggeredNotes_.push_back(noteGroup);
-                    noteOns_.push_back(noteGroup);
+                    OmniNoteTracker trackedNote;
+                    trackedNote.setFromNoteGroup(noteGroup);
+                    trackedNote.setMidiFXIndex(mfxIndex);
+                    noteOns_.push_back(trackedNote);
                 }
             }
         }
@@ -871,6 +899,7 @@ namespace FormOmni
 
     void FormMachineOmni::onEnabled()
     {
+        stepHeld_ = false;
     }
     void FormMachineOmni::onDisabled()
     {
@@ -1031,6 +1060,8 @@ namespace FormOmni
         {
             transpPat_.onUIEnabled();
         }
+
+        stepHeld_ = false;
         // Tell Note editor it's been started for step mode
     }
 
@@ -1141,7 +1172,10 @@ namespace FormOmni
                 // remove matching note numbers
                 if (seqConfig.lastClockMicros >= noteOffMicros)
                 {
-                    seqNoteOff(*it, 255);
+                    auto noteGroup = it->toMidiNoteGroup();
+                    noteGroup.noteOff = true;
+                    noteGroup.unknownLength = true;
+                    seqNoteOff(noteGroup, it->getMidifFXIndex());
                     it = noteOns_.erase(it);
                 }
                 else
@@ -1920,7 +1954,7 @@ namespace FormOmni
             }
             else if (param == 3)
             {
-                selStep->mfxIndex = constrain(selStep->mfxIndex + amtSlow, 0, 6);
+                selStep->mfxIndex = constrain(selStep->mfxIndex + amtSlow, 0, NUM_MIDIFX_GROUPS + 2 - 1);
             }
         }
         break;
