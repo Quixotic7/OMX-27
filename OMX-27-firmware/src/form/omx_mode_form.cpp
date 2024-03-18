@@ -328,6 +328,12 @@ void OmxModeForm::stopSequencers()
 void OmxModeForm::selectMidiFx(uint8_t mfxIndex, bool dispMsg)
 {
 	getSelectedMachine()->selectMidiFx(mfxIndex, dispMsg);
+
+	for (uint8_t i = 0; i < NUM_MIDIFX_GROUPS; i++)
+	{
+		subModeMidiFx[i].setSelected(i == mfxIndex);
+	}
+
 	// uint8_t prevMidiFX = activeDrumKit.drumKeys[selDrumKey].midifx;
 
 	// if(mfxIndex != prevMidiFX && prevMidiFX < NUM_MIDIFX_GROUPS)
@@ -353,10 +359,7 @@ void OmxModeForm::selectMidiFx(uint8_t mfxIndex, bool dispMsg)
 	// 	}
 	// }
 
-	// for (uint8_t i = 0; i < NUM_MIDIFX_GROUPS; i++)
-	// {
-	// 	subModeMidiFx[i].setSelected(i == mfxIndex);
-	// }
+	
 
 	// if (dispMsg)
 	// {
@@ -390,15 +393,15 @@ void OmxModeForm::onPotChanged(int potIndex, int prevValue, int newValue, int an
 
 void OmxModeForm::onClockTick()
 {
-	for (uint8_t i = 0; i < 5; i++)
-	{
-		// Lets them do things in background
-		subModeMidiFx[i].onClockTick();
-	}
-
 	for(auto machine : machines_)
 	{
 		machine->onClockTick();
+	}
+
+	for (uint8_t i = 0; i < NUM_MIDIFX_GROUPS; i++)
+	{
+		// Lets them do things in background
+		subModeMidiFx[i].onClockTick();
 	}
 }
 
@@ -406,7 +409,12 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 {
 	// Serial.println("LoopUpdate");
 
-	for (uint8_t i = 0; i < 5; i++)
+	for(auto machine : machines_)
+	{
+		machine->loopUpdate();
+	}
+
+	for (uint8_t i = 0; i < NUM_MIDIFX_GROUPS; i++)
 	{
 		// Lets them do things in background
 		subModeMidiFx[i].loopUpdate();
@@ -424,11 +432,6 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 			ledUpdateTime_ = stepmicros + clockConfig.ppqInterval * 12;
 			omxLeds.setDirty();
 		}
-	}
-
-	for(auto machine : machines_)
-	{
-		machine->loopUpdate();
 	}
 
 	// Serial.println("LoopUpdate complete");
@@ -866,7 +869,7 @@ void OmxModeForm::updateLEDs()
 
 	if (midiSettings.midiAUX)
 	{
-		uint8_t selMFXIndex = 0;
+		uint8_t selMFXIndex = getSelectedMachine()->getSelectedMidiFX();
 		auxMacroManager_.UpdateAUXLEDS(selMFXIndex);
 		return;
 	}
@@ -1205,7 +1208,7 @@ void OmxModeForm::SetScale(MusicScales *scale)
 
 void OmxModeForm::seqNoteOn(MidiNoteGroup noteGroup, uint8_t midifx)
 {
-	// Serial.println("seqNoteOn: " + String(noteGroup.noteNumber));
+	// Serial.println("seqNoteOn: " + String(noteGroup.noteNumber) + " " + String(midifx));
 	// onNotePostFX(noteGroup);
 
 
@@ -1221,11 +1224,14 @@ void OmxModeForm::seqNoteOn(MidiNoteGroup noteGroup, uint8_t midifx)
 
 	if (midifx < NUM_MIDIFX_GROUPS)
 	{
+		// Serial.println("seqNoteOn Send to midifx");
+		// noteGroup.Print();
 		subModeMidiFx[midifx].noteInput(noteGroup);
 		// subModeMidiFx.noteInput(noteGroup);
 	}
 	else
 	{
+		// Serial.println("Send to post");
 		onNotePostFX(noteGroup);
 	}
 }
@@ -1233,6 +1239,8 @@ void OmxModeForm::seqNoteOn(MidiNoteGroup noteGroup, uint8_t midifx)
 // Called via doNoteOnForwarder
 void OmxModeForm::seqNoteOff(MidiNoteGroup noteGroup, uint8_t midifx)
 {
+	// Serial.println("seqNoteOff: " + String(noteGroup.noteNumber) + " " + String(midifx));
+
 	// Serial.println("seqNoteOff: " + String(noteGroup.noteNumber));
 
 	// onNotePostFX(noteGroup);
@@ -1249,11 +1257,14 @@ void OmxModeForm::seqNoteOff(MidiNoteGroup noteGroup, uint8_t midifx)
 
 	if (midifx < NUM_MIDIFX_GROUPS)
 	{
+		// Serial.println("seqNoteOff Send to midifx");
+		// noteGroup.Print();
 		subModeMidiFx[midifx].noteInput(noteGroup);
 		// subModeMidiFx.noteInput(noteGroup);
 	}
 	else
 	{
+		// Serial.println("Send to post");
 		onNotePostFX(noteGroup);
 	}
 }

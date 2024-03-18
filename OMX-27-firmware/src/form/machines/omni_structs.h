@@ -1,5 +1,6 @@
 #pragma once
 #include "../../ClearUI/ClearUI_Input.h"
+#include "../../config.h"
 
 namespace FormOmni
 {
@@ -54,6 +55,11 @@ namespace FormOmni
         STEPFUNC_COUNT
     };
 
+    struct OmniTriggeredNoteTracker
+    {
+        uint8_t noteNumber = 0;
+    };
+
     struct OmniNoteTracker
     {
         uint8_t channel : 4;
@@ -66,17 +72,17 @@ namespace FormOmni
         uint8_t sendMidi : 1;
         uint8_t sendCV : 1;
         uint32_t noteonMicros = 0;
-        // bool unknownLength = false;
+        uint8_t unknownLength : 1;
         // bool noteOff = false; // Set true if note off, corresponding note on should have stepLength of 0
 
         OmniNoteTracker()
         {
-            midiFXIndex;
-
+            midiFXIndex = 0;
             channel = 0;
             midiFXIndex = 0;
             sendMidi = 1;
             sendCV = 1;
+            unknownLength = 0;
         }
 
         // Set with full note non-bitmasked midifx version where 0-4 map to a MidiFX group and 255 is off
@@ -106,10 +112,11 @@ namespace FormOmni
         {
             channel = noteGroup.channel - 1;
             noteNumber = noteGroup.noteNumber;
-            stepLength =noteGroup.stepLength;
-            sendMidi = noteGroup.sendMidi ? 1 : 0;
-            sendCV = noteGroup.sendCV ? 1 : 0;
+            stepLength = noteGroup.stepLength;
+            sendMidi = (uint8_t)noteGroup.sendMidi;
+            sendCV = (uint8_t)noteGroup.sendCV;
             noteonMicros = noteGroup.noteonMicros;
+            unknownLength = (uint8_t)noteGroup.unknownLength;
         }
 
         MidiNoteGroup toMidiNoteGroup()
@@ -117,12 +124,14 @@ namespace FormOmni
             MidiNoteGroup noteGroup;
 
             noteGroup.channel = channel + 1;
+            noteGroup.velocity = 100;
             noteGroup.noteNumber = noteNumber;
             noteGroup.prevNoteNumber = noteNumber;
             noteGroup.stepLength = stepLength;
-            noteGroup.sendMidi = sendMidi == 1 ? true : false;
-            noteGroup.sendCV = sendCV == 1 ? true : false;
+            noteGroup.sendMidi = sendMidi == 1;
+            noteGroup.sendCV = sendCV == 1;
             noteGroup.noteonMicros = noteonMicros;
+            noteGroup.unknownLength = unknownLength == 1;
             return noteGroup;
         }
     };

@@ -32,6 +32,10 @@ namespace FormOmni
 	    void playBackStateChanged(bool newIsPlaying) override;
 	    void resetPlayback() override;
 
+	    void selectMidiFx(uint8_t mfxIndex, bool dispMsg) override;
+	    uint8_t getSelectedMidiFX() override;
+
+
         // Standard Updates
         void onPotChanged(int potIndex, int prevValue, int newValue, int analogDelta) override;
         void onClockTick() override;
@@ -153,7 +157,7 @@ namespace FormOmni
 
         float stepLengthMult_ = 1.0f; // 1 is a 16th note, 0.5 a 32nd note length, recalculated with the rate
 
-        std::vector<MidiNoteGroup> triggeredNotes_;
+        std::vector<OmniTriggeredNoteTracker> triggeredNotes_;
 
         std::vector<OmniNoteTracker> noteOns_;
 

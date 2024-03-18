@@ -63,6 +63,7 @@ public:
 	virtual void onDisplayUpdate() {}
 
 	virtual void selectMidiFx(uint8_t mfxIndex, bool dispMsg) {};
+	virtual uint8_t getSelectedMidiFX() { return 255; }
 
 	virtual void setTest(){};
 

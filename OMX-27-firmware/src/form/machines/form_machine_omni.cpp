@@ -344,6 +344,44 @@ namespace FormOmni
         resetPlayback(true);
     }
 
+    void FormMachineOmni::selectMidiFx(uint8_t mfxIndex, bool dispMsg)
+    {
+        auto track = getTrack();
+
+        if (mfxIndex >= NUM_MIDIFX_GROUPS)
+        {
+            track->midiFx = 0;
+        }
+        else
+        {
+            track->midiFx = mfxIndex + 1;
+        }
+
+        if (dispMsg)
+        {
+            if (mfxIndex < NUM_MIDIFX_GROUPS)
+            {
+                omxDisp.displayMessageTimed("TRK MFX " + String(mfxIndex + 1), 5);
+            }
+            else
+            {
+                omxDisp.displayMessageTimed("TRK MFX Off", 5);
+            }
+        }
+    }
+
+    uint8_t FormMachineOmni::getSelectedMidiFX()
+    {
+         auto track = getTrack();
+
+        if (track->midiFx == 0)
+        {
+            return 255;
+        }
+
+        return track->midiFx - 1;
+    }
+
     void FormMachineOmni::resetPlayback(bool resetTickCounters)
     {
         // nextStepTime_ = seqConfig.lastClockMicros + ;
@@ -478,7 +516,7 @@ namespace FormOmni
     {
         MidiNoteGroup noteGroup;
 
-        noteGroup.channel = seq_.channel;
+        noteGroup.channel = seq_.channel + 1;
 
         if(noteIndex >= 6)
         {
@@ -866,8 +904,6 @@ namespace FormOmni
                         if (it->noteNumber == noteNumber)
                         {
                             auto noteGroup = it->toMidiNoteGroup();
-                            noteGroup.noteOff = true;
-                            noteGroup.unknownLength = true;
                             seqNoteOff(noteGroup, it->getMidifFXIndex());
                             // `erase()` invalidates the iterator, use returned iterator
                             it = noteOns_.erase(it);
@@ -884,7 +920,9 @@ namespace FormOmni
                 {
                     noteGroup.noteonMicros = seqConfig.lastClockMicros;
                     seqNoteOn(noteGroup, mfxIndex);
-                    triggeredNotes_.push_back(noteGroup);
+                    OmniTriggeredNoteTracker triggeredTracker;
+                    triggeredTracker.noteNumber = noteGroup.noteNumber;
+                    triggeredNotes_.push_back(triggeredTracker);
                     OmniNoteTracker trackedNote;
                     trackedNote.setFromNoteGroup(noteGroup);
                     trackedNote.setMidiFXIndex(mfxIndex);
@@ -1173,7 +1211,6 @@ namespace FormOmni
                 if (seqConfig.lastClockMicros >= noteOffMicros)
                 {
                     auto noteGroup = it->toMidiNoteGroup();
-                    noteGroup.noteOff = true;
                     noteGroup.unknownLength = true;
                     seqNoteOff(noteGroup, it->getMidifFXIndex());
                     it = noteOns_.erase(it);
@@ -1722,8 +1759,17 @@ namespace FormOmni
         {
             if (stepHeld_)
             {
-                // Shortcut to set function
-                if (e.down() && thisKey >= 1 && thisKey <= STEPFUNC_COUNT)
+                // Shortcut to set mute
+                if (e.quickClicked() && thisKey >= 11)
+                {
+                    auto track = getTrack();
+
+                    selStep(thisKey - 11);
+                    stepReleased(thisKey - 11);
+                    uint8_t stepIndex = key16toStep(thisKey - 11);
+                    track->steps[stepIndex].mute = !track->steps[stepIndex].mute;
+                }
+                else if (e.down() && thisKey >= 1 && thisKey <= STEPFUNC_COUNT)
                 {
                     auto step = getSelStep();
 
@@ -2023,7 +2069,7 @@ namespace FormOmni
             }
             else if (param == 1)
             {
-                track->midiFx = constrain(track->midiFx + amtSlow, 0, 6);
+                track->midiFx = constrain(track->midiFx + amtSlow, 0, NUM_MIDIFX_GROUPS + 1 - 1);
             }
         }
         break;
