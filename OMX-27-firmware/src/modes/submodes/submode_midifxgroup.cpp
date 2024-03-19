@@ -131,10 +131,46 @@ midifx::MidiFXArpeggiator *SubModeMidiFxGroup::getArp(bool autoCreate)
 
 void SubModeMidiFxGroup::toggleArp()
 {
+	bool arpIsOn = false;
+
 	auto arp = getArp(true);
 	if (arp != nullptr)
 	{
 		arp->toggleArp();
+
+		arpIsOn = arp->isOn();
+	}
+
+	bool isSelectedArp = false;
+
+	if (selectedMidiFX_ < NUM_MIDIFX_SLOTS)
+	{
+		auto mfx = getMidiFX(selectedMidiFX_);
+		if(mfx != nullptr && mfx->getFXType() == MIDIFX_ARP)
+		{
+			isSelectedArp = true;
+		}
+	}
+
+	if(isSelectedArp && (passthroughQuickEdit || midiFXParamView_))
+	{
+		// Only set state of current selected arp in these modes. 
+		return; 
+	}
+
+	// If multiple arps turn every arp on or off
+	for (uint8_t i = 0; i < NUM_MIDIFX_SLOTS; i++)
+	{
+		auto mfx = getMidiFX(i);
+		if (mfx != nullptr)
+		{
+			if (mfx->getFXType() == MIDIFX_ARP)
+			{
+				auto arpFX = static_cast<midifx::MidiFXArpeggiator *>(mfx);
+
+				arpFX->setArpState(arpIsOn);
+			}
+		}
 	}
 }
 

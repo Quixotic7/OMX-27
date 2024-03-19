@@ -159,7 +159,6 @@ private:
 	FormMachineInterface* getSelectedMachine();
 
 	void changeMachineAtIndex(uint8_t machineIndex, uint8_t machineType);
-	void changeMachineAtIndex(uint8_t machineIndex, FormMachineType machineType);
 
 	void cutMachineAt(uint8_t machineIndex);
 	void copyMachineAt(uint8_t machineIndex);

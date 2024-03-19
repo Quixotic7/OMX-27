@@ -4,6 +4,7 @@
 #include "../../utils/param_manager.h"
 #include "../../config.h"
 #include "../omx_form_global.h"
+#include "../../hardware/storage.h"
 
 enum FormMachineType
 {
@@ -27,6 +28,8 @@ public:
 	virtual bool usesPots() { return false; } // return true if submode uses pots
 	virtual bool shouldBlockEncEdit() { return false; }
 	virtual bool getEncoderSelect();
+	virtual bool getMute() { return false; }
+	virtual bool getSolo() { return false; }
 
 	virtual bool doesConsumePots() { return false; }
 	virtual bool doesConsumeDisplay() { return false; }
@@ -40,9 +43,14 @@ public:
 
     // Setters
 	virtual void setEnabled(bool newEnabled);
+	virtual void setMute(bool isMuted) {}
+	virtual void setSolo(bool isSoloed) {}
 
 	virtual void playBackStateChanged(bool newIsPlaying) {}
 	virtual void resetPlayback() {}
+
+	void setMachineIndex(uint8_t machineIndex) { machineIndex_ = machineIndex; }
+	uint8_t getMachineIndex() { return machineIndex_; }
 
 	// Callbacks
 	void setContext(void *context);
@@ -81,6 +89,7 @@ public:
 	virtual int loadFromDisk(int startingAddress, Storage *storage) { return startingAddress; }
 
 protected:
+	uint8_t machineIndex_;
 	bool enabled_;
 	bool encoderSelect_;
 

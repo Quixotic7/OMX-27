@@ -93,7 +93,7 @@ namespace midifx
 
 		virtual void loopUpdate() {}
 		virtual void onClockTick() {}
-
+		// Called by sequencer when sequencer is stopped
 		virtual void resync() {}
 
 		virtual bool getEncoderSelect();

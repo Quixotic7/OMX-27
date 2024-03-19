@@ -145,14 +145,6 @@ FormMachineInterface *OmxModeForm::getSelectedMachine()
 
 void OmxModeForm::changeMachineAtIndex(uint8_t machineIndex, uint8_t machineType)
 {
-	if (machineType < FORMMACH_COUNT)
-	{
-		changeMachineAtIndex(selectedMachine_, (FormMachineType)machineType);
-	}
-}
-
-void OmxModeForm::changeMachineAtIndex(uint8_t machineIndex, FormMachineType machineType)
-{
 	if (isMachineValid(machineIndex) == false)
 		return;
 
@@ -161,11 +153,13 @@ void OmxModeForm::changeMachineAtIndex(uint8_t machineIndex, FormMachineType mac
 	case FORMMACH_COUNT:
 	case FORMMACH_NULL:
 	{
+		// Serial.println("Setting machine at " + String(machineIndex) + " to FormMachineNull");
 		setMachineTo(machineIndex, new FormMachineNull());
 	}
 	break;
 	case FORMMACH_OMNI:
 	{
+		// Serial.println("Setting machine at " + String(machineIndex) + " to FormMachineOmni");
 		setMachineTo(machineIndex, new FormOmni::FormMachineOmni());
 	}
 	break;
@@ -220,6 +214,7 @@ void OmxModeForm::setMachineTo(uint8_t machineIndex, FormMachineInterface *ptr)
 
 	machines_[machineIndex] = ptr;
 	machines_[machineIndex]->setContext(this);
+	machines_[machineIndex]->setMachineIndex(machineIndex);
 	machines_[machineIndex]->setNoteOnFptr(&OmxModeForm::seqNoteOnForwarder);
 	machines_[machineIndex]->setNoteOffFptr(&OmxModeForm::seqNoteOffForwarder);
 }
@@ -296,9 +291,9 @@ void OmxModeForm::onModeActivated()
 	params.setSelPageAndParam(0, 0);
 	omxFormGlobal.encoderSelect = true;
 
-	Serial.println("AuxMacroActivated");
+	// Serial.println("AuxMacroActivated");
 	auxMacroManager_.onModeActivated();
-	Serial.println("onModeActivated complete");
+	// Serial.println("onModeActivated complete");
 
 
 	// activeDrumKit.CopyFrom(drumKits[selDrumKit]);
@@ -762,7 +757,18 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 		default:
 		{
 			// Key pressed
-			if (!e.held() && e.down())
+			if(e.quickClicked())
+			{
+				if (thisKey >= 3 && thisKey < 11)
+				{
+					selectMachine(thisKey - 3);
+					keyConsumed = true;
+					auto m = getSelectedMachine();
+					m->setMute(!m->getMute());
+					// selectMachineMode_ = true;
+				}
+			}
+			else if (!e.held() && e.down())
 			{
 				if (thisKey >= 3 && thisKey < 11)
 				{
@@ -890,7 +896,8 @@ void OmxModeForm::updateLEDs()
 	{
 		for (uint8_t i = 0; i < kNumMachines; i++)
 		{
-			int color = (i == selectedMachine_ && slowBlink) ? LEDOFF : getMachineColor(i);
+			int mColor = machines_[i]->getMute() ? DKRED : getMachineColor(i);
+			int color = (i == selectedMachine_ && slowBlink) ? LEDOFF : mColor;
 
 			strip.setPixelColor(i + 3, color);
 		}
@@ -1408,6 +1415,12 @@ void OmxModeForm::togglePlayback()
 	}
 	else
 	{
+		// Tell all the MidiFX to stop
+		for (uint8_t i = 0; i < NUM_MIDIFX_GROUPS; i++)
+		{
+			subModeMidiFx[i].resync();
+		}
+
 		omxUtil.stopClocks();
 		omxLeds.setBlinkAutoRefresh(true);
 	}
@@ -1443,16 +1456,22 @@ int OmxModeForm::saveToDisk(int startingAddress, Storage *storage)
 
 	for (uint8_t i = 0; i < kNumMachines; i++)
 	{
+		// Serial.println((String)"startingAddress: " + startingAddress);
+
 		auto machine = machines_[i];
 
 		if(machine == nullptr || machine->getType() == FORMMACH_NULL)
 		{
+			Serial.println("machine is null");
 			storage->write(startingAddress, FORMMACH_NULL);
 			startingAddress++;
 		}
 		else
 		{
 			uint8_t machineType = machine->getType();
+
+			// Serial.println("machine type is: " + String(machineType));
+
 			storage->write(startingAddress, machineType);
 			startingAddress++;
 
@@ -1469,9 +1488,13 @@ int OmxModeForm::saveToDisk(int startingAddress, Storage *storage)
 
 int OmxModeForm::loadFromDisk(int startingAddress, Storage *storage)
 {
+	// Serial.println((String)"startingAddress: " + startingAddress);
+
 	for (uint8_t i = 0; i < kNumMachines; i++)
 	{
 		uint8_t machineType = storage->read(startingAddress);
+
+		// Serial.println("machine type is: " + String(machineType));
 		startingAddress++;
 
 		changeMachineAtIndex(i, machineType);
@@ -1480,11 +1503,16 @@ int OmxModeForm::loadFromDisk(int startingAddress, Storage *storage)
 
 		if (machine != nullptr)
 		{
+			// uint8_t newMachType = machine->getType();
+
+			// Serial.println("Machine at " + String(i) + " is " + String(newMachType));
+			// Serial.println("Machine.getMachineIndex() = " + String(machine->getMachineIndex()));
+
 			startingAddress = machine->loadFromDisk(startingAddress, storage);
 		}
 		else
 		{
-			// Serial.println("machine is null");
+			Serial.println("machine is null");
 		}
 
 		// Serial.println((String)"startingAddress: " + startingAddress);

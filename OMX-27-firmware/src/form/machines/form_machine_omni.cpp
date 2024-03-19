@@ -545,6 +545,23 @@ namespace FormOmni
         return noteGroup;
     }
 
+    bool FormMachineOmni::getMute()
+    {
+        return seq_.mute == 1;
+    }
+    bool FormMachineOmni::getSolo()
+    {
+        return seq_.solo == 1;
+    }
+    void FormMachineOmni::setMute(bool isMuted)
+    {
+        seq_.mute = isMuted ? 1 : 0;
+    }
+    void FormMachineOmni::setSolo(bool isSoloed)
+    {
+        seq_.solo = isSoloed ? 1 : 0;
+    }
+
     bool FormMachineOmni::evaluateTrig(uint8_t stepIndex, Step *step)
     {
         if(step->mute == 1) return false;
@@ -847,86 +864,89 @@ namespace FormOmni
 
         // Micros now = micros();
 
-        for(int8_t i = 0; i < 6; i++)
+        if (seq_.mute == 0)
         {
-            int8_t noteNumber = step->notes[i];
-
-            if(noteNumber >= 0 && noteNumber <= 127)
+            for (int8_t i = 0; i < 6; i++)
             {
-                // Serial.println("triggerStep: " + String(noteNumber));
+                int8_t noteNumber = step->notes[i];
 
-                noteNumber = applyTranspose(noteNumber, step, stepDynamic);
-
-                if (noteNumber < 0)
-                    continue;
-
-                auto noteGroup = step2NoteGroup(i, step);
-                noteGroup.noteNumber = noteNumber;
-                noteGroup.prevNoteNumber = noteNumber;
-
-                bool noteTriggeredOnSameStep = false; 
-
-                // With nudge, two steps could fire at once, 
-                // If a step already triggered a note, 
-                // don't trigger same note again to avoid
-                // overlapping note ons
-                for(auto n : triggeredNotes_)
+                if (noteNumber >= 0 && noteNumber <= 127)
                 {
-                    if(n.noteNumber == noteNumber)
-                    {
-                        noteTriggeredOnSameStep = true;
+                    // Serial.println("triggerStep: " + String(noteNumber));
+
+                    noteNumber = applyTranspose(noteNumber, step, stepDynamic);
+
+                    if (noteNumber < 0)
                         continue;
-                    }
-                }
 
-                uint8_t mfxIndex = 255;
+                    auto noteGroup = step2NoteGroup(i, step);
+                    noteGroup.noteNumber = noteNumber;
+                    noteGroup.prevNoteNumber = noteNumber;
 
-                // Use the track midiFX, default
-                if(step->mfxIndex == 1)
-                {
-                    uint8_t trackMFX = getTrack()->midiFx;
-                    mfxIndex = trackMFX == 0 ? 255 : trackMFX - 1;
-                }
-                // Use the step's midiFX
-                else if(step->mfxIndex >= 2)
-                {
-                    mfxIndex = step->mfxIndex - 2;
-                }
-                // If step's mfxIndex is 0, mfxIndex will be 255 for off
+                    bool noteTriggeredOnSameStep = false;
 
-                if (!noteTriggeredOnSameStep)
-                {
-                    // bool foundNoteToRemove = false;
-                    auto it = noteOns_.begin();
-                    while (it != noteOns_.end())
+                    // With nudge, two steps could fire at once,
+                    // If a step already triggered a note,
+                    // don't trigger same note again to avoid
+                    // overlapping note ons
+                    for (auto n : triggeredNotes_)
                     {
-                        // remove matching note numbers
-                        if (it->noteNumber == noteNumber)
+                        if (n.noteNumber == noteNumber)
                         {
-                            auto noteGroup = it->toMidiNoteGroup();
-                            seqNoteOff(noteGroup, it->getMidifFXIndex());
-                            // `erase()` invalidates the iterator, use returned iterator
-                            it = noteOns_.erase(it);
-                            // foundNoteToRemove = true;
-                        }
-                        else
-                        {
-                            ++it;
+                            noteTriggeredOnSameStep = true;
+                            continue;
                         }
                     }
-                }
 
-                if(!noteTriggeredOnSameStep && noteOns_.size() < 16)
-                {
-                    noteGroup.noteonMicros = seqConfig.lastClockMicros;
-                    seqNoteOn(noteGroup, mfxIndex);
-                    OmniTriggeredNoteTracker triggeredTracker;
-                    triggeredTracker.noteNumber = noteGroup.noteNumber;
-                    triggeredNotes_.push_back(triggeredTracker);
-                    OmniNoteTracker trackedNote;
-                    trackedNote.setFromNoteGroup(noteGroup);
-                    trackedNote.setMidiFXIndex(mfxIndex);
-                    noteOns_.push_back(trackedNote);
+                    uint8_t mfxIndex = 255;
+
+                    // Use the track midiFX, default
+                    if (step->mfxIndex == 1)
+                    {
+                        uint8_t trackMFX = getTrack()->midiFx;
+                        mfxIndex = trackMFX == 0 ? 255 : trackMFX - 1;
+                    }
+                    // Use the step's midiFX
+                    else if (step->mfxIndex >= 2)
+                    {
+                        mfxIndex = step->mfxIndex - 2;
+                    }
+                    // If step's mfxIndex is 0, mfxIndex will be 255 for off
+
+                    if (!noteTriggeredOnSameStep)
+                    {
+                        // bool foundNoteToRemove = false;
+                        auto it = noteOns_.begin();
+                        while (it != noteOns_.end())
+                        {
+                            // remove matching note numbers
+                            if (it->noteNumber == noteNumber)
+                            {
+                                auto noteGroup = it->toMidiNoteGroup();
+                                seqNoteOff(noteGroup, it->getMidifFXIndex());
+                                // `erase()` invalidates the iterator, use returned iterator
+                                it = noteOns_.erase(it);
+                                // foundNoteToRemove = true;
+                            }
+                            else
+                            {
+                                ++it;
+                            }
+                        }
+                    }
+
+                    if (!noteTriggeredOnSameStep && noteOns_.size() < 16)
+                    {
+                        noteGroup.noteonMicros = seqConfig.lastClockMicros;
+                        seqNoteOn(noteGroup, mfxIndex);
+                        OmniTriggeredNoteTracker triggeredTracker;
+                        triggeredTracker.noteNumber = noteGroup.noteNumber;
+                        triggeredNotes_.push_back(triggeredTracker);
+                        OmniNoteTracker trackedNote;
+                        trackedNote.setFromNoteGroup(noteGroup);
+                        trackedNote.setMidiFXIndex(mfxIndex);
+                        noteOns_.push_back(trackedNote);
+                    }
                 }
             }
         }

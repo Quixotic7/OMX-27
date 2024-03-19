@@ -18,6 +18,11 @@ namespace FormOmni
         FormMachineType getType() { return FORMMACH_OMNI; }
         FormMachineInterface *getClone() override;
 
+        bool getMute() override;
+        bool getSolo() override;
+        void setMute(bool isMuted) override;
+        void setSolo(bool isSoloed) override;
+
         bool doesConsumePots() override;
         bool doesConsumeDisplay() override;
         bool doesConsumeKeys() override; 
