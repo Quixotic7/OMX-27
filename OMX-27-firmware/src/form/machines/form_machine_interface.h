@@ -77,6 +77,9 @@ public:
     // AUX + Top 4 = Increment play direction mode
 	virtual void onAUXFunc(uint8_t funcKey) {}
 
+	virtual int saveToDisk(int startingAddress, Storage *storage) { return startingAddress; }
+	virtual int loadFromDisk(int startingAddress, Storage *storage) { return startingAddress; }
+
 protected:
 	bool enabled_;
 	bool encoderSelect_;

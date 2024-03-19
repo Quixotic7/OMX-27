@@ -2102,7 +2102,8 @@ namespace FormOmni
             }
             else if (param == 1)
             {
-                track->playDirection = constrain(track->playDirection + amtSlow, 0, 1);
+                // Reverse encoder direction since forward makes more sense to the right. 
+                track->playDirection = constrain(track->playDirection - amtSlow, 0, 1);
             }
             else if (param == 2)
             {
@@ -2499,4 +2500,40 @@ namespace FormOmni
     // AUX + Top 3 = Flip play direction if forward or reverse
     // AUX + Top 4 = Increment play direction mode
     void FormMachineOmni::onAUXFunc(uint8_t funcKey) {}
+
+    int FormMachineOmni::saveToDisk(int startingAddress, Storage *storage)
+	{
+        int saveSize = sizeof(OmniSeq);
+
+        Serial.println("Omni Save Size = " + String(saveSize));
+
+        auto saveBytesPtr = (byte *)(&seq_);
+        for (int j = 0; j < saveSize; j++)
+        {
+            storage->write(startingAddress + j, *saveBytesPtr++);
+        }
+
+        startingAddress += saveSize;
+
+        return startingAddress;
+	}
+
+	int FormMachineOmni::loadFromDisk(int startingAddress, Storage *storage)
+	{
+		int saveSize = sizeof(OmniSeq);
+
+        auto current = (byte *)&seq_;
+        for (int j = 0; j < saveSize; j++)
+        {
+            *current = storage->read(startingAddress + j);
+            current++;
+        }
+
+        resetPlayback(true);
+        onEnabled();
+
+        startingAddress += saveSize;
+        return startingAddress;
+	}
 }
+

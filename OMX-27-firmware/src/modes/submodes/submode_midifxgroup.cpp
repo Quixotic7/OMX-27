@@ -1605,8 +1605,6 @@ int SubModeMidiFxGroup::loadFromDisk(int startingAddress, Storage *storage)
 		int mfxType = storage->read(startingAddress);
 		startingAddress++;
 
-		if(mfxType >= 0 && mfxType)
-
 		// Serial.println((String)"MFX: " + mfxType);
 
 		changeMidiFXType(i, mfxType, true);

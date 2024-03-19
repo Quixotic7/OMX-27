@@ -495,6 +495,13 @@ void savePatterns(void)
 	}
 	Serial.println((String)"nLocalAddress: " + nLocalAddress); // 5784
 
+#ifndef OMXMODESEQ
+	Serial.println("Saving FORM");
+	Serial.println((String)"nLocalAddress: " + nLocalAddress); 
+	nLocalAddress = omxModeForm.saveToDisk(nLocalAddress, storage);
+	Serial.println((String)"nLocalAddress: " + nLocalAddress); 
+#endif
+
 #ifdef OMXMODEGRIDS
 	Serial.println("Saving Grids");
 
@@ -590,6 +597,13 @@ void loadPatterns(void)
 	{
 		return;
 	}
+
+#ifndef OMXMODESEQ
+	Serial.print("Loading FORM");
+	Serial.println((String) "nLocalAddress: " + nLocalAddress); // 5988
+	nLocalAddress = omxModeForm.loadFromDisk(nLocalAddress, storage);
+	Serial.println((String) "nLocalAddress: " + nLocalAddress); // 5988
+#endif
 
 	Serial.print("Grids patterns - nLocalAddress: ");
 	Serial.println(nLocalAddress);

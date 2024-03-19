@@ -55,6 +55,9 @@ namespace FormOmni
         // AUX + Top 4 = Increment play direction mode
         void onAUXFunc(uint8_t funcKey) override;
 
+        int saveToDisk(int startingAddress, Storage *storage) override;
+	    int loadFromDisk(int startingAddress, Storage *storage) override;
+
     private:
         OmniSeq seq_;
         OmniSeqDynamic seqDynamic_;

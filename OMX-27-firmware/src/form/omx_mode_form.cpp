@@ -1439,54 +1439,56 @@ void OmxModeForm::resetPlayback()
 
 int OmxModeForm::saveToDisk(int startingAddress, Storage *storage)
 {
-	// int saveSize = sizeof(DrumKit);
+	int initStart = startingAddress;
 
-	// for (uint8_t saveIndex = 0; saveIndex < NUM_DRUM_KITS; saveIndex++)
-	// {
-	//     auto saveBytesPtr = (byte *)(&drumKits[saveIndex]);
-	//     for (int j = 0; j < saveSize; j++)
-	//     {
-	//         storage->write(startingAddress + j, *saveBytesPtr++);
-	//     }
+	for (uint8_t i = 0; i < kNumMachines; i++)
+	{
+		auto machine = machines_[i];
 
-	//     startingAddress += saveSize;
-	// }
+		if(machine == nullptr || machine->getType() == FORMMACH_NULL)
+		{
+			storage->write(startingAddress, FORMMACH_NULL);
+			startingAddress++;
+		}
+		else
+		{
+			uint8_t machineType = machine->getType();
+			storage->write(startingAddress, machineType);
+			startingAddress++;
+
+			startingAddress = machine->saveToDisk(startingAddress, storage);
+		}
+	}
+
+	int totalSize = startingAddress - initStart;
+
+	Serial.println("FORM Size = " + String(totalSize));
 
 	return startingAddress;
 }
 
 int OmxModeForm::loadFromDisk(int startingAddress, Storage *storage)
 {
-	// int saveSize = sizeof(DrumKit); // 5 * 26 = 130
+	for (uint8_t i = 0; i < kNumMachines; i++)
+	{
+		uint8_t machineType = storage->read(startingAddress);
+		startingAddress++;
 
-	// // int drumKeySize = sizeof(DrumKeySettings);
+		changeMachineAtIndex(i, machineType);
 
-	// // Serial.println((String)"DrumKit Size: " + saveSize + " drumKeySize: " + drumKeySize); // 5 - 130 - 1040 bytes
+		auto machine = machines_[i];
 
-	// for (uint8_t saveIndex = 0; saveIndex < NUM_DRUM_KITS; saveIndex++)
-	// {
-	//     // auto drumKit = DrumKit{};
-	//     // auto current = (byte *)&drumKit;
-	//     // for (int j = 0; j < saveSize; j++)
-	//     // {
-	//     //     *current = storage->read(startingAddress + j);
-	//     //     current++;
-	//     // }
+		if (machine != nullptr)
+		{
+			startingAddress = machine->loadFromDisk(startingAddress, storage);
+		}
+		else
+		{
+			// Serial.println("machine is null");
+		}
 
-	//     // drumKits[saveIndex].CopyFrom(drumKit);
-
-	// 	// Write bytes to heap
-	// 	auto current = (byte *)&drumKits[saveIndex];
-	// 	for (int j = 0; j < saveSize; j++)
-	//     {
-	//         *current = storage->read(startingAddress + j);
-	//         current++;
-	//     }
-
-	//     startingAddress += saveSize;
-	// }
-
-	// loadKit(0);
+		// Serial.println((String)"startingAddress: " + startingAddress);
+	}
 
 	return startingAddress;
 }
