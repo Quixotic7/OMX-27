@@ -30,6 +30,7 @@ public:
 	virtual bool getEncoderSelect();
 	virtual bool getMute() { return false; }
 	virtual bool getSolo() { return false; }
+	virtual bool didTriggerThisStep() { return false; }
 
 	virtual bool doesConsumePots() { return false; }
 	virtual bool doesConsumeDisplay() { return false; }

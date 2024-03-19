@@ -324,6 +324,8 @@ namespace FormOmni
 
             onRateChanged();
 
+            didNotesPlayThisStep_ = false;
+
             // Calculate first step
         }
         else
@@ -336,6 +338,8 @@ namespace FormOmni
                 seqNoteOff(noteGroup, n.getMidifFXIndex());
             }
             noteOns_.clear();
+
+            didNotesPlayThisStep_ = false;
         }
     }
 
@@ -560,6 +564,11 @@ namespace FormOmni
     void FormMachineOmni::setSolo(bool isSoloed)
     {
         seq_.solo = isSoloed ? 1 : 0;
+    }
+
+    bool FormMachineOmni::didTriggerThisStep() 
+    {
+        return omxFormGlobal.isPlaying && didNotesPlayThisStep_;
     }
 
     bool FormMachineOmni::evaluateTrig(uint8_t stepIndex, Step *step)
@@ -937,6 +946,7 @@ namespace FormOmni
 
                     if (!noteTriggeredOnSameStep && noteOns_.size() < 16)
                     {
+                        didNotesPlayThisStep_ = true;
                         noteGroup.noteonMicros = seqConfig.lastClockMicros;
                         seqNoteOn(noteGroup, mfxIndex);
                         OmniTriggeredNoteTracker triggeredTracker;
@@ -946,6 +956,8 @@ namespace FormOmni
                         trackedNote.setFromNoteGroup(noteGroup);
                         trackedNote.setMidiFXIndex(mfxIndex);
                         noteOns_.push_back(trackedNote);
+
+                        omxLeds.setDirty();
                     }
                 }
             }
@@ -1266,6 +1278,7 @@ namespace FormOmni
         if(ticksTilNext16Trigger_ <= 0)
         {
             ticksTilNext16Trigger_ = 24;
+            didNotesPlayThisStep_ = false;
 
             // auto track = getTrack();
 
@@ -1282,6 +1295,7 @@ namespace FormOmni
         {
             ticksTilNextTriggerRate_ = ticksPerStep_;
             onRate = true;
+            didNotesPlayThisStep_ = false;
 
             // auto track = getTrack();
             // uint8_t length = track->len + 1;
@@ -1306,6 +1320,7 @@ namespace FormOmni
         if(ticksTilNextTrigger_ <= 0)
         {
             triggeredNotes_.clear();
+            didNotesPlayThisStep_ = false;
         }
 
         bool resetAfterThisTrig = false;
@@ -1420,6 +1435,7 @@ namespace FormOmni
             else
             {
                 lastTriggeredStepState_ = false;
+                didNotesPlayThisStep_ = false;
             }
             lastTriggeredStepIndex_ = playingStep_;
 

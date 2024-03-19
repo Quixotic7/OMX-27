@@ -22,6 +22,8 @@ namespace FormOmni
         bool getSolo() override;
         void setMute(bool isMuted) override;
         void setSolo(bool isSoloed) override;
+	    bool didTriggerThisStep() override;
+
 
         bool doesConsumePots() override;
         bool doesConsumeDisplay() override;
@@ -136,6 +138,7 @@ namespace FormOmni
 
         uint8_t lastTriggeredStepIndex_ = 0;
         bool lastTriggeredStepState_ = false;
+        bool didNotesPlayThisStep_ = false;
 
         // Each slot points to a step index
         // uint8_t shufflePattern[64];

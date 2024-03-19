@@ -596,24 +596,25 @@ namespace midifx
 
     void MidiFXRepeat::resync()
     {
-        playedNoteQueue.clear();
-        tempNoteQueue.clear();
-        activeNoteQueue.clear();
-        pendingNoteQueue.clear();
+        stopSeq();
+        // playedNoteQueue.clear();
+        // tempNoteQueue.clear();
+        // activeNoteQueue.clear();
+        // pendingNoteQueue.clear();
 
-        resetArpSeq();
+        // resetArpSeq();
 
-        noteMaster.clear();
+        // noteMaster.clear();
 
-        // End all fixed length notes
-        auto it = fixedLengthNotes.begin();
-        while (it != fixedLengthNotes.end())
-        {
-            auto noteGroup = it->noteCache.toMidiNoteGroup();
-            repeatNoteOff(&noteGroup);
-        }
+        // // End all fixed length notes
+        // auto it = fixedLengthNotes.begin();
+        // while (it != fixedLengthNotes.end())
+        // {
+        //     auto noteGroup = it->noteCache.toMidiNoteGroup();
+        //     repeatNoteOff(&noteGroup);
+        // }
 
-        fixedLengthNotes.clear();
+        // fixedLengthNotes.clear();
 
         // for (uint8_t i = 0; i < 8; i++)
         // {

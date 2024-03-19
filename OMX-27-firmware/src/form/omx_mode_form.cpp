@@ -756,8 +756,8 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 		break;
 		default:
 		{
-			// Key pressed
-			if(e.quickClicked())
+			// Toggle Mute
+			if(!e.down() && e.clicks() == 2)
 			{
 				if (thisKey >= 3 && thisKey < 11)
 				{
@@ -765,6 +765,8 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 					keyConsumed = true;
 					auto m = getSelectedMachine();
 					m->setMute(!m->getMute());
+
+					omxDisp.displayMessage(m->getMute() ? "MUTE" : "UNMUTE");
 					// selectMachineMode_ = true;
 				}
 			}
@@ -778,7 +780,7 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 				}
 			}
 			// Key released
-			else if (!e.down() && !e.down())
+			else if (!e.held() && !e.down())
 			{
 			}
 
@@ -889,15 +891,25 @@ void OmxModeForm::updateLEDs()
 	}
 
 	bool blinkState = omxLeds.getBlinkState();
-	bool slowBlink = omxLeds.getSlowBlinkState();
+	// bool slowBlink = omxLeds.getSlowBlinkState();
 
 	// F3 machine might use these keys for shortcuts
 	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_F3)
 	{
 		for (uint8_t i = 0; i < kNumMachines; i++)
 		{
-			int mColor = machines_[i]->getMute() ? DKRED : getMachineColor(i);
-			int color = (i == selectedMachine_ && slowBlink) ? LEDOFF : mColor;
+			bool isMuted = machines_[i]->getMute();
+			int color = isMuted ? RED : getMachineColor(i);
+
+			if(i == selectedMachine_)
+			{
+				color = isMuted ? SALMON : WHITE;
+			}
+
+			if(machines_[i]->didTriggerThisStep())
+			{
+				color = INDIGO;
+			}
 
 			strip.setPixelColor(i + 3, color);
 		}

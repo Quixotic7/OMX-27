@@ -1226,24 +1226,25 @@ namespace midifx
     // Used with stoping sequencers
     void MidiFXArpeggiator::resync()
     {
-        playedNoteQueue.clear();
-        holdNoteQueue.clear();
-        sortedNoteQueue.clear();
-        tempNoteQueue.clear();
+        stopArp();
+        // playedNoteQueue.clear();
+        // holdNoteQueue.clear();
+        // sortedNoteQueue.clear();
+        // tempNoteQueue.clear();
 
-        resetArpSeq();
+        // resetArpSeq();
 
-        noteMaster.clear();
+        // noteMaster.clear();
 
-        // End all fixed length notes
-        auto it = fixedLengthNotes.begin();
-        while (it != fixedLengthNotes.end())
-        {
-            auto nt = it->noteCache.toMidiNoteGroup();
-            arpNoteOff(&nt);
-        }
+        // // End all fixed length notes
+        // auto it = fixedLengthNotes.begin();
+        // while (it != fixedLengthNotes.end())
+        // {
+        //     auto nt = it->noteCache.toMidiNoteGroup();
+        //     arpNoteOff(&nt);
+        // }
 
-        fixedLengthNotes.clear();
+        // fixedLengthNotes.clear();
 
         // for (uint8_t i = 0; i < 8; i++)
         // {
