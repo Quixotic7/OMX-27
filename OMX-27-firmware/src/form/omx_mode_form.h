@@ -40,6 +40,36 @@
 
 // Pot 5 - Pickup On, default is mix. Change behaviour of keys, also on UI page
 
+
+// Pot 5 - UI Mode:
+// 	SEQ - Edit steps, change active machine
+//	MIDI KEYBOARD - Play the keyboard, record notes into active machine
+//	MIDI KEYBOARD TRANSPOSE - Play the keyboard, transpose the current machine
+//	TRANSPOSE PATTERN - Edit the transpose pattern
+//	NOTE EDITOR - Edit the notes
+//	MACHINE CONFIG - Edit the machine configuration (Cut, copy, paste machines) (Load different machine types)
+
+// Pot 4 - SEQ
+//	MIX - Quickclick steps to toggle mute, hold step to edit velocity for held steps on top row, Double Click keys to edit notes, F1, F2 shortcuts for muting and soloing F1 + F2 to change length
+//  EDIT MODES: In these modes F1 and F2 do cut, copy, paste, track length, quickclick mute toggle is off?
+//	EDIT FUNC - Hold step to edit function or jump to specific step. 
+//  EDIT NOTE LENGTH - Hold steps to edit their note lengths(Top row keys)
+//	EDIT NUDGE - Hold steps to edit their nudge(Top row keys)
+//	EDIT MFX - Hold steps and use top keys to set midifx
+//	EDIT ACCUM - Hold steps and use top keys to set step accum values
+//	EDIT CHANCE - Hold steps and use top keys to set step chance values
+//	EDIT CONDITIONS - Hold steps and use top keys to set step condition values
+//	EDIT CHORD - Hold steps and use the top row keys to set a chord, 8 Chord keys configurable like in chord mode. 
+//  EDIT DRUM - Hold steps and use the top row keys to set drum keys, 8 drum keys configurable like drum mode
+
+// Pot 4 - MIDI KEYBOARD
+//	RECORD OFF
+//	RECORD ON - Record notes to pattern
+
+// MIDI KEYBOARD
+//	Menu option to clear the pattern
+
+
 // Mix - Press keys to mute/unmute, hold to enter note editor
 //      Mix note editor here shows full note params
 //      Pots will set params of current page using pot pickup
