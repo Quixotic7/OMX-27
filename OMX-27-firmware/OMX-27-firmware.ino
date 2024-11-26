@@ -1,7 +1,7 @@
 // OMX-27 MIDI KEYBOARD / SEQUENCER
 
 //	v1.13.5
-//	Last update: Feb 2024
+//	Last update: Nov 2024
 //
 //	Original concept and initial code by Steven Noreyko
 //  Additional code contributions:
