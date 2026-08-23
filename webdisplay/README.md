@@ -47,6 +47,10 @@ You can also host `index.html` anywhere with HTTPS (e.g. GitHub Pages) and open 
   the edges), barrel-curved screen with rounded corners, phosphor RGB shadow mask,
   interlaced scanlines, vignette, grain, brightness flicker and a glass highlight.
   Combine with VHS for the full retro package.
+- **Brazil** — homage to the tiny CRTs with huge fresnel magnifiers in Terry
+  Gilliam's *Brazil*: a small monitor peeks out at the bottom while a big square
+  lens shows the blown-up picture with fresnel rings, radial glare and shaded
+  glass edges. Stacks with VHS and/or CRT.
 - **OMX pace ms** — round-trip to the OMX: gap between chunk messages. Lower = lower
   latency; raise it if you ever see corruption. Sent live via SysEx (`0x5F`).
 

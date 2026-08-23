@@ -151,6 +151,10 @@
       <div class="row"><input id="crt" type="checkbox"></div>
     </div>
     <div class="field">
+      <label>Brazil</label>
+      <div class="row"><input id="brazil" type="checkbox"></div>
+    </div>
+    <div class="field">
       <label>OMX pace ms</label>
       <div class="row"><input id="pace" type="range" min="1" max="30" step="1" value="4"><span class="val" id="paceVal">4</span></div>
     </div>
@@ -299,7 +303,7 @@
   // pixels are drawn to this offscreen buffer, then composited (bloom + sharp)
   const off = document.createElement('canvas');
   const offCtx = off.getContext('2d');
-  const ui = { scale: 6, glow: 8, grid: true, vhs: false, crt: false, color: '#d8f6ff', bg: '#000000', pace: 4 };
+  const ui = { scale: 6, glow: 8, grid: true, vhs: false, crt: false, brazil: false, color: '#d8f6ff', bg: '#000000', pace: 4 };
 
   function pixelOn(x, y) { return (fb[x + (y >> 3) * OMX_W] >> (y & 7)) & 1; }
 
@@ -346,8 +350,11 @@
     if (b.hold <= 0) {                       // new tear pattern, held a few frames
       for (let i = 0; i < 7; i++) {
         const d = Math.abs(i - 3);
-        const maxS = d === 0 ? 4 : d === 1 ? 3 : d === 2 ? 2 : 1; // strongest at the band
-        b.shifts[i] = Math.random() < 0.6 ? Math.round((Math.random() * 2 - 1) * maxS) : 0;
+        // 1..8 px tears, weighted to prefer small ones; taper away from the band
+        const base = 1 + Math.floor(7 * Math.pow(Math.random(), 2.2));
+        const taper = d === 0 ? 1 : d === 1 ? 0.75 : d === 2 ? 0.5 : 0.3;
+        const m = Math.max(1, Math.round(base * taper));
+        b.shifts[i] = Math.random() < 0.6 ? (Math.random() < 0.5 ? -m : m) : 0;
       }
       b.hold = 2 + (Math.random() * 4 | 0);
     }
@@ -397,7 +404,7 @@
       }
     }
     for (let ry = 0; ry < OMX_H; ry++) {     // keep stacked shifts sane
-      if (rowOff[ry] > 6) rowOff[ry] = 6; else if (rowOff[ry] < -6) rowOff[ry] = -6;
+      if (rowOff[ry] > 8) rowOff[ry] = 8; else if (rowOff[ry] < -8) rowOff[ry] = -8;
     }
   }
 
@@ -451,8 +458,115 @@
   }
 
   function drawFrame(ctx, W, H) {
-    if (!ui.crt) { renderScene(ctx, W, H); return; }
-    drawCRT(ctx, W, H);
+    if (!ui.crt && !ui.brazil) { renderScene(ctx, W, H); return; }
+    if (!ui.brazil) { drawCRT(ctx, W, H); return; }
+    // Brazil: render the picture (optionally CRT-processed) into a source
+    // canvas, then compose the tiny-monitor-plus-fresnel-magnifier scene.
+    fit(bzSrc, W, H);
+    if (ui.crt) drawCRT(bzCtx, W, H); else renderScene(bzCtx, W, H);
+    drawBrazil(ctx, W, H);
+  }
+
+  // ---- "Brazil" mode -----------------------------------------------------
+  // Homage to the tiny CRTs with huge fresnel magnifiers in Terry Gilliam's
+  // Brazil. The small monitor sits centered BEHIND the lens; the glass in front
+  // refracts it: magnified ~2.3x at the centre, with the image compressing
+  // toward the rim and joining the unmagnified scene exactly at the edge
+  // (a real thick-lens mapping, done as a two-pass strip warp). Fresnel rings,
+  // corner glare and rim shading on top.
+  const bzSrc = document.createElement('canvas'), bzCtx = bzSrc.getContext('2d');
+  const bzBehind = document.createElement('canvas'), bzBehindCtx = bzBehind.getContext('2d');
+  const bzWarp = document.createElement('canvas'), bzWarpCtx = bzWarp.getContext('2d');
+  // Flat magnification across the lens with refraction confined to a thin rim:
+  // for |u| <= BZ_C the image is uniformly magnified (s = u/M, completely flat,
+  // like the movie prop); only the outer rim squeezes the rest of the scene in
+  // so the glass edge still reads as refractive.
+  const BZ_M = 2.4, BZ_C = 0.85, BZ_Q = 2.0;
+  function bzMap(u) {
+    const a = Math.abs(u), sgn = u < 0 ? -1 : 1;
+    if (a <= BZ_C) return u / BZ_M;
+    const t = (a - BZ_C) / (1 - BZ_C);          // 0..1 across the rim
+    return sgn * (BZ_C / BZ_M + (1 - BZ_C / BZ_M) * Math.pow(t, BZ_Q));
+  }
+  function drawBrazil(ctx, W, H) {
+    fit(bzBehind, W, H); fit(bzWarp, W, H);
+
+    // scene behind the glass: dark backdrop + the small monitor, centered
+    const g = bzBehindCtx;
+    const bgGrad = g.createLinearGradient(0, 0, 0, H);
+    bgGrad.addColorStop(0, '#121317'); bgGrad.addColorStop(1, '#06070a');
+    g.fillStyle = bgGrad; g.fillRect(0, 0, W, H);
+    const mw = W * 0.30, mh = H * 0.30, mx = (W - mw) / 2, my = (H - mh) / 2;
+    g.fillStyle = '#1a1c21';
+    g.beginPath(); g.roundRect(mx - mw * 0.05, my - mh * 0.10, mw * 1.10, mh * 1.24, 5); g.fill();
+    g.strokeStyle = '#31343c'; g.lineWidth = 1; g.stroke();
+    g.save(); g.beginPath(); g.roundRect(mx, my, mw, mh, 2); g.clip();
+    g.drawImage(bzSrc, mx, my, mw, mh);
+    g.restore();
+
+    // unrefracted scene everywhere first
+    ctx.drawImage(bzBehind, 0, 0);
+
+    // lens geometry, centered over the monitor
+    const lw = W * 0.86, lh = H * 0.86, lx = (W - lw) / 2, ly = (H - lh) / 2, lr = 10;
+    const cx = W / 2, cy = H / 2;
+
+    // refract: horizontal strip pass (behind -> warp), then vertical (warp -> ctx)
+    const N = 110;
+    bzWarpCtx.drawImage(bzBehind, 0, 0);
+    for (let i = 0; i < N; i++) {
+      const x0 = lx + (i / N) * lw, x1 = lx + ((i + 1) / N) * lw;
+      const u0 = (x0 - cx) / (lw / 2), u1 = (x1 - cx) / (lw / 2);
+      const sx0 = cx + bzMap(u0) * (lw / 2), sx1 = cx + bzMap(u1) * (lw / 2);
+      bzWarpCtx.drawImage(bzBehind, sx0, ly, Math.max(0.5, sx1 - sx0), lh, x0, ly, x1 - x0, lh);
+    }
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(lx, ly, lw, lh, lr); ctx.clip();
+    for (let i = 0; i < N; i++) {
+      const y0 = ly + (i / N) * lh, y1 = ly + ((i + 1) / N) * lh;
+      const v0 = (y0 - cy) / (lh / 2), v1 = (y1 - cy) / (lh / 2);
+      const sy0 = cy + bzMap(v0) * (lh / 2), sy1 = cy + bzMap(v1) * (lh / 2);
+      ctx.drawImage(bzWarp, lx, sy0, lw, Math.max(0.5, sy1 - sy0), lx, y0, lw, y1 - y0);
+    }
+
+    // faint cool glass tint
+    ctx.fillStyle = 'rgba(190,215,255,0.030)'; ctx.fillRect(lx, ly, lw, lh);
+
+    // fresnel rings (concentric grooves)
+    ctx.strokeStyle = 'rgba(255,255,255,0.028)'; ctx.lineWidth = 1;
+    const maxR = Math.hypot(lw, lh) / 2, ringGap = Math.max(7, W * 0.012);
+    for (let r = ringGap; r < maxR; r += ringGap) {
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    }
+    // corner glare streaks
+    ctx.globalCompositeOperation = 'lighter';
+    const corners = [[lx, ly], [lx + lw, ly], [lx, ly + lh], [lx + lw, ly + lh]];
+    for (const [px, py] of corners) {
+      const gr = ctx.createLinearGradient(cx, cy, px, py);
+      gr.addColorStop(0, 'rgba(255,255,255,0.07)');
+      gr.addColorStop(0.4, 'rgba(255,255,255,0.02)');
+      gr.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gr;
+      const dx = px - cx, dy = py - cy, sp = 0.09;
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.lineTo(px - dy * sp, py + dx * sp);
+      ctx.lineTo(px + dy * sp, py - dx * sp);
+      ctx.closePath(); ctx.fill();
+    }
+    // rim shading: darkens where the glass compresses, strongest at the border
+    ctx.globalCompositeOperation = 'source-over';
+    const eg = ctx.createRadialGradient(cx, cy, Math.min(lw, lh) * 0.40, cx, cy, maxR);
+    eg.addColorStop(0, 'rgba(0,0,0,0)');
+    eg.addColorStop(0.85, 'rgba(0,0,0,0.10)');
+    eg.addColorStop(1, 'rgba(0,0,0,0.38)');
+    ctx.fillStyle = eg; ctx.fillRect(lx, ly, lw, lh);
+    ctx.restore();
+
+    // frame + specular edge
+    ctx.strokeStyle = '#3a3e47'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(lx, ly, lw, lh, lr); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(lx + 1.5, ly + 1.5, lw - 3, lh - 3, lr - 1); ctx.stroke();
   }
 
   // ---- CRT monitor simulation -------------------------------------------
@@ -704,14 +818,44 @@
     ['#fbbf24', '#000000', 'amber'], ['#34d399', '#000000', 'green'],
     ['#9a8cf0', '#3b2f91', 'C64'], ['#e6444f', '#0a0a0a', 'NES'], ['#e8a020', '#0b0900', 'Atari']
   ];
+  // ---- settings persistence ---------------------------------------------
+  let selSwatch = 0;
+  const LS_KEY = 'omx-display-settings';
+  function saveUI() {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        scale: ui.scale, glow: ui.glow, grid: ui.grid, vhs: ui.vhs, crt: ui.crt,
+        brazil: ui.brazil, pace: ui.pace, swatch: selSwatch
+      }));
+    } catch (_) {}
+  }
+  function loadUI() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (_) {}
+    if (!d) return;
+    if (Number.isFinite(d.scale)) ui.scale = Math.min(12, Math.max(3, d.scale));
+    if (Number.isFinite(d.glow)) ui.glow = Math.min(24, Math.max(0, d.glow));
+    if (Number.isFinite(d.pace)) ui.pace = Math.min(30, Math.max(1, d.pace));
+    ui.grid = !!d.grid; ui.vhs = !!d.vhs; ui.crt = !!d.crt; ui.brazil = !!d.brazil;
+    if (Number.isFinite(d.swatch) && d.swatch >= 0 && d.swatch < COLORS.length) selSwatch = d.swatch;
+    ui.color = COLORS[selSwatch][0]; ui.bg = COLORS[selSwatch][1];
+    // reflect into the controls
+    $('scale').value = ui.scale; $('scaleVal').innerHTML = ui.scale + '&times;';
+    $('glow').value = ui.glow; $('glowVal').textContent = ui.glow;
+    $('pace').value = ui.pace; $('paceVal').textContent = ui.pace;
+    $('grid').checked = ui.grid; $('vhs').checked = ui.vhs;
+    $('crt').checked = ui.crt; $('brazil').checked = ui.brazil;
+  }
+  loadUI();
+
   const sw = $('swatches');
   COLORS.forEach(([fg, bg, label], i) => {
     const el = document.createElement('div');
-    el.className = 'swatch' + (i === 0 ? ' sel' : '');
+    el.className = 'swatch' + (i === selSwatch ? ' sel' : '');
     el.style.background = bg === '#000000' ? fg : `linear-gradient(135deg, ${fg} 50%, ${bg} 50%)`;
     el.title = label;
     el.onclick = () => {
-      ui.color = fg; ui.bg = bg; resize();
+      ui.color = fg; ui.bg = bg; selSwatch = i; resize(); saveUI();
       [...sw.children].forEach(x => x.classList.remove('sel')); el.classList.add('sel');
     };
     sw.appendChild(el);
@@ -720,12 +864,13 @@
   $('connect').onclick = connect;
   $('popout').onclick = openPopup;
   $('demo').onclick = toggleDemo;
-  $('scale').oninput = e => { ui.scale = +e.target.value; $('scaleVal').innerHTML = ui.scale + '&times;'; resize(); };
-  $('glow').oninput = e => { ui.glow = +e.target.value; $('glowVal').textContent = ui.glow; resize(); };
-  $('grid').onchange = e => { ui.grid = e.target.checked; dirty = true; };
-  $('vhs').onchange = e => { ui.vhs = e.target.checked; dirty = true; };
-  $('crt').onchange = e => { ui.crt = e.target.checked; dirty = true; };
-  $('pace').oninput = e => { ui.pace = +e.target.value; $('paceVal').textContent = ui.pace; if (connected) sendSysex(CMD_PACE, [ui.pace]); };
+  $('scale').oninput = e => { ui.scale = +e.target.value; $('scaleVal').innerHTML = ui.scale + '&times;'; resize(); saveUI(); };
+  $('glow').oninput = e => { ui.glow = +e.target.value; $('glowVal').textContent = ui.glow; resize(); saveUI(); };
+  $('grid').onchange = e => { ui.grid = e.target.checked; dirty = true; saveUI(); };
+  $('vhs').onchange = e => { ui.vhs = e.target.checked; dirty = true; saveUI(); };
+  $('crt').onchange = e => { ui.crt = e.target.checked; dirty = true; saveUI(); };
+  $('brazil').onchange = e => { ui.brazil = e.target.checked; dirty = true; saveUI(); };
+  $('pace').oninput = e => { ui.pace = +e.target.value; $('paceVal').textContent = ui.pace; if (connected) sendSysex(CMD_PACE, [ui.pace]); saveUI(); };
 
   window.addEventListener('beforeunload', () => {
     if (connected) setEnabled(false);
