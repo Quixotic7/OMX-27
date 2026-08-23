@@ -28,13 +28,24 @@ You can also host `index.html` anywhere with HTTPS (e.g. GitHub Pages) and open 
 ## Controls
 
 - **Connect** — request Web MIDI access and start streaming.
-- **Pop out ↗** — opens the display in its own bare window (just the screen on black)
-  that you can move, resize, or maximize as a dedicated external monitor. It mirrors
-  the same live frames and honours the colour/grid/glow settings.
+- **Pop out ↗** — opens the display in its own chromeless, always-on-top window (via
+  the Document Picture-in-Picture API — no address bar or browser chrome) that you can
+  move and resize as a dedicated external screen. It mirrors the same live frames and
+  honours the colour/grid/glow settings. Older browsers fall back to a plain popup.
 - **Test pattern** — animated demo with no hardware (verifies rendering).
-- **colour / size / glow** — display appearance.
+- **colour** — pixel colour + background, including **C64 / NES / Atari**-inspired
+  retro palettes (these tint the background too).
+- **size / glow** — display size and per-pixel bloom.
 - **grid** — on: dot-matrix look (gaps between pixels); off: solid, edge-to-edge
   chunky pixels.
+- **VHS** — ambient tape look: a tracking band creeps slowly down the picture and
+  is invisible while the tape is "locked"; every few seconds it briefly loses
+  tracking — the band shows faintly and the OMX pixel rows within ±3 of it tear
+  sideways by whole pixels (max 4). No whole-image wobble.
+- **CRT** — old-monitor simulation: chromatic aberration (RGB split growing toward
+  the edges), barrel-curved screen with rounded corners, phosphor RGB shadow mask,
+  interlaced scanlines, vignette, grain, brightness flicker and a glass highlight.
+  Combine with VHS for the full retro package.
 - **OMX pace ms** — round-trip to the OMX: gap between chunk messages. Lower = lower
   latency; raise it if you ever see corruption. Sent live via SysEx (`0x5F`).
 

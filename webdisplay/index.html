@@ -143,6 +143,14 @@
       <div class="row"><input id="grid" type="checkbox" checked></div>
     </div>
     <div class="field">
+      <label>VHS</label>
+      <div class="row"><input id="vhs" type="checkbox"></div>
+    </div>
+    <div class="field">
+      <label>CRT</label>
+      <div class="row"><input id="crt" type="checkbox"></div>
+    </div>
+    <div class="field">
       <label>OMX pace ms</label>
       <div class="row"><input id="pace" type="range" min="1" max="30" step="1" value="4"><span class="val" id="paceVal">4</span></div>
     </div>
@@ -288,74 +296,297 @@
   // ---- rendering --------------------------------------------------------
   const cv = document.getElementById('screen');
   const ctx = cv.getContext('2d');
-  const ui = { scale: 6, glow: 8, grid: true, color: '#d8f6ff', pace: 4 };
+  // pixels are drawn to this offscreen buffer, then composited (bloom + sharp)
+  const off = document.createElement('canvas');
+  const offCtx = off.getContext('2d');
+  const ui = { scale: 6, glow: 8, grid: true, vhs: false, crt: false, color: '#d8f6ff', bg: '#000000', pace: 4 };
 
   function pixelOn(x, y) { return (fb[x + (y >> 3) * OMX_W] >> (y & 7)) & 1; }
-
-  function applyGlow(canvas) {
-    canvas.style.filter = ui.glow > 0 ? `drop-shadow(0 0 ${ui.glow}px ${ui.color})` : 'none';
-  }
 
   function resize() {
     cv.width = OMX_W * ui.scale;
     cv.height = OMX_H * ui.scale;
     document.documentElement.style.setProperty('--screen', ui.color);
-    applyGlow(cv);
-    if (popupCv) applyGlow(popupCv);
+    cv.style.filter = 'none'; // glow is now composited in-canvas
     dirty = true;
   }
 
-  // Draw the framebuffer into ctx, fit to WxH (keeps 4:1 aspect, centered).
+  // ---- VHS tracking state (advanced once per frame in loop) --------------
+  // A tracking band creeps slowly down the picture. Almost all the time the
+  // tape is "locked": nothing is drawn and nothing moves. Every so often it
+  // briefly loses tracking: the band becomes faintly visible and the rows within
+  // +-3 of it tear sideways by whole OMX pixels (max 4), chunky, like the real
+  // thing. No whole-image wobble, no drift.
+  const rowOff = new Int8Array(OMX_H);      // per-row shift in whole OMX pixels
+  let vhsT = 0, scanY = -4;
+  const trk = { lost: false, start: 0, until: 0, hold: 0, shifts: new Int8Array(7) };
+  function stepVHS() {
+    vhsT++;
+    scanY += 0.035;                              // ~15 s per sweep
+    if (scanY > OMX_H + 4) scanY = -4;
+    rowOff.fill(0);
+    if (!trk.lost) {
+      if (Math.random() < 0.004) {               // lose tracking every few seconds
+        trk.lost = true; trk.start = vhsT; trk.until = vhsT + 12 + (Math.random() * 30 | 0); trk.hold = 0;
+      }
+      return;
+    }
+    if (vhsT > trk.until) { trk.lost = false; return; }
+    if (trk.hold <= 0) {                         // new tear pattern, held a few frames
+      for (let i = 0; i < 7; i++) {
+        const d = Math.abs(i - 3);
+        const maxS = d === 0 ? 4 : d === 1 ? 3 : d === 2 ? 2 : 1;   // strongest at the band
+        trk.shifts[i] = Math.random() < 0.6 ? Math.round((Math.random() * 2 - 1) * maxS) : 0;
+      }
+      trk.hold = 2 + (Math.random() * 4 | 0);
+    }
+    trk.hold--;
+    const c = Math.round(scanY);
+    for (let i = 0; i < 7; i++) {
+      const ry = c - 3 + i;
+      if (ry >= 0 && ry < OMX_H) rowOff[ry] = trk.shifts[i];
+    }
+  }
+  // 0..1 envelope of the current tracking loss (fades in and out)
+  function trackEnv() {
+    if (!trk.lost) return 0;
+    const t = (vhsT - trk.start) / Math.max(1, trk.until - trk.start);
+    return Math.sin(Math.PI * Math.min(1, Math.max(0, t)));
+  }
+
+  // Draw just the lit pixels (transparent bg) into g, with optional VHS warp.
   // Grid on -> inset dot-matrix (rounded at large sizes). Grid off -> pixels tile
-  // edge-to-edge from rounded cell boundaries, so solid areas are truly solid
-  // (no rounding, no seams / corner dots).
-  function drawFrame(ctx, W, H) {
+  // edge-to-edge from rounded cell boundaries, so solid areas are truly solid.
+  function drawPixels(g, W, H) {
     const s = Math.min(W / OMX_W, H / OMX_H);
     const ox = (W - OMX_W * s) / 2, oy = (H - OMX_H * s) / 2;
     const gap = ui.grid ? Math.max(1, Math.round(s * 0.14)) : 0;
     const g0 = gap >> 1, g1 = gap - g0;
     const rounded = ui.grid && s >= 6;
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = ui.color;
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = ui.color;
     for (let dy = 0; dy < OMX_H; dy++) {
       const sy = OMX_H - 1 - dy;                 // 180deg rotation (matches firmware)
+      const xoff = ui.vhs ? rowOff[dy] * s : 0;
       const y0 = Math.round(oy + dy * s) + g0, y1 = Math.round(oy + (dy + 1) * s) - g1;
       for (let dx = 0; dx < OMX_W; dx++) {
         if (pixelOn(OMX_W - 1 - dx, sy)) {
-          const x0 = Math.round(ox + dx * s) + g0, x1 = Math.round(ox + (dx + 1) * s) - g1;
+          const x0 = Math.round(ox + dx * s + xoff) + g0, x1 = Math.round(ox + (dx + 1) * s + xoff) - g1;
           const w = x1 - x0, h = y1 - y0;
           if (w <= 0 || h <= 0) continue;
-          if (rounded) { ctx.beginPath(); ctx.roundRect(x0, y0, w, h, Math.min(3, w * 0.3)); ctx.fill(); }
-          else ctx.fillRect(x0, y0, w, h);
+          if (rounded) { g.beginPath(); g.roundRect(x0, y0, w, h, Math.min(3, w * 0.3)); g.fill(); }
+          else g.fillRect(x0, y0, w, h);
         }
       }
     }
+    return { s, ox, oy };
+  }
+
+  // Base scene into g (fit WxH): background, per-pixel bloom, sharp pixels, VHS.
+  function renderScene(g, W, H) {
+    g.fillStyle = ui.bg;
+    g.fillRect(0, 0, W, H);
+    if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }
+    const geo = drawPixels(offCtx, W, H);
+    if (ui.glow > 0) {                          // bloom halo
+      g.save();
+      g.filter = `blur(${ui.glow}px)`;
+      g.globalAlpha = 0.85;
+      g.drawImage(off, 0, 0);
+      g.restore();
+    }
+    g.drawImage(off, 0, 0);                      // sharp pixels
+    if (ui.vhs) drawVHSOverlay(g, W, H, geo);
+    return geo;
+  }
+
+  function drawFrame(ctx, W, H) {
+    if (!ui.crt) { renderScene(ctx, W, H); return; }
+    drawCRT(ctx, W, H);
+  }
+
+  // ---- CRT monitor simulation -------------------------------------------
+  // Renders the scene, splits it into R/G/B channels drawn at slightly different
+  // scales (chromatic aberration that grows toward the edges), curves the result
+  // (barrel distortion), then layers an RGB phosphor shadow mask, interlaced
+  // scanlines, vignette, noise/grain, flicker and a glass highlight.
+  const scene = document.createElement('canvas'), sceneCtx = scene.getContext('2d');
+  const abPass = document.createElement('canvas'), abCtx = abPass.getContext('2d');
+  const chan = ['#ff0000', '#00ff00', '#0000ff'].map(c => {
+    const k = document.createElement('canvas');
+    return { c, k, g: k.getContext('2d') };
+  });
+  const noise = document.createElement('canvas'); noise.width = noise.height = 128;
+  const noiseCtx = noise.getContext('2d');
+  const maskCache = new WeakMap();
+  let crtFrame = 0;
+
+  function makeNoise() {
+    const id = noiseCtx.createImageData(128, 128), d = id.data;
+    for (let i = 0; i < d.length; i += 4) { const v = (Math.random() * 255) | 0; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+    noiseCtx.putImageData(id, 0, 0);
+  }
+  makeNoise();
+
+  function shadowMask(ctx) {
+    let p = maskCache.get(ctx);
+    if (p) return p;
+    const m = document.createElement('canvas'); m.width = 3; m.height = 1;
+    const g = m.getContext('2d');
+    g.fillStyle = '#ff3030'; g.fillRect(0, 0, 1, 1);
+    g.fillStyle = '#30ff30'; g.fillRect(1, 0, 1, 1);
+    g.fillStyle = '#3030ff'; g.fillRect(2, 0, 1, 1);
+    p = ctx.createPattern(m, 'repeat');
+    maskCache.set(ctx, p);
+    return p;
+  }
+
+  function fit(c, W, H) { if (c.width !== W || c.height !== H) { c.width = W; c.height = H; } }
+
+  function drawCRT(ctx, W, H) {
+    crtFrame++;
+    if ((crtFrame & 1) === 0) makeNoise();
+    const s = Math.min(W / OMX_W, H / OMX_H);
+
+    // 1) base scene
+    fit(scene, W, H);
+    renderScene(sceneCtx, W, H);
+
+    // 2) chromatic aberration: isolate channels, recombine with edge-growing offsets
+    const ab = Math.max(1.2, s * 0.32);          // px of split at the screen edge
+    fit(abPass, W, H);
+    abCtx.globalCompositeOperation = 'source-over';
+    abCtx.fillStyle = '#000'; abCtx.fillRect(0, 0, W, H);
+    const scales = [1 + (2 * ab) / W, 1, 1 - (2 * ab) / W];
+    chan.forEach((ch, i) => {
+      fit(ch.k, W, H);
+      ch.g.globalCompositeOperation = 'source-over';
+      ch.g.drawImage(scene, 0, 0);
+      ch.g.globalCompositeOperation = 'multiply';
+      ch.g.fillStyle = ch.c; ch.g.fillRect(0, 0, W, H);   // keep one channel
+      const sc = scales[i], dw = W * sc, dh = H * sc;
+      abCtx.globalCompositeOperation = 'lighter';
+      abCtx.drawImage(ch.k, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    });
+    abCtx.globalCompositeOperation = 'source-over';
+
+    // 3) barrel distortion: vertical strips, height shrinking toward the sides
+    ctx.save();
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    const r = Math.max(6, s * 1.6);
+    ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.clip();
+    const flicker = 0.955 + Math.random() * 0.045;  // subtle brightness flutter
+    ctx.globalAlpha = flicker;
+    const N = Math.min(128, Math.max(32, (W / 6) | 0)), curve = 0.085;
+    const sw = W / N;
+    for (let i = 0; i < N; i++) {
+      const sx = i * sw;
+      const u = ((sx + sw / 2) / W - 0.5) * 2;
+      const sc = 1 - curve * u * u;
+      const dh = H * sc, dy = (H - dh) / 2;
+      ctx.drawImage(abPass, sx, 0, sw + 1, H, sx, dy, sw + 1, dh);
+    }
+    ctx.globalAlpha = 1;
+
+    // 4) phosphor shadow mask (RGB triads)
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = shadowMask(ctx);
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+
+    // 5) interlaced scanlines (phase alternates each frame)
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    const step = Math.max(2, Math.round(s * 0.5)), ph = (crtFrame & 1) ? (step >> 1) : 0;
+    for (let y = ph; y < H; y += step) ctx.fillRect(0, y, W, Math.max(1, step >> 1));
+
+    // 6) vignette + corner darkening
+    const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.62);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+
+    // 7) grain
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.09;
+    ctx.drawImage(noise, 0, 0, W, H);
+    ctx.restore();
+
+    // 8) glass highlight (soft reflection across the top)
+    const gl = ctx.createLinearGradient(0, 0, W * 0.3, H);
+    gl.addColorStop(0, 'rgba(255,255,255,0.07)');
+    gl.addColorStop(0.45, 'rgba(255,255,255,0.015)');
+    gl.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gl; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  function drawVHSOverlay(ctx, W, H, geo) {
+    const s = geo.s, oy = geo.oy;
+    // faint static scanlines (ambient texture)
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';
+    const step = Math.max(2, Math.round(s * 0.5));
+    for (let y = 0; y < H; y += step) ctx.fillRect(0, y, W, Math.max(1, step >> 1));
+    // the tracking band is only visible while tracking is lost
+    const env = trackEnv();
+    if (env <= 0) return;
+    const cy = oy + scanY * s + s / 2, bh = Math.max(6, s * 3.5);
+    const grad = ctx.createLinearGradient(0, cy - bh, 0, cy + bh);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.5, `rgba(255,255,255,${0.13 * env})`);
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, cy - bh, W, bh * 2);
+    ctx.fillStyle = `rgba(255,255,255,${0.08 * env})`;   // thin noisy head-switch line
+    ctx.fillRect(0, cy + (Math.random() * 2 - 1), W, 1);
+    ctx.restore();
   }
 
   // ---- pop-out window ---------------------------------------------------
-  let popup = null, popupCv = null, popupCtx = null;
-  function openPopup() {
-    if (popup && !popup.closed) { popup.focus(); return; }
-    popup = window.open('', 'omx-display', 'width=820,height=230');
-    if (!popup) { note('<span class="err">Pop-out blocked.</span> Allow pop-ups for this page, then try again.'); return; }
-    popup.document.write(
-      '<!doctype html><html><head><meta charset="utf-8"><title>OMX-27 Display</title>' +
-      '<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block}</style>' +
-      '</head><body><canvas id="c"></canvas></body></html>');
-    popup.document.close();
-    popupCv = popup.document.getElementById('c');
+  // Prefers Document Picture-in-Picture: a chromeless, always-on-top, resizable
+  // window with NO address bar. Falls back to a plain popup on older browsers.
+  let popupWin = null, popupCv = null, popupCtx = null, popupPlain = false;
+  function closePopup() { popupWin = null; popupCv = null; popupCtx = null; }
+  function attachPopup(win, plain) {
+    popupWin = win; popupPlain = plain;
+    const doc = win.document, b = doc.body;
+    doc.documentElement.style.height = '100%';
+    b.style.cssText = 'margin:0;height:100%;background:#000;overflow:hidden';
+    popupCv = doc.createElement('canvas');
+    popupCv.style.display = 'block';
+    b.appendChild(popupCv);
     popupCtx = popupCv.getContext('2d');
-    const fit = () => { popupCv.width = popup.innerWidth; popupCv.height = popup.innerHeight; applyGlow(popupCv); dirty = true; };
-    popup.addEventListener('resize', fit);
+    const fit = () => { popupCv.width = win.innerWidth; popupCv.height = win.innerHeight; dirty = true; };
+    win.addEventListener('resize', fit);
+    win.addEventListener('pagehide', closePopup);
     fit();
   }
-  function closePopup() { popup = null; popupCv = null; popupCtx = null; }
+  async function openPopup() {
+    if (popupWin && !(popupPlain && popupWin.closed)) { try { popupWin.focus(); } catch (_) {} return; }
+    if ('documentPictureInPicture' in window) {
+      try {
+        const w = await documentPictureInPicture.requestWindow({ width: 820, height: 230 });
+        attachPopup(w, false);
+        return;
+      } catch (_) { /* fall through to a plain popup */ }
+    }
+    const w = window.open('', 'omx-display', 'width=820,height=230');
+    if (!w) { note('<span class="err">Pop-out blocked.</span> Allow pop-ups for this page, then try again.'); return; }
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>OMX-27 Display</title></head><body></body></html>');
+    w.document.close();
+    attachPopup(w, true);
+  }
 
   function loop() {
-    if (dirty) {
+    if (ui.vhs) stepVHS();
+    if (dirty || ui.vhs || ui.crt) {
       drawFrame(ctx, cv.width, cv.height);
-      if (popup) {
-        if (popup.closed) closePopup();
+      if (popupWin) {
+        if (popupPlain && popupWin.closed) closePopup();
         else if (popupCtx) drawFrame(popupCtx, popupCv.width, popupCv.height);
       }
       dirty = false;
@@ -414,17 +645,20 @@
   function note(html) { $('note').innerHTML = html || defaultNote; }
   const defaultNote = $('note').innerHTML;
 
+  // [foreground, background, label]. Retro palettes tint the background too.
   const COLORS = [
-    ['#d8f6ff', 'white'], ['#22d3ee', 'cyan'], ['#7dd3fc', 'blue'],
-    ['#fbbf24', 'amber'], ['#34d399', 'green']
+    ['#d8f6ff', '#000000', 'white'], ['#22d3ee', '#000000', 'cyan'], ['#7dd3fc', '#000000', 'blue'],
+    ['#fbbf24', '#000000', 'amber'], ['#34d399', '#000000', 'green'],
+    ['#9a8cf0', '#3b2f91', 'C64'], ['#e6444f', '#0a0a0a', 'NES'], ['#e8a020', '#0b0900', 'Atari']
   ];
   const sw = $('swatches');
-  COLORS.forEach(([c], i) => {
+  COLORS.forEach(([fg, bg, label], i) => {
     const el = document.createElement('div');
     el.className = 'swatch' + (i === 0 ? ' sel' : '');
-    el.style.background = c; el.title = COLORS[i][1];
+    el.style.background = bg === '#000000' ? fg : `linear-gradient(135deg, ${fg} 50%, ${bg} 50%)`;
+    el.title = label;
     el.onclick = () => {
-      ui.color = c; resize();
+      ui.color = fg; ui.bg = bg; resize();
       [...sw.children].forEach(x => x.classList.remove('sel')); el.classList.add('sel');
     };
     sw.appendChild(el);
@@ -436,11 +670,13 @@
   $('scale').oninput = e => { ui.scale = +e.target.value; $('scaleVal').innerHTML = ui.scale + '&times;'; resize(); };
   $('glow').oninput = e => { ui.glow = +e.target.value; $('glowVal').textContent = ui.glow; resize(); };
   $('grid').onchange = e => { ui.grid = e.target.checked; dirty = true; };
+  $('vhs').onchange = e => { ui.vhs = e.target.checked; dirty = true; };
+  $('crt').onchange = e => { ui.crt = e.target.checked; dirty = true; };
   $('pace').oninput = e => { ui.pace = +e.target.value; $('paceVal').textContent = ui.pace; if (connected) sendSysex(CMD_PACE, [ui.pace]); };
 
   window.addEventListener('beforeunload', () => {
     if (connected) setEnabled(false);
-    if (popup && !popup.closed) popup.close();
+    if (popupWin && popupPlain && !popupWin.closed) popupWin.close();
   });
 
   resize();
