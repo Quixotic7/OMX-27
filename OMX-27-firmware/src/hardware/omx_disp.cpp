@@ -4,6 +4,7 @@
 #include "../consts/consts.h"
 #include "../ClearUI/ClearUI.h"
 #include "../globals.h"
+#include "../midi/norns_link.h"
 
 U8G2_FOR_ADAFRUIT_GFX u8g2_display;
 
@@ -1426,6 +1427,10 @@ void OmxDisp::showDisplay()
 		if (dirtyDisplayTimer > displayRefreshRate)
 		{
 			display.display();
+			// Mirror the just-pushed (complete) frame to norns. This is the only
+			// point where the buffer is guaranteed fully drawn -- the main loop
+			// clears it every iteration and modes only repaint when dirty.
+			nornsLink.streamFrame();
 			dirtyDisplay = false;
 			dirtyDisplayTimer = 0;
 		}
