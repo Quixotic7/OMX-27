@@ -4,6 +4,7 @@
 #include "../consts/consts.h"
 #include "../ClearUI/ClearUI.h"
 #include "../globals.h"
+#include "../midi/norns_link.h"
 
 U8G2_FOR_ADAFRUIT_GFX u8g2_display;
 
@@ -1423,6 +1424,11 @@ void OmxDisp::showDisplay()
 {
 	if (dirtyDisplay)
 	{
+		// Mirror the freshly-drawn buffer to norns on EVERY dirty frame (the mode
+		// repaints it this loop while dirty), decoupled from the ~60ms OLED refresh
+		// below, so the mirror tracks changes with low latency. streamFrame() has
+		// its own rate cap + delta, so this is cheap.
+		nornsLink.streamFrame();
 		if (dirtyDisplayTimer > displayRefreshRate)
 		{
 			display.display();

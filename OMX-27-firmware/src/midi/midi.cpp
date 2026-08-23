@@ -267,6 +267,44 @@ namespace MM
 		HWMIDI.sendSysEx(length, sysexData, hasBeginEnd);
 	}
 
+	// USB-only SysEx. Used for the norns link (screen mirror / takeover) so we
+	// don't flood the 31250-baud TRS DIN port with framebuffer data.
+	//
+	// Written directly to TinyUSB rather than via the MIDI library: the library
+	// ignores tud_midi_stream_write's return value, so when the 128-byte TX FIFO
+	// is short on room the TAIL of the message (incl. F7) is silently dropped --
+	// which is exactly what was corrupting the norns screen stream. Here we keep
+	// writing the remainder as the FIFO drains (TinyUSB's task runs from an IRQ
+	// on RP2040), bounded by a short timeout so we can never stall the sequencer.
+	void sendSysExUSB(uint32_t length, const uint8_t *sysexData, bool hasBeginEnd)
+	{
+#if BOARDTYPE == OMX2040
+		uint8_t msg[160];
+		uint32_t n = 0;
+		if (!hasBeginEnd)
+			msg[n++] = 0xF0;
+		for (uint32_t i = 0; i < length && n < sizeof(msg) - 1; i++)
+			msg[n++] = sysexData[i];
+		if (!hasBeginEnd)
+			msg[n++] = 0xF7;
+
+		uint32_t sent = 0;
+		uint32_t start = micros();
+		while (sent < n)
+		{
+			sent += tud_midi_stream_write(0, msg + sent, n - sent);
+			if (sent < n)
+			{
+				if ((uint32_t)(micros() - start) > 6000) // give up; norns will REQ a resend
+					break;
+				tud_task(); // help drain the FIFO while we wait
+			}
+		}
+#else
+		usbMIDI.sendSysEx(length, sysexData, hasBeginEnd);
+#endif
+	}
+
 	void sendClock()
 	{
 		// usbMIDI.sendRealTime(midi::Clock);
