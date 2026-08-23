@@ -1135,7 +1135,10 @@ void OmxDisp::dispChordBasicPage(uint8_t selected, bool encoderSelect, const cha
 
 	for (uint8_t i = 0; i < 4; i++)
 	{
-		uint8_t yPos = map(velArray[i], 0.0f, 1.0f, (float)endY, (float)startY);
+		// Float interpolation so the ghost slides between endY/startY as velArray transitions.
+		// Arduino's map() is integer-only (long) on the RP2040 core, which truncated the
+		// in-between positions and made the ghosts snap/pop instead of animate.
+		uint8_t yPos = (uint8_t)((float)endY + velArray[i] * ((float)startY - (float)endY));
 
 		int bal = balArray[i];
 		if (bal <= -10)
@@ -1200,7 +1203,8 @@ void OmxDisp::dispChordBalance()
 
 	for (uint8_t i = 0; i < 4; i++)
 	{
-		uint8_t yPos = map(chordVelArray_[i], 0.0f, 1.0f, (float)endY, (float)startY);
+		// Float interpolation (integer map() truncates and makes the ghosts snap). See dispChordBasicPage.
+		uint8_t yPos = (uint8_t)((float)endY + chordVelArray_[i] * ((float)startY - (float)endY));
 
 		// Serial.println("ypos: " + String(yPos));
 

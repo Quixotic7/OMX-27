@@ -3517,7 +3517,10 @@ ChordBalanceDetails OmxModeChords::getChordBalanceDetails(uint8_t balance)
 			float v1 = bal <= -10 ? 0.0f : 1.0f;
 			float v2 = nextBal <= -10 ? 0.0f : 1.0f;
 
-			bDetails.velMult[i + 1] = map((float)balance, balanceIndex * 10.0f, (balanceIndex + 1) * 10.0f, v1, v2);
+			// Float interpolation across the balance step (integer map() truncates to 0/1 on the
+			// RP2040 core, which made the ghosts pop instead of slide). See ChordUtil::updateChordBalance.
+			float balanceT = ((float)balance - balanceIndex * 10.0f) / 10.0f;
+			bDetails.velMult[i + 1] = v1 + balanceT * (v2 - v1);
 		}
 		else
 		{

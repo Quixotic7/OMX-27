@@ -631,7 +631,11 @@ void ChordUtil::updateChordBalance(uint8_t balance)
 			float v1 = bal <= -10 ? 0.0f : 1.0f;
 			float v2 = nextBal <= -10 ? 0.0f : 1.0f;
 
-			chordBalanceDetails.velMult[i + 1] = map((float)balance, balanceIndex * 10.0f, (balanceIndex + 1) * 10.0f, v1, v2);
+			// Float interpolation across the balance step so the ghost velocity (and thus its
+			// on-screen height) transitions smoothly. Arduino map() is integer-only on the RP2040
+			// core, which collapsed this to 0/1 and made the ghosts pop instead of slide.
+			float balanceT = ((float)balance - balanceIndex * 10.0f) / 10.0f;
+			chordBalanceDetails.velMult[i + 1] = v1 + balanceT * (v2 - v1);
 		}
 		else
 		{
