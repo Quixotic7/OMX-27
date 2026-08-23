@@ -28,8 +28,13 @@ You can also host `index.html` anywhere with HTTPS (e.g. GitHub Pages) and open 
 ## Controls
 
 - **Connect** — request Web MIDI access and start streaming.
+- **Pop out ↗** — opens the display in its own bare window (just the screen on black)
+  that you can move, resize, or maximize as a dedicated external monitor. It mirrors
+  the same live frames and honours the colour/grid/glow settings.
 - **Test pattern** — animated demo with no hardware (verifies rendering).
-- **colour / size / glow / grid** — display appearance.
+- **colour / size / glow** — display appearance.
+- **grid** — on: dot-matrix look (gaps between pixels); off: solid, edge-to-edge
+  chunky pixels.
 - **OMX pace ms** — round-trip to the OMX: gap between chunk messages. Lower = lower
   latency; raise it if you ever see corruption. Sent live via SysEx (`0x5F`).
 

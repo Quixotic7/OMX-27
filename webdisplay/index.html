@@ -123,6 +123,7 @@
 
   <div class="controls">
     <button id="connect" class="primary">Connect</button>
+    <button id="popout" class="ghost">Pop out &#8599;</button>
     <button id="demo" class="ghost">Test pattern</button>
 
     <div class="field">
@@ -291,35 +292,74 @@
 
   function pixelOn(x, y) { return (fb[x + (y >> 3) * OMX_W] >> (y & 7)) & 1; }
 
+  function applyGlow(canvas) {
+    canvas.style.filter = ui.glow > 0 ? `drop-shadow(0 0 ${ui.glow}px ${ui.color})` : 'none';
+  }
+
   function resize() {
     cv.width = OMX_W * ui.scale;
     cv.height = OMX_H * ui.scale;
-    cv.style.setProperty('--glow', ui.glow + 'px');
     document.documentElement.style.setProperty('--screen', ui.color);
-    cv.style.filter = `drop-shadow(0 0 ${ui.glow}px ${ui.color})`;
+    applyGlow(cv);
+    if (popupCv) applyGlow(popupCv);
     dirty = true;
   }
 
-  function render() {
-    const s = ui.scale;
+  // Draw the framebuffer into ctx, fit to WxH (keeps 4:1 aspect, centered).
+  // Grid on -> inset dot-matrix (rounded at large sizes). Grid off -> pixels tile
+  // edge-to-edge from rounded cell boundaries, so solid areas are truly solid
+  // (no rounding, no seams / corner dots).
+  function drawFrame(ctx, W, H) {
+    const s = Math.min(W / OMX_W, H / OMX_H);
+    const ox = (W - OMX_W * s) / 2, oy = (H - OMX_H * s) / 2;
     const gap = ui.grid ? Math.max(1, Math.round(s * 0.14)) : 0;
-    const px = s - gap, off = gap / 2, r = px >= 4 ? Math.min(2, (px * 0.28) | 0) : 0;
-    ctx.clearRect(0, 0, cv.width, cv.height);
+    const g0 = gap >> 1, g1 = gap - g0;
+    const rounded = ui.grid && s >= 6;
+    ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = ui.color;
     for (let dy = 0; dy < OMX_H; dy++) {
       const sy = OMX_H - 1 - dy;                 // 180deg rotation (matches firmware)
+      const y0 = Math.round(oy + dy * s) + g0, y1 = Math.round(oy + (dy + 1) * s) - g1;
       for (let dx = 0; dx < OMX_W; dx++) {
         if (pixelOn(OMX_W - 1 - dx, sy)) {
-          const X = dx * s + off, Y = dy * s + off;
-          if (r) { ctx.beginPath(); ctx.roundRect(X, Y, px, px, r); ctx.fill(); }
-          else ctx.fillRect(X, Y, px, px);
+          const x0 = Math.round(ox + dx * s) + g0, x1 = Math.round(ox + (dx + 1) * s) - g1;
+          const w = x1 - x0, h = y1 - y0;
+          if (w <= 0 || h <= 0) continue;
+          if (rounded) { ctx.beginPath(); ctx.roundRect(x0, y0, w, h, Math.min(3, w * 0.3)); ctx.fill(); }
+          else ctx.fillRect(x0, y0, w, h);
         }
       }
     }
   }
 
+  // ---- pop-out window ---------------------------------------------------
+  let popup = null, popupCv = null, popupCtx = null;
+  function openPopup() {
+    if (popup && !popup.closed) { popup.focus(); return; }
+    popup = window.open('', 'omx-display', 'width=820,height=230');
+    if (!popup) { note('<span class="err">Pop-out blocked.</span> Allow pop-ups for this page, then try again.'); return; }
+    popup.document.write(
+      '<!doctype html><html><head><meta charset="utf-8"><title>OMX-27 Display</title>' +
+      '<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block}</style>' +
+      '</head><body><canvas id="c"></canvas></body></html>');
+    popup.document.close();
+    popupCv = popup.document.getElementById('c');
+    popupCtx = popupCv.getContext('2d');
+    const fit = () => { popupCv.width = popup.innerWidth; popupCv.height = popup.innerHeight; applyGlow(popupCv); dirty = true; };
+    popup.addEventListener('resize', fit);
+    fit();
+  }
+  function closePopup() { popup = null; popupCv = null; popupCtx = null; }
+
   function loop() {
-    if (dirty) { render(); dirty = false; }
+    if (dirty) {
+      drawFrame(ctx, cv.width, cv.height);
+      if (popup) {
+        if (popup.closed) closePopup();
+        else if (popupCtx) drawFrame(popupCtx, popupCv.width, popupCv.height);
+      }
+      dirty = false;
+    }
     requestAnimationFrame(loop);
   }
   setInterval(() => { fps = recvCount * 2; recvCount = 0; updateStatus(); }, 500);
@@ -391,13 +431,17 @@
   });
 
   $('connect').onclick = connect;
+  $('popout').onclick = openPopup;
   $('demo').onclick = toggleDemo;
   $('scale').oninput = e => { ui.scale = +e.target.value; $('scaleVal').innerHTML = ui.scale + '&times;'; resize(); };
   $('glow').oninput = e => { ui.glow = +e.target.value; $('glowVal').textContent = ui.glow; resize(); };
   $('grid').onchange = e => { ui.grid = e.target.checked; dirty = true; };
   $('pace').oninput = e => { ui.pace = +e.target.value; $('paceVal').textContent = ui.pace; if (connected) sendSysex(CMD_PACE, [ui.pace]); };
 
-  window.addEventListener('beforeunload', () => { if (connected) setEnabled(false); });
+  window.addEventListener('beforeunload', () => {
+    if (connected) setEnabled(false);
+    if (popup && !popup.closed) popup.close();
+  });
 
   resize();
   requestAnimationFrame(loop);
