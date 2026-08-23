@@ -1424,13 +1424,14 @@ void OmxDisp::showDisplay()
 {
 	if (dirtyDisplay)
 	{
+		// Mirror the freshly-drawn buffer to norns on EVERY dirty frame (the mode
+		// repaints it this loop while dirty), decoupled from the ~60ms OLED refresh
+		// below, so the mirror tracks changes with low latency. streamFrame() has
+		// its own rate cap + delta, so this is cheap.
+		nornsLink.streamFrame();
 		if (dirtyDisplayTimer > displayRefreshRate)
 		{
 			display.display();
-			// Mirror the just-pushed (complete) frame to norns. This is the only
-			// point where the buffer is guaranteed fully drawn -- the main loop
-			// clears it every iteration and modes only repaint when dirty.
-			nornsLink.streamFrame();
 			dirtyDisplay = false;
 			dirtyDisplayTimer = 0;
 		}

@@ -30,20 +30,20 @@ local unpack = table.unpack or unpack
 
 local ROOT = _path.data .. NAME .. "/"
 local STATE_FILE = ROOT .. "state.lua"
-local FPS = 15                  -- norns redraws ~15Hz; keeps our CPU load low
+local FPS = 60                  -- fast tick; redraw is gated on need_draw so it's cheap
 local Y_OFF = (64 - sx.OMX_H) // 2
 local STALE_TICKS = FPS * 3     -- drop the mirror if no frames for ~3s (OMX unplugged)
 local ACTIVITY_TICKS = FPS * 3  -- "auto": keep showing ~3s after last OMX input
-local REQ_TICKS = 5             -- re-request missing chunks after ~330ms
+local REQ_TICKS = 6             -- re-request missing chunks after ~100ms (at 60fps)
 local REQ_MAX = 3               -- then give up on the pass (next pass supersedes)
-local PRESENT_FALLBACK = 9      -- ~600ms: present what we have rather than nothing
+local PRESENT_FALLBACK = 24     -- ~400ms: present what we have rather than nothing
 
 local MODES = { "off", "auto", "forced" }
 
 -- ---------------------------------------------------------------------------
 -- state
 
-local state = { port = 1, mode = 2, pace = 15 } -- default: auto, 15ms between chunks
+local state = { port = 1, mode = 2, pace = 4 } -- default: auto, 4ms between chunks
 
 local dev, our_event, script_event, sysex_acc
 
@@ -108,7 +108,7 @@ local function load_state()
   d = d or {}
   state.port = d.port or 1
   state.mode = d.mode or 2
-  state.pace = d.pace or 15
+  state.pace = d.pace or 4
   if state.mode < 1 or state.mode > #MODES then state.mode = 2 end
   state.pace = util.clamp(state.pace, 1, 127)
 end

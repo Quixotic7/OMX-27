@@ -7,8 +7,8 @@
 
 NornsLink nornsLink;
 
-// How often we look for display changes to send.
-static const uint32_t kMinSendIntervalMicros = 40000;
+// How often we look for display changes to send (low, since it's cheap + delta'd).
+static const uint32_t kMinSendIntervalMicros = 4000;
 // (gap between chunk messages is chunkIntervalMicros_, tunable via NL_CMD_PACE)
 
 // Encode src[len] (8-bit) into dst as 7-bit-safe SysEx data (32 bytes -> 37).
