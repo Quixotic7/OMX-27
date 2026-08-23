@@ -38,10 +38,11 @@ You can also host `index.html` anywhere with HTTPS (e.g. GitHub Pages) and open 
 - **size / glow** — display size and per-pixel bloom.
 - **grid** — on: dot-matrix look (gaps between pixels); off: solid, edge-to-edge
   chunky pixels.
-- **VHS** — ambient tape look: a tracking band creeps slowly down the picture and
-  is invisible while the tape is "locked"; every few seconds it briefly loses
-  tracking — the band shows faintly and the OMX pixel rows within ±3 of it tear
-  sideways by whole pixels (max 4). No whole-image wobble.
+- **VHS** — ambient tape faults, all in chunky OMX pixel space, each with its own
+  rarity and fade-in/out: the creeping tracking band briefly loses lock and tears
+  the rows within ±3 of it (every 0.2–1.5 s) · two bands at once (3–15 s) · four
+  bands (20–60 s) · 1–4 rows of noise corruption (8–30 s) · a brief whole-image
+  wobble (very rare, 30–200 s). Between events the picture is rock-steady.
 - **CRT** — old-monitor simulation: chromatic aberration (RGB split growing toward
   the edges), barrel-curved screen with rounded corners, phosphor RGB shadow mask,
   interlaced scanlines, vignette, grain, brightness flicker and a glass highlight.

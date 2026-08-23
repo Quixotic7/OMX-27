@@ -312,46 +312,93 @@
   }
 
   // ---- VHS tracking state (advanced once per frame in loop) --------------
-  // A tracking band creeps slowly down the picture. Almost all the time the
-  // tape is "locked": nothing is drawn and nothing moves. Every so often it
-  // briefly loses tracking: the band becomes faintly visible and the rows within
-  // +-3 of it tear sideways by whole OMX pixels (max 4), chunky, like the real
-  // thing. No whole-image wobble, no drift.
+  // A small weather system of tape faults, each with its own rarity and a
+  // fade-in/out envelope, all in whole OMX pixels (chunky):
+  //   tear1   - the creeping tracking band loses lock, rows +-3 tear (0.2-1.5s)
+  //   tear2   - two tear bands at once                            (3-15s)
+  //   tear4   - four tear bands at once                           (20-60s)
+  //   corrupt - 1-4 rows of noise that fades in and out           (8-30s)
+  //   wobble  - brief whole-image wobble                          (30-200s)
+  // Between events the picture is rock-steady.
   const rowOff = new Int8Array(OMX_H);      // per-row shift in whole OMX pixels
+  const noiseRows = new Float32Array(OMX_H); // per-row noise intensity 0..1
   let vhsT = 0, scanY = -4;
-  const trk = { lost: false, start: 0, until: 0, hold: 0, shifts: new Int8Array(7) };
-  function stepVHS() {
-    vhsT++;
-    scanY += 0.035;                              // ~15 s per sweep
-    if (scanY > OMX_H + 4) scanY = -4;
-    rowOff.fill(0);
-    if (!trk.lost) {
-      if (Math.random() < 0.004) {               // lose tracking every few seconds
-        trk.lost = true; trk.start = vhsT; trk.until = vhsT + 12 + (Math.random() * 30 | 0); trk.hold = 0;
-      }
-      return;
-    }
-    if (vhsT > trk.until) { trk.lost = false; return; }
-    if (trk.hold <= 0) {                         // new tear pattern, held a few frames
+  let vhsBands = [];                         // visible bands for the overlay {y, env}
+  const R = (a, b) => a + Math.random() * (b - a);
+  const RI = (a, b) => Math.round(R(a, b));
+  // intervals in seconds (~60fps), durations in frames
+  function mkFx(minI, maxI, minD, maxD) {
+    return { minI, maxI, minD, maxD, active: false, start: 0, until: 0, next: -1, data: null };
+  }
+  const fx = {
+    tear1: mkFx(0.2, 1.5, 12, 42),
+    tear2: mkFx(3, 15, 20, 55),
+    tear4: mkFx(20, 60, 30, 80),
+    corrupt: mkFx(8, 120, 25, 70),
+    wobble: mkFx(30, 400, 25, 60),
+  };
+  function env01(f) {
+    const t = (vhsT - f.start) / Math.max(1, f.until - f.start);
+    return Math.sin(Math.PI * Math.min(1, Math.max(0, t)));
+  }
+  function mkBand(y) { return { y, hold: 0, shifts: new Int8Array(7) }; }
+  function stepBand(b) {
+    if (b.hold <= 0) {                       // new tear pattern, held a few frames
       for (let i = 0; i < 7; i++) {
         const d = Math.abs(i - 3);
-        const maxS = d === 0 ? 4 : d === 1 ? 3 : d === 2 ? 2 : 1;   // strongest at the band
-        trk.shifts[i] = Math.random() < 0.6 ? Math.round((Math.random() * 2 - 1) * maxS) : 0;
+        const maxS = d === 0 ? 4 : d === 1 ? 3 : d === 2 ? 2 : 1; // strongest at the band
+        b.shifts[i] = Math.random() < 0.6 ? Math.round((Math.random() * 2 - 1) * maxS) : 0;
       }
-      trk.hold = 2 + (Math.random() * 4 | 0);
+      b.hold = 2 + (Math.random() * 4 | 0);
     }
-    trk.hold--;
-    const c = Math.round(scanY);
+    b.hold--;
+    b.y += 0.05;                             // slight downward drift while torn
+    const c = Math.round(b.y);
     for (let i = 0; i < 7; i++) {
       const ry = c - 3 + i;
-      if (ry >= 0 && ry < OMX_H) rowOff[ry] = trk.shifts[i];
+      if (ry >= 0 && ry < OMX_H) rowOff[ry] += b.shifts[i];
     }
   }
-  // 0..1 envelope of the current tracking loss (fades in and out)
-  function trackEnv() {
-    if (!trk.lost) return 0;
-    const t = (vhsT - trk.start) / Math.max(1, trk.until - trk.start);
-    return Math.sin(Math.PI * Math.min(1, Math.max(0, t)));
+  function stepVHS() {
+    vhsT++;
+    scanY += 0.035;                          // creeping tracking line, ~15s per sweep
+    if (scanY > OMX_H + 4) scanY = -4;
+    rowOff.fill(0);
+    noiseRows.fill(0);
+    vhsBands = [];
+    for (const name in fx) {
+      const f = fx[name];
+      if (f.next < 0) f.next = vhsT + R(f.minI, f.maxI) * 60; // schedule first occurrence
+      if (!f.active && vhsT >= f.next) {
+        f.active = true; f.start = vhsT; f.until = vhsT + RI(f.minD, f.maxD);
+        if (name === 'tear1') f.data = [mkBand(scanY)];
+        else if (name === 'tear2') f.data = [0, 1].map(i => mkBand(R(2, OMX_H / 2 - 4) + i * (OMX_H / 2)));
+        else if (name === 'tear4') f.data = [0, 1, 2, 3].map(i => mkBand(R(0, OMX_H / 4 - 2) + i * (OMX_H / 4)));
+        else if (name === 'corrupt') f.data = { row: RI(0, OMX_H - 4), span: RI(1, 4) };
+        else if (name === 'wobble') f.data = { amp: R(1.5, 3), freq: R(0.15, 0.35), phase: R(0, 6.28) };
+      }
+      if (!f.active) continue;
+      if (vhsT > f.until) { f.active = false; f.next = vhsT + R(f.minI, f.maxI) * 60; continue; }
+      const e = env01(f);
+      if (name === 'tear1') {
+        f.data[0].y = scanY;                 // this band rides the creeping line
+        stepBand(f.data[0]);
+        vhsBands.push({ y: scanY, env: e });
+      } else if (name === 'tear2' || name === 'tear4') {
+        for (const b of f.data) { stepBand(b); vhsBands.push({ y: b.y, env: e }); }
+      } else if (name === 'corrupt') {
+        for (let i = 0; i < f.data.span; i++) {
+          const ry = f.data.row + i;
+          if (ry < OMX_H) noiseRows[ry] = e;
+        }
+      } else if (name === 'wobble') {
+        const o = Math.round(Math.sin((vhsT - f.start) * f.data.freq + f.data.phase) * f.data.amp * e);
+        if (o) for (let ry = 0; ry < OMX_H; ry++) rowOff[ry] += o;
+      }
+    }
+    for (let ry = 0; ry < OMX_H; ry++) {     // keep stacked shifts sane
+      if (rowOff[ry] > 6) rowOff[ry] = 6; else if (rowOff[ry] < -6) rowOff[ry] = -6;
+    }
   }
 
   // Draw just the lit pixels (transparent bg) into g, with optional VHS warp.
@@ -369,8 +416,11 @@
       const sy = OMX_H - 1 - dy;                 // 180deg rotation (matches firmware)
       const xoff = ui.vhs ? rowOff[dy] * s : 0;
       const y0 = Math.round(oy + dy * s) + g0, y1 = Math.round(oy + (dy + 1) * s) - g1;
+      const nz = ui.vhs ? noiseRows[dy] : 0;   // corruption: randomize cells, faded by envelope
       for (let dx = 0; dx < OMX_W; dx++) {
-        if (pixelOn(OMX_W - 1 - dx, sy)) {
+        let on = pixelOn(OMX_W - 1 - dx, sy);
+        if (nz > 0 && Math.random() < nz * 0.8) on = Math.random() < 0.5;
+        if (on) {
           const x0 = Math.round(ox + dx * s + xoff) + g0, x1 = Math.round(ox + (dx + 1) * s + xoff) - g1;
           const w = x1 - x0, h = y1 - y0;
           if (w <= 0 || h <= 0) continue;
@@ -529,20 +579,23 @@
     ctx.fillStyle = 'rgba(0,0,0,0.10)';
     const step = Math.max(2, Math.round(s * 0.5));
     for (let y = 0; y < H; y += step) ctx.fillRect(0, y, W, Math.max(1, step >> 1));
-    // the tracking band is only visible while tracking is lost
-    const env = trackEnv();
-    if (env <= 0) return;
-    const cy = oy + scanY * s + s / 2, bh = Math.max(6, s * 3.5);
-    const grad = ctx.createLinearGradient(0, cy - bh, 0, cy + bh);
-    grad.addColorStop(0, 'rgba(255,255,255,0)');
-    grad.addColorStop(0.5, `rgba(255,255,255,${0.13 * env})`);
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    // tear bands are only visible during a tracking-loss event
+    if (vhsBands.length === 0) return;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, cy - bh, W, bh * 2);
-    ctx.fillStyle = `rgba(255,255,255,${0.08 * env})`;   // thin noisy head-switch line
-    ctx.fillRect(0, cy + (Math.random() * 2 - 1), W, 1);
+    for (const b of vhsBands) {
+      const env = b.env;
+      if (env <= 0) continue;
+      const cy = oy + b.y * s + s / 2, bh = Math.max(6, s * 3.5);
+      const grad = ctx.createLinearGradient(0, cy - bh, 0, cy + bh);
+      grad.addColorStop(0, 'rgba(255,255,255,0)');
+      grad.addColorStop(0.5, `rgba(255,255,255,${0.13 * env})`);
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, cy - bh, W, bh * 2);
+      ctx.fillStyle = `rgba(255,255,255,${0.08 * env})`; // thin noisy head-switch line
+      ctx.fillRect(0, cy + (Math.random() * 2 - 1), W, 1);
+    }
     ctx.restore();
   }
 
