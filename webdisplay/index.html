@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OMX-27 Display</title>
+<style>
+  :root {
+    --bg: #0a0b0f;
+    --panel: #14161d;
+    --panel-2: #1c1f28;
+    --line: #2a2e3a;
+    --text: #e7ebf3;
+    --muted: #8b93a7;
+    --accent: #22d3ee;
+    --ok: #34d399;
+    --bad: #f87171;
+    --screen: #d8f6ff; /* pixel colour, overridden by theme */
+    --glow: 8px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 50% -10%, #12151d 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 16px 48px;
+    min-height: 100%;
+  }
+  header { text-align: center; margin-bottom: 20px; }
+  h1 { font-size: 20px; font-weight: 650; letter-spacing: .2px; margin: 0; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  .device {
+    background: linear-gradient(180deg, #0d0f14, #05060a);
+    border: 1px solid #23262f;
+    border-radius: 18px;
+    padding: 22px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.03);
+    max-width: 100%;
+  }
+  .screen-wrap {
+    background: #000;
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: inset 0 0 0 1px #1b1e26, inset 0 0 40px rgba(0,0,0,.9);
+    line-height: 0;
+  }
+  canvas#screen {
+    display: block;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 0 var(--glow) var(--screen));
+    max-width: 100%;
+    height: auto;
+  }
+
+  .bar {
+    display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+    margin-top: 16px; font-size: 13px; color: var(--muted);
+    max-width: 820px; justify-content: center;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); display: inline-block; margin-right: 7px; box-shadow: 0 0 8px currentColor; color: var(--bad); }
+  .dot.on { background: var(--ok); color: var(--ok); }
+  .stat b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: center;
+    margin-top: 22px; max-width: 820px;
+  }
+  button {
+    appearance: none; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+    font: inherit; font-size: 14px; font-weight: 600; padding: 10px 18px; border-radius: 10px; cursor: pointer;
+    transition: border-color .15s, background .15s, transform .05s;
+  }
+  button:hover { border-color: #3a4152; background: #22262f; }
+  button:active { transform: translateY(1px); }
+  button.primary { background: var(--accent); color: #062c33; border-color: transparent; }
+  button.primary:hover { filter: brightness(1.06); }
+  button.ghost { background: transparent; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+  .field label { padding-left: 2px; }
+  .field .row { display: flex; align-items: center; gap: 8px; }
+  select, input[type=range] { accent-color: var(--accent); }
+  select {
+    appearance: none; background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 13px;
+  }
+  input[type=range] { width: 130px; }
+  .val { color: var(--text); font-variant-numeric: tabular-nums; min-width: 34px; }
+  .swatches { display: flex; gap: 6px; }
+  .swatch { width: 22px; height: 22px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; }
+  .swatch.sel { border-color: #fff; }
+
+  .note {
+    margin-top: 26px; max-width: 640px; text-align: center; color: var(--muted); font-size: 12.5px; line-height: 1.55;
+  }
+  .note code { background: #000; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: #cbd5e1; }
+  .err { color: var(--bad); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+  <header>
+    <h1>OMX&#8209;27 <span>Display</span></h1>
+    <div class="sub">live screen mirror over USB&#8209;MIDI &middot; Web MIDI</div>
+  </header>
+
+  <div class="device">
+    <div class="screen-wrap"><canvas id="screen" width="768" height="192"></canvas></div>
+  </div>
+
+  <div class="bar">
+    <span class="stat"><span id="dot" class="dot"></span><span id="conn">disconnected</span></span>
+    <span class="stat">device <b id="devname">&mdash;</b></span>
+    <span class="stat"><b id="fps">0</b> fps</span>
+    <span class="stat"><b id="frames">0</b> frames</span>
+    <span class="stat"><b id="drops">0</b> resend</span>
+  </div>
+
+  <div class="controls">
+    <button id="connect" class="primary">Connect</button>
+    <button id="demo" class="ghost">Test pattern</button>
+
+    <div class="field">
+      <label>colour</label>
+      <div class="row swatches" id="swatches"></div>
+    </div>
+    <div class="field">
+      <label>size</label>
+      <div class="row"><input id="scale" type="range" min="3" max="12" step="1" value="6"><span class="val" id="scaleVal">6&times;</span></div>
+    </div>
+    <div class="field">
+      <label>glow</label>
+      <div class="row"><input id="glow" type="range" min="0" max="24" step="1" value="8"><span class="val" id="glowVal">8</span></div>
+    </div>
+    <div class="field">
+      <label>grid</label>
+      <div class="row"><input id="grid" type="checkbox" checked></div>
+    </div>
+    <div class="field">
+      <label>OMX pace ms</label>
+      <div class="row"><input id="pace" type="range" min="1" max="30" step="1" value="4"><span class="val" id="paceVal">4</span></div>
+    </div>
+  </div>
+
+  <div class="note" id="note">
+    Requires Chrome/Edge over <code>https</code> or <code>localhost</code> (Web MIDI + SysEx).
+    Connect the OMX&#8209;27 (RP2040, with the display&#8209;mirror firmware) by USB, then press <b>Connect</b>
+    and allow MIDI access.
+  </div>
+
+<script>
+"use strict";
+(() => {
+  // ---- protocol (matches src/midi/norns_link.h) -------------------------
+  const MANU = [0x7d, 0x00, 0x00];
+  const CMD_FRAME = 0x50, CMD_STATUS = 0x52, CMD_FRAME_END = 0x53;
+  const CMD_MIRROR_EN = 0x58, CMD_REQ = 0x5e, CMD_PACE = 0x5f;
+  const OMX_W = 128, OMX_H = 32, FB_BYTES = 512;
+  const CHUNK_BYTES = 32, CHUNK_COUNT = 16;
+
+  // ---- state ------------------------------------------------------------
+  const fb = new Uint8Array(FB_BYTES);        // SSD1306 page layout
+  const chunkFid = new Int16Array(CHUNK_COUNT).fill(-1);
+  let midi = null, omxIn = null, omxOut = null;
+  let connected = false, demo = false, dirty = true;
+  let frames = 0, drops = 0, fps = 0, recvCount = 0;
+  let heartbeat = null;
+
+  // ---- decode (mirror of omx_sysex.lua decode7bit) ----------------------
+  function decode7bit(src, from, to) {
+    const out = [];
+    let i = from;
+    while (i <= to) {
+      const hi = src[i]; i++;
+      const n = Math.min(7, to - i + 1);
+      for (let j = 0; j < n; j++) {
+        let b = src[i + j] & 0x7f;
+        if ((hi >> j) & 1) b |= 0x80;
+        out.push(b);
+      }
+      i += n;
+    }
+    return out;
+  }
+
+  // ---- incoming sysex ---------------------------------------------------
+  function onMIDIMessage(e) {
+    const d = e.data;
+    if (d.length < 5 || d[0] !== 0xf0) return;
+    if (d[1] !== MANU[0] || d[2] !== MANU[1] || d[3] !== MANU[2]) return;
+    const cmd = d[4];
+    if (cmd === CMD_FRAME) handleChunk(d);
+    else if (cmd === CMD_FRAME_END) handleEnd(d);
+    // CMD_STATUS (input activity) is not needed for a passive display
+  }
+
+  function handleChunk(d) {
+    const chunk = d[5], fid = d[6], cksum = d[7];
+    if (chunk >= CHUNK_COUNT) return;
+    const dec = decode7bit(d, 8, d.length - 2);
+    if (dec.length !== CHUNK_BYTES) return;      // corrupt / wrong length
+    let sum = 0; for (let i = 0; i < CHUNK_BYTES; i++) sum += dec[i];
+    if ((sum & 0x7f) !== cksum) return;          // checksum mismatch
+    const base = chunk * CHUNK_BYTES;
+    for (let i = 0; i < CHUNK_BYTES; i++) fb[base + i] = dec[i];
+    chunkFid[chunk] = fid;
+    dirty = true;
+  }
+
+  function handleEnd(d) {
+    const fid = d[5];
+    const mask = (d[6] & 0x7f) | ((d[7] & 0x7f) << 7) | ((d[8] & 0x03) << 14);
+    // any chunks this frame listed but we didn't receive with this fid? ask again.
+    let miss = 0;
+    for (let c = 0; c < CHUNK_COUNT; c++) {
+      if ((mask & (1 << c)) && chunkFid[c] !== fid) miss |= (1 << c);
+    }
+    if (miss && omxOut) {
+      drops++;
+      sendSysex(CMD_REQ, [miss & 0x7f, (miss >> 7) & 0x7f, (miss >> 14) & 0x03]);
+    }
+    frames++; recvCount++;
+    dirty = true;
+  }
+
+  // ---- outgoing ---------------------------------------------------------
+  function sendSysex(cmd, payload) {
+    if (!omxOut) return;
+    const msg = [0xf0, ...MANU, cmd, ...(payload || []).map(b => b & 0x7f), 0xf7];
+    try { omxOut.send(msg); } catch (_) {}
+  }
+  function setEnabled(on) {
+    if (on) sendSysex(CMD_PACE, [ui.pace]);
+    sendSysex(CMD_MIRROR_EN, [on ? 1 : 0]);
+  }
+
+  // ---- Web MIDI ---------------------------------------------------------
+  function findOMX() {
+    omxIn = null; omxOut = null;
+    for (const p of midi.inputs.values())
+      if ((p.name || "").toLowerCase().includes("omx")) omxIn = p;
+    for (const p of midi.outputs.values())
+      if ((p.name || "").toLowerCase().includes("omx")) omxOut = p;
+    return omxIn && omxOut;
+  }
+
+  function bindInput() {
+    if (omxIn) omxIn.onmidimessage = onMIDIMessage;
+  }
+
+  function refreshConnection() {
+    const was = connected;
+    connected = midi ? findOMX() : false;
+    if (connected) bindInput();
+    if (connected && !was) {
+      setEnabled(true);
+      if (heartbeat) clearInterval(heartbeat);
+      heartbeat = setInterval(() => setEnabled(true), 2000); // survive OMX reboot
+    }
+    if (!connected && was && heartbeat) { clearInterval(heartbeat); heartbeat = null; }
+    updateStatus();
+  }
+
+  async function connect() {
+    if (!navigator.requestMIDIAccess) {
+      note('<span class="err">Web MIDI is not available in this browser.</span> Use Chrome or Edge.');
+      return;
+    }
+    try {
+      midi = await navigator.requestMIDIAccess({ sysex: true });
+    } catch (err) {
+      note('<span class="err">MIDI access denied.</span> It needs https/localhost and SysEx permission. ' + (err && err.message ? err.message : ''));
+      return;
+    }
+    midi.onstatechange = refreshConnection;
+    demo = false;
+    refreshConnection();
+    if (!connected) note('Connected to Web MIDI, but no device named "omx" was found. Plug in the OMX-27 and it will appear automatically.');
+    else note('');
+  }
+
+  // ---- rendering --------------------------------------------------------
+  const cv = document.getElementById('screen');
+  const ctx = cv.getContext('2d');
+  const ui = { scale: 6, glow: 8, grid: true, color: '#d8f6ff', pace: 4 };
+
+  function pixelOn(x, y) { return (fb[x + (y >> 3) * OMX_W] >> (y & 7)) & 1; }
+
+  function resize() {
+    cv.width = OMX_W * ui.scale;
+    cv.height = OMX_H * ui.scale;
+    cv.style.setProperty('--glow', ui.glow + 'px');
+    document.documentElement.style.setProperty('--screen', ui.color);
+    cv.style.filter = `drop-shadow(0 0 ${ui.glow}px ${ui.color})`;
+    dirty = true;
+  }
+
+  function render() {
+    const s = ui.scale;
+    const gap = ui.grid ? Math.max(1, Math.round(s * 0.14)) : 0;
+    const px = s - gap, off = gap / 2, r = px >= 4 ? Math.min(2, (px * 0.28) | 0) : 0;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = ui.color;
+    for (let dy = 0; dy < OMX_H; dy++) {
+      const sy = OMX_H - 1 - dy;                 // 180deg rotation (matches firmware)
+      for (let dx = 0; dx < OMX_W; dx++) {
+        if (pixelOn(OMX_W - 1 - dx, sy)) {
+          const X = dx * s + off, Y = dy * s + off;
+          if (r) { ctx.beginPath(); ctx.roundRect(X, Y, px, px, r); ctx.fill(); }
+          else ctx.fillRect(X, Y, px, px);
+        }
+      }
+    }
+  }
+
+  function loop() {
+    if (dirty) { render(); dirty = false; }
+    requestAnimationFrame(loop);
+  }
+  setInterval(() => { fps = recvCount * 2; recvCount = 0; updateStatus(); }, 500);
+
+  // ---- demo / test pattern ---------------------------------------------
+  function setPixel(x, y, on) {
+    if (x < 0 || x >= OMX_W || y < 0 || y >= OMX_H) return;
+    const i = x + (y >> 3) * OMX_W, m = 1 << (y & 7);
+    if (on) fb[i] |= m; else fb[i] &= ~m;
+  }
+  let demoPhase = 0, demoTimer = null;
+  function demoFrame() {
+    fb.fill(0);
+    // border
+    for (let x = 0; x < OMX_W; x++) { setPixel(x, 0, 1); setPixel(x, OMX_H - 1, 1); }
+    for (let y = 0; y < OMX_H; y++) { setPixel(0, y, 1); setPixel(OMX_W - 1, y, 1); }
+    // bouncing sine
+    for (let x = 2; x < OMX_W - 2; x++) {
+      const y = Math.round(OMX_H / 2 + (OMX_H / 2 - 4) * Math.sin((x + demoPhase) * 0.14));
+      setPixel(x, y, 1); setPixel(x, y + 1, 1);
+    }
+    // moving block
+    const bx = 2 + ((demoPhase * 2) % (OMX_W - 12));
+    for (let y = 2; y < 8; y++) for (let x = bx; x < bx + 8; x++) setPixel(x, y, 1);
+    demoPhase++;
+    frames++; recvCount++; dirty = true;
+  }
+  function toggleDemo() {
+    demo = !demo;
+    if (demo) {
+      if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
+      connected = false; updateStatus();
+      demoTimer = setInterval(demoFrame, 33);
+      note('Test pattern (no hardware). Press <b>Connect</b> for the real OMX-27.');
+    } else {
+      clearInterval(demoTimer); demoTimer = null; fb.fill(0); dirty = true;
+      note('');
+    }
+    document.getElementById('demo').textContent = demo ? 'Stop test' : 'Test pattern';
+  }
+
+  // ---- UI wiring --------------------------------------------------------
+  const $ = id => document.getElementById(id);
+  function updateStatus() {
+    $('dot').classList.toggle('on', connected || demo);
+    $('conn').textContent = demo ? 'test pattern' : (connected ? 'connected' : 'disconnected');
+    $('devname').textContent = connected && omxIn ? (omxIn.name || 'OMX-27') : '—';
+    $('fps').textContent = fps;
+    $('frames').textContent = frames;
+    $('drops').textContent = drops;
+  }
+  function note(html) { $('note').innerHTML = html || defaultNote; }
+  const defaultNote = $('note').innerHTML;
+
+  const COLORS = [
+    ['#d8f6ff', 'white'], ['#22d3ee', 'cyan'], ['#7dd3fc', 'blue'],
+    ['#fbbf24', 'amber'], ['#34d399', 'green']
+  ];
+  const sw = $('swatches');
+  COLORS.forEach(([c], i) => {
+    const el = document.createElement('div');
+    el.className = 'swatch' + (i === 0 ? ' sel' : '');
+    el.style.background = c; el.title = COLORS[i][1];
+    el.onclick = () => {
+      ui.color = c; resize();
+      [...sw.children].forEach(x => x.classList.remove('sel')); el.classList.add('sel');
+    };
+    sw.appendChild(el);
+  });
+
+  $('connect').onclick = connect;
+  $('demo').onclick = toggleDemo;
+  $('scale').oninput = e => { ui.scale = +e.target.value; $('scaleVal').innerHTML = ui.scale + '&times;'; resize(); };
+  $('glow').oninput = e => { ui.glow = +e.target.value; $('glowVal').textContent = ui.glow; resize(); };
+  $('grid').onchange = e => { ui.grid = e.target.checked; dirty = true; };
+  $('pace').oninput = e => { ui.pace = +e.target.value; $('paceVal').textContent = ui.pace; if (connected) sendSysex(CMD_PACE, [ui.pace]); };
+
+  window.addEventListener('beforeunload', () => { if (connected) setEnabled(false); });
+
+  resize();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
