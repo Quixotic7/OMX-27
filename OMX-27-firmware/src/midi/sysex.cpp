@@ -1,6 +1,7 @@
 
 #include "../globals.h"
 #include "../midi/sysex.h"
+#include "norns_link.h"
 
 // #include "../midi/midi.h"
 // #include "../config.h"
@@ -40,6 +41,30 @@ void SysEx::processIncomingSysex(const byte *sysexData, unsigned size)
 		// 0D - c0nfig Device edit - new config just for device opts
 		// 			Serial.println("Got an c0nfig Device Edit");
 		this->updateDeviceSettingsAndStore(sysexData, size);
+		break;
+	case NL_CMD_MIRROR_EN:
+		// 58 - norns screen-mirror enable/disable: F0 7D 00 00 58 <0|1> F7
+		if (size > 5)
+		{
+			nornsLink.setMirrorEnabled(sysexData[5] != 0);
+		}
+		break;
+	case NL_CMD_REQ:
+		// 5E - norns missed some screen chunks, resend: F0 7D 00 00 5E <m0> <m1> <m2> F7
+		if (size > 7)
+		{
+			uint16_t mask = (uint16_t)(sysexData[5] & 0x7F) |
+							(uint16_t)((sysexData[6] & 0x7F) << 7) |
+							(uint16_t)((sysexData[7] & 0x03) << 14);
+			nornsLink.requestChunks(mask);
+		}
+		break;
+	case NL_CMD_PACE:
+		// 5F - gap between screen chunk messages: F0 7D 00 00 5F <ms> F7
+		if (size > 5)
+		{
+			nornsLink.setPaceMs(sysexData[5]);
+		}
 		break;
 	default:
 		break;

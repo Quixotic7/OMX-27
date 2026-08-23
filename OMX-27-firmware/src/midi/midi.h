@@ -23,6 +23,7 @@ namespace MM
 	void sendNoteOffHW(int note, int velocity, int channel);
 	void sendControlChangeHW(int control, int value, int channel);
 	void sendSysEx(uint32_t length, const uint8_t *sysexData, bool hasBeginEnd);
+	void sendSysExUSB(uint32_t length, const uint8_t *sysexData, bool hasBeginEnd); // USB only (skips slow TRS DIN)
 
 	// handlers/callbacks?
 	// void handleProgramChange(byte program, byte channel);

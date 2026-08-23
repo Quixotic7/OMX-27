@@ -41,6 +41,7 @@
 #include "src/utils/music_scales.h"
 #include "src/hardware/omx_leds.h"
 #include "src/midi/MIDIClockStats.h"
+#include "src/midi/norns_link.h"
 
 // Allows code to compile with smallest code LTO
 
@@ -279,6 +280,7 @@ void readPotentimeters()
 
 		if (potSettings.analog[k]->hasChanged())
 		{
+			nornsLink.markActivity();
 			// do stuff
 			if (sysSettings.screenSaverMode)
 			{
@@ -686,6 +688,19 @@ void loop()
 	// ############### SLEEP MODE ###############
 	//
 	//	Serial.println(screenSaverCounter);
+	// Keep the OLED awake (don't blank) while the norns screen mirror is active,
+	// and force a periodic repaint so a static screen still streams a frame
+	// (initial frame after enable + steady self-heal of any dropped frames).
+	if (nornsLink.mirrorEnabled())
+	{
+		omxScreensaver.resetCounter();
+		static uint32_t lastMirrorPush = 0;
+		if ((uint32_t)(millis() - lastMirrorPush) > 500)
+		{
+			lastMirrorPush = millis();
+			omxDisp.setDirty();
+		}
+	}
 	omxScreensaver.updateScreenSaverState();
 	sysSettings.screenSaverMode = omxScreensaver.shouldShowScreenSaver();
 
@@ -717,6 +732,7 @@ void loop()
 	{
 		auto amt = u.accel(1);		   // where 5 is the acceleration factor if you want it, 0 if you don't)
 		omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+		nornsLink.markActivity();
 									   //    	Serial.println(u.dir() < 0 ? "ccw " : "cw ");
 									   //    	Serial.println(amt);
 
@@ -746,6 +762,7 @@ void loop()
 	// SHORT PRESS
 	case Button::Down:				   // Serial.println("Button down");
 		omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+		nornsLink.markActivity();
 
 		// what page are we on?
 		if (sysSettings.newmode != sysSettings.omxMode && encoderConfig.enc_edit)
@@ -815,6 +832,7 @@ void loop()
 		if (e.down())
 		{
 			omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+			nornsLink.markActivity();
 			midiSettings.keyState[thisKey] = true;
 		}
 
@@ -878,6 +896,10 @@ void loop()
 	// DISPLAY at end of loop
 	omxDisp.showDisplay();
 	omxLeds.showLeds();
+
+	// Pace the norns screen-mirror page sends (one page per loop iteration) so
+	// the 4 SysEx pages of a frame don't overflow the USB TX FIFO in one burst.
+	nornsLink.pump();
 
 	while (MM::usbMidiRead())
 	{
