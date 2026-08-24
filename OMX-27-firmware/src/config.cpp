@@ -94,7 +94,7 @@ const char *paramOnMsg = "ON";
 const char *bool2lightswitchMsg[] = {"OFF", "ON"};
 const char *bool2Msg[] = {"TRUE", "FALS"};
 
-const char *modes[] = {"MI", "DRUM", "CH", "FORM", "S1", "S2", "GR", "EL", "OM"};
+const char *modes[] = {"MI", "DRUM", "CH", "FORM", "S1", "S2", "GR", "EL", "OM", "CFG"};
 const char *macromodes[] = {"Off", "M8", "NRN", "DEL"};
 const int nummacromodes = 3;
 

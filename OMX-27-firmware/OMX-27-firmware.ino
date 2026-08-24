@@ -44,6 +44,7 @@
 #include "src/modes/omx_mode_euclidean.h"
 #include "src/modes/omx_mode_chords.h"
 #include "src/form/omx_mode_form.h"
+#include "src/modes/omx_mode_config.h"
 #include "src/modes/omx_screensaver.h"
 #include "src/utils/music_scales.h"
 #include "src/hardware/omx_leds.h"
@@ -77,6 +78,7 @@ OmxModeGrids omxModeGrids;
 OmxModeEuclidean omxModeEuclid;
 OmxModeChords omxModeChords;
 OmxModeForm omxModeForm;
+OmxModeConfig omxModeConfig;
 
 OmxModeInterface *activeOmxMode;
 
@@ -242,6 +244,9 @@ void changeOmxMode(OMXMode newOmxmode)
 		break;
 	case MODE_EUCLID:
 		activeOmxMode = &omxModeEuclid;
+		break;
+	case MODE_CONFIG:
+		activeOmxMode = &omxModeConfig;
 		break;
 	default:
 		omxModeMidi.setMidiMode();
@@ -1146,6 +1151,7 @@ void setup()
 	omxModeEuclid.SetScale(&globalScale);
 	omxModeChords.SetScale(&globalScale);
 	omxModeForm.SetScale(&globalScale);
+	omxModeConfig.SetScale(&globalScale);
 
 	// Keypad
 	//	customKeypad.begin();
