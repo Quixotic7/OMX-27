@@ -17,20 +17,20 @@ enum ConfigPage
 	CFGPAGE_CLOCK,
 	CFGPAGE_MIDI,
 	CFGPAGE_SCALE,
-	CFGPAGE_CV,
-	CFGPAGE_POTS,
-	CFGPAGE_SYSTEM,
+	CFGPAGE_CV,	   // In->CV, Trigger, -, Pots (launches pot config)
+	CFGPAGE_SYSTEM, // Device ID, -, Save, Clear Storage
+	CFGPAGE_VERSION, // full-screen version label, like MIDI mode's last page
 	CFGPAGE_COUNT
 };
 
 OmxModeConfig::OmxModeConfig()
 {
-	params.addPage(4); // CLOCK : Tempo, Source, Send, Quantize
-	params.addPage(4); // MIDI  : Channel, Thru, Macro, Macro Ch
-	params.addPage(4); // SCALE : Root, Scale, Lock, Group
-	params.addPage(2); // CV    : In->CV, Trigger mode
-	params.addPage(1); // POTS  : Edit (launches pot config submode)
-	params.addPage(4); // SYSTEM: Device ID, Version, Save, Clear Storage
+	params.addPage(4); // CLOCK  : Tempo, Source, Send, Quantize
+	params.addPage(4); // MIDI   : Channel, Thru, Macro, Macro Ch
+	params.addPage(4); // SCALE  : Root, Scale, Lock, Group
+	params.addPage(4); // CV     : In->CV, Trigger, [gap], Pots
+	params.addPage(4); // SYSTEM : Device ID, [gap], Save, Clear Storage
+	params.addPage(1); // VERSION: rendered as a label
 }
 
 void OmxModeConfig::InitSetup()
@@ -92,7 +92,7 @@ bool OmxModeConfig::isSubmodeEnabled()
 }
 
 // ---------------------------------------------------------------------------
-// Input
+// Params
 // ---------------------------------------------------------------------------
 bool OmxModeConfig::inEditMode()
 {
@@ -101,21 +101,46 @@ bool OmxModeConfig::inEditMode()
 
 bool OmxModeConfig::isActionParam(int8_t page, int8_t param)
 {
-	if (page == CFGPAGE_POTS && param == 0)
-		return true;
+	if (page == CFGPAGE_CV && param == 3)
+		return true; // Pots -> launch pot config
 	if (page == CFGPAGE_SYSTEM && (param == 2 || param == 3))
+		return true; // Save / Clear Storage
+	return false;
+}
+
+bool OmxModeConfig::isGapParam(int8_t page, int8_t param)
+{
+	if (page == CFGPAGE_CV && param == 2)
+		return true;
+	if (page == CFGPAGE_SYSTEM && param == 1)
 		return true;
 	return false;
 }
 
+void OmxModeConfig::navParam(int8_t dir)
+{
+	if (dir == 0)
+		dir = 1;
+	for (uint8_t i = 0; i < CFGPAGE_COUNT * 4 + 1; i++)
+	{
+		params.changeParam(dir);
+		if (!isGapParam(params.getSelPage(), params.getSelParam()))
+			break;
+	}
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+}
+
 void OmxModeConfig::doAction(int8_t page, int8_t param)
 {
-	if (page == CFGPAGE_POTS && param == 0)
+	if (page == CFGPAGE_CV && param == 3) // Pot config
 	{
 		enableSubmode(&omxUtil.subModePotConfig);
 	}
-	else if (page == CFGPAGE_SYSTEM && param == 2) // Save
+	else if (page == CFGPAGE_SYSTEM && param == 2) // Save (blocks for a bit)
 	{
+		omxDisp.displayMessage("Saving");
+		omxDisp.forceShowDisplay(); // push "Saving" to the OLED before the blocking save
 		saveToStorage();
 		omxDisp.displayMessage("Saved");
 	}
@@ -127,6 +152,9 @@ void OmxModeConfig::doAction(int8_t page, int8_t param)
 	omxLeds.setDirty();
 }
 
+// ---------------------------------------------------------------------------
+// Input
+// ---------------------------------------------------------------------------
 void OmxModeConfig::onPotChanged(int potIndex, int prevValue, int newValue, int analogDelta)
 {
 	if (isSubmodeEnabled() && activeSubmode->usesPots())
@@ -154,8 +182,7 @@ void OmxModeConfig::onEncoderChanged(Encoder::Update enc)
 
 	if (!inEditMode())
 	{
-		params.changeParam(enc.dir());
-		omxDisp.setDirty();
+		navParam(enc.dir());
 		return;
 	}
 
@@ -249,6 +276,10 @@ void OmxModeConfig::onEncoderChangedEditParam(Encoder::Update enc)
 		else if (param == 1)
 			cvNoteUtil.triggerMode = constrain(cvNoteUtil.triggerMode + amt, 0, 1);
 		break;
+	case CFGPAGE_SYSTEM:
+		if (param == 0) // Device ID
+			deviceID = constrain(deviceID + amt, 0, 127);
+		break;
 	default:
 		break;
 	}
@@ -303,17 +334,17 @@ void OmxModeConfig::onKeyUpdate(OMXKeypadEvent e)
 	{
 		if (thisKey == 1)
 		{
-			params.decrementParam();
+			navParam(-1);
 		}
 		else if (thisKey == 2)
 		{
-			params.incrementParam();
+			navParam(1);
 		}
 		else if (thisKey >= 19 && thisKey <= 22)
 		{
 			int8_t p = (int8_t)(thisKey - 19);
 			int8_t page = params.getSelPage();
-			if (p < (int8_t)params.getNumOfParamsForPage(page))
+			if (p < (int8_t)params.getNumOfParamsForPage(page) && !isGapParam(page, p))
 			{
 				if (isActionParam(page, p))
 				{
@@ -366,11 +397,16 @@ void OmxModeConfig::updateLEDs()
 
 	int8_t page = params.getSelPage();
 	int8_t sel = params.getSelParam();
-	uint8_t np = params.getNumOfParamsForPage(page);
-	for (uint8_t p = 0; p < np && p < 4; p++)
+	if (page != CFGPAGE_VERSION)
 	{
-		uint32_t col = isActionParam(page, p) ? ORANGE : (p == sel ? WHITE : BLUE);
-		strip.setPixelColor(19 + p, col);
+		uint8_t np = params.getNumOfParamsForPage(page);
+		for (uint8_t p = 0; p < np && p < 4; p++)
+		{
+			if (isGapParam(page, p))
+				continue; // leave gap key dark
+			uint32_t col = isActionParam(page, p) ? ORANGE : (p == sel ? WHITE : BLUE);
+			strip.setPixelColor(19 + p, col);
+		}
 	}
 }
 
@@ -379,10 +415,18 @@ void OmxModeConfig::updateLEDs()
 // ---------------------------------------------------------------------------
 void OmxModeConfig::onDisplayUpdate()
 {
+	// Submode (pot config / clear storage) drives its own screen + LEDs.
 	if (isSubmodeEnabled())
 	{
+		activeSubmode->updateLEDs();
 		activeSubmode->onDisplayUpdate();
 		return;
+	}
+
+	// Modes paint their own LEDs from onDisplayUpdate (the loop only pushes the strip).
+	if (omxLeds.isDirty())
+	{
+		updateLEDs();
 	}
 
 	if (encoderConfig.enc_edit)
@@ -392,6 +436,15 @@ void OmxModeConfig::onDisplayUpdate()
 		return;
 
 	int8_t page = params.getSelPage();
+
+	// Version page: full-screen label, like the last page of MIDI mode.
+	if (page == CFGPAGE_VERSION)
+	{
+		tempString = "v" + String(MAJOR_VERSION) + "." + String(MINOR_VERSION) + "." + String(POINT_VERSION);
+		omxDisp.dispGenericModeLabel(tempString.c_str(), params.getNumPages(), page);
+		return;
+	}
+
 	omxDisp.clearLegends();
 
 	switch (page)
@@ -417,14 +470,11 @@ void OmxModeConfig::onDisplayUpdate()
 	case CFGPAGE_CV:
 		omxDisp.setLegend(0, "InCV", midiSettings.midiInToCV ? "ON" : "OFF");
 		omxDisp.setLegend(1, "TRIG", cvNoteUtil.getTriggerModeDispName());
-		break;
-	case CFGPAGE_POTS:
-		omxDisp.setLegend(0, "POTS", "Edit");
+		omxDisp.setLegend(3, "POTS", "Edit");
 		break;
 	case CFGPAGE_SYSTEM:
-		omxDisp.setLegend(0, "DEV", DEVICE_ID);
-		omxDisp.setLegend(1, "VER", (String(MAJOR_VERSION) + "." + String(MINOR_VERSION) + "." + String(POINT_VERSION)).c_str());
-		omxDisp.setLegend(2, "SAVE", "");
+		omxDisp.setLegend(0, "DEV", (int)deviceID);
+		omxDisp.setLegend(2, "SAVE", "SAV");
 		omxDisp.setLegend(3, "CLR", "STOR");
 		break;
 	default:

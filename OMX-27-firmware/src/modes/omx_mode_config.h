@@ -44,6 +44,7 @@ public:
 private:
 	ParamManager params;
 	MusicScales *musicScale_ = nullptr;
+	String tempString;
 
 	bool initSetup = false;
 	bool encoderSelect = true; // true = encoder selects param, false = edits value
@@ -58,6 +59,11 @@ private:
 	// of editing a value.
 	bool isActionParam(int8_t page, int8_t param);
 	void doAction(int8_t page, int8_t param);
+
+	// Some params are intentional gaps (empty slots) to space out the layout.
+	bool isGapParam(int8_t page, int8_t param);
+	// Change selected param, skipping over gap params.
+	void navParam(int8_t dir);
 
 	void onEncoderChangedEditParam(Encoder::Update enc);
 

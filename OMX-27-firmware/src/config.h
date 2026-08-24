@@ -42,6 +42,7 @@ extern const char* VERSION_STRING;
 // 1.14.0 - finish RP2040 port
 
 const int DEVICE_ID = 2;
+extern uint8_t deviceID; // runtime, editable in CONFIG mode (defaults to DEVICE_ID)
 
 // DAC
 extern Adafruit_MCP4725 dac;

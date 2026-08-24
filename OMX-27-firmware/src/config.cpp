@@ -9,6 +9,8 @@ const uint8_t EEPROM_VERSION = 39;
 
 const char* VERSION_STRING = "ALPHA";
 
+uint8_t deviceID = DEVICE_ID; // runtime device id, editable in CONFIG mode
+
 // v30 - adds storage to header for velocity
 // v31 - adds storage for drums
 // v32 - adds mfx chord saves
