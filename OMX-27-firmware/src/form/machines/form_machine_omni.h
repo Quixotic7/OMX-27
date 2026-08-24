@@ -99,6 +99,8 @@ namespace FormOmni
 
         ParamManager *getParams();
 
+        void ensureParamsInit(); // populates shared param pages at runtime (static-init-safe)
+
         TrackDynamic *getDynamicTrack();
 
         uint8_t key16toStep(uint8_t key16);

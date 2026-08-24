@@ -105,32 +105,44 @@ namespace FormOmni
 
     uint8_t omniUiMode_ = 0;
 
+    // The ParamManagers above are shared namespace globals. They must be populated
+    // AT RUNTIME, not from the constructor: omxModeForm is a global object, so its
+    // constructor (which news these OMNI machines) can run during static init BEFORE
+    // these ParamManager globals are themselves constructed -- in which case the
+    // ParamManager constructor later wipes any pages the OMNI ctor had added, leaving
+    // 0 pages and a param selector stuck on param 1. Keying on getNumPages() makes
+    // this idempotent and self-healing: loopUpdate() (runtime) rebuilds if wiped.
+    void FormMachineOmni::ensureParamsInit()
+    {
+        if (trackParams_.getNumPages() > 0)
+            return;
+
+        trackParams_.addPage(4); // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
+        trackParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
+        trackParams_.addPage(7); // OMNIPAGE_STEPNOTES,
+        trackParams_.addPage(7); // OMNIPAGE_STEPPOTS,
+        trackParams_.addPage(4); // OMNIPAGE_TRACK, // Length, MidiFX
+        trackParams_.addPage(4); // OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode,
+        trackParams_.addPage(4); // OMNIPAGE_SEQMIX, // Mute, Solo, Gate
+        trackParams_.addPage(4); // OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat,
+        trackParams_.addPage(4); // OMNIPAGE_SEQMIDI, // Midi Chan, MonoPhonic, SendMidi, SendCV
+        trackParams_.addPage(4); // OMNIPAGE_TIMINGS, // BPM, Rate, Swing, Swing Division
+        trackParams_.addPage(4); // OMNIPAGE_SCALE,
+        trackParams_.addPage(17); // OMNIPAGE_TPAT, // SendMidi, SendCV
+
+        stepParams_.addPage(4); // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
+        stepParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
+        stepParams_.addPage(7); // OMNIPAGE_STEPNOTES,
+        stepParams_.addPage(7); // OMNIPAGE_STEPPOTS,
+
+        tPatParams_.addPage(17);
+
+        paramsInit_ = true;
+    }
+
     FormMachineOmni::FormMachineOmni()
     {
-        if (!paramsInit_)
-        {
-            trackParams_.addPage(4); // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
-            trackParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
-            trackParams_.addPage(7); // OMNIPAGE_STEPNOTES,
-            trackParams_.addPage(7); // OMNIPAGE_STEPPOTS,
-            trackParams_.addPage(4); // OMNIPAGE_TRACK, // Length, MidiFX
-            trackParams_.addPage(4); // OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode,
-            trackParams_.addPage(4); // OMNIPAGE_SEQMIX, // Mute, Solo, Gate
-            trackParams_.addPage(4); // OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat,
-            trackParams_.addPage(4); // OMNIPAGE_SEQMIDI, // Midi Chan, MonoPhonic, SendMidi, SendCV
-            trackParams_.addPage(4); // OMNIPAGE_TIMINGS, // BPM, Rate, Swing, Swing Division
-            trackParams_.addPage(4); // OMNIPAGE_SCALE,
-            trackParams_.addPage(17); // OMNIPAGE_TPAT, // SendMidi, SendCV
-
-            stepParams_.addPage(4); // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
-            stepParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
-            stepParams_.addPage(7); // OMNIPAGE_STEPNOTES,
-            stepParams_.addPage(7); // OMNIPAGE_STEPPOTS,
-
-            tPatParams_.addPage(17);
-
-            paramsInit_ = true;
-        }
+        ensureParamsInit();
 
         resetPlayback();
 
@@ -1702,6 +1714,7 @@ namespace FormOmni
 
     void FormMachineOmni::loopUpdate()
     {
+        ensureParamsInit(); // self-heal if pages were wiped by static-init ordering
         transpPat_.loopUpdate();
     }
 
