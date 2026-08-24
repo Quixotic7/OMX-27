@@ -305,36 +305,47 @@ namespace MM
 #endif
 	}
 
+	// usbMIDI is a FortySevenEffects MidiInterface on RP2040 (has sendClock/Start/...),
+	// but the Teensy core's usb_midi_class only has sendRealTime(type). Guard per platform.
 	void sendClock()
 	{
-		// usbMIDI.sendRealTime(midi::Clock);
 		if (sequencer.clockSource == 0){ // internal clock
+#if BOARDTYPE == OMX2040
 			usbMIDI.sendClock();
+#else
+			usbMIDI.sendRealTime(midi::Clock);
+#endif
 			HWMIDI.sendClock();
 		}
 	}
 
 	void startTransport()
 	{
-		// usbMIDI.sendRealTime(midi::Start);
-		// Serial.println("Start received");
+#if BOARDTYPE == OMX2040
 		usbMIDI.sendStart();
+#else
+		usbMIDI.sendRealTime(midi::Start);
+#endif
 		HWMIDI.sendStart();
 	}
 
 	void continueTransport()
 	{
-		// usbMIDI.sendRealTime(midi::Continue);
-		// Serial.println("Continue received");
+#if BOARDTYPE == OMX2040
 		usbMIDI.sendContinue();
+#else
+		usbMIDI.sendRealTime(midi::Continue);
+#endif
 		HWMIDI.sendContinue();
 	}
 
 	void stopTransport()
 	{
-		// usbMIDI.sendRealTime(midi::Stop);
-		// Serial.println("Stop received");
+#if BOARDTYPE == OMX2040
 		usbMIDI.sendStop();
+#else
+		usbMIDI.sendRealTime(midi::Stop);
+#endif
 		HWMIDI.sendStop();
 	}
 
