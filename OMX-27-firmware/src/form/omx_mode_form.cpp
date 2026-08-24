@@ -11,6 +11,7 @@
 #include "../midi/noteoffs.h"
 #include "machines/form_machine_null.h"
 #include "machines/form_machine_omni.h"
+#include "machines/form_machine_euclid.h"
 #include "omx_form_global.h"
 
 enum FormModePage
@@ -24,9 +25,9 @@ enum FormModePage
 	FORMPAGE_NUMPAGES
 };
 
-const char *kMachineNames[FORMMACH_COUNT] = {"NONE", "OMNI"};
+const char *kMachineNames[FORMMACH_COUNT] = {"NONE", "OMNI", "EUCL"};
 
-const int kMachineColors[FORMMACH_COUNT] = {LEDOFF, ORANGE};
+const int kMachineColors[FORMMACH_COUNT] = {LEDOFF, ORANGE, CYAN};
 
 OmxModeForm::OmxModeForm()
 {
@@ -162,6 +163,11 @@ void OmxModeForm::changeMachineAtIndex(uint8_t machineIndex, uint8_t machineType
 	{
 		// Serial.println("Setting machine at " + String(machineIndex) + " to FormMachineOmni");
 		setMachineTo(machineIndex, new FormOmni::FormMachineOmni());
+	}
+	break;
+	case FORMMACH_EUCLID:
+	{
+		setMachineTo(machineIndex, new FormEuclid::FormMachineEuclid());
 	}
 	break;
 	}
@@ -799,7 +805,7 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	{
 		if (!e.held() && e.down())
 		{
-			if (thisKey >= 11 && thisKey < 27)
+			if (thisKey >= 11 && (thisKey - 11) < FORMMACH_COUNT)
 			{
 				changeMachineAtIndex(selectedMachine_, thisKey - 11);
 			}
