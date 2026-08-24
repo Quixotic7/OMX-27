@@ -624,6 +624,21 @@ void OmxModeDrum::onKeyUpdate(OMXKeypadEvent e)
 					potSettings.potbank = b;
 					potBankAuxTriggerFlash((uint8_t)b);
 					MM::sendControlChange(90, potSettings.potbank, sysSettings.midiChannel);
+					omxDisp.displayMessage("Pot Bank " + String(b + 1));
+				}
+				else if (thisKey == 16 || thisKey == 17)
+				{
+					// Copy / paste the selected drum key (key 15 left as a gap after the pot-bank pair)
+					if (thisKey == 16)
+					{
+						tempDrumKey.CopyFrom(activeDrumKit.drumKeys[selDrumKey]);
+						omxDisp.displayMessage("Copied " + String(selDrumKey + 1));
+					}
+					else // thisKey == 17
+					{
+						activeDrumKit.drumKeys[selDrumKey].CopyFrom(tempDrumKey);
+						omxDisp.displayMessage("Pasted " + String(selDrumKey + 1));
+					}
 				}
 			}
 
