@@ -194,15 +194,19 @@ namespace FormEuclid
 	{
 		uint8_t thisKey = e.key();
 		// Tap a step key to rotate the pattern so it starts on that step.
-		if (e.down() && thisKey >= kSeqKeyStart && thisKey < kSeqKeyStart + kMaxSteps)
+		if (thisKey >= kSeqKeyStart && thisKey < kSeqKeyStart + kMaxSteps)
 		{
-			uint8_t steps = euclid_.getSteps();
-			if (steps > 0)
-				euclid_.setRotation((thisKey - kSeqKeyStart) % steps);
-			omxDisp.setDirty();
-			omxLeds.setDirty();
+			if (e.down())
+			{
+				uint8_t steps = euclid_.getSteps();
+				if (steps > 0)
+					euclid_.setRotation((thisKey - kSeqKeyStart) % steps);
+				omxDisp.setDirty();
+				omxLeds.setDirty();
+			}
+			return true;
 		}
-		return true;
+		return false;
 	}
 
 	bool FormMachineEuclid::onKeyHeldUpdate(OMXKeypadEvent e)

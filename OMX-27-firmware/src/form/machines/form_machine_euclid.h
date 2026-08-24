@@ -24,9 +24,14 @@ namespace FormEuclid
 		void setMute(bool isMuted) override;
 		bool didTriggerThisStep() override;
 
-		bool doesConsumeDisplay() override { return true; }
-		bool doesConsumeKeys() override { return true; }
-		bool doesConsumeLEDs() override { return false; } // container paints the machine row; we paint the lower 16
+		// Return false so the container keeps handling top-row machine navigation
+		// (track select + entering SELECTMACHINE). The lower 16 keys are still
+		// forwarded to our onKeyUpdate, and our display/LEDs are still drawn, via
+		// the container's FORMMODE_BASE fall-through -- same pattern OMNI uses in
+		// its nav mode.
+		bool doesConsumeDisplay() override { return false; }
+		bool doesConsumeKeys() override { return false; }
+		bool doesConsumeLEDs() override { return false; }
 
 		const char *getF3shortcutName() override { return "RATE"; }
 
