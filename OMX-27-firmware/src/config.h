@@ -19,6 +19,16 @@
 
 // #include <cstdarg>
 
+// Floating-point map(). The RP2040 / arduino-pico core only provides the integer
+// long map(long,...), which truncates fractional interpolation to 0/1 (e.g. a 0..1
+// output range collapses to just 0 or 1). Teensy 4's core had a float map() overload;
+// this helper restores that exact behavior on every platform. Use it instead of map()
+// whenever any argument or the result is fractional.
+static inline float mapFloat(float x, float inMin, float inMax, float outMin, float outMax)
+{
+	return (x - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+}
+
 /* * firmware metadata  */
 // OMX_VERSION = 1.15.0
 const int MAJOR_VERSION = 1;

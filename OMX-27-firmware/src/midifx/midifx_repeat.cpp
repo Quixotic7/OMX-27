@@ -374,7 +374,7 @@ namespace midifx
 
         if (rateHz < 100)
         {
-            hertz = map((float)rateHz, 0.0f, 100.0f, 0.1f, 1.0f);
+            hertz = mapFloat((float)rateHz, 0.0f, 100.0f, 0.1f, 1.0f);
         }
         else if (rateHz == 100)
         {
@@ -382,7 +382,7 @@ namespace midifx
         }
         else if (rateHz > 100)
         {
-            hertz = map((float)rateHz, 100.0f, 255.0f, 1.0f, 50.0f);
+            hertz = mapFloat((float)rateHz, 100.0f, 255.0f, 1.0f, 50.0f);
         }
 
         return hertz;
@@ -1070,13 +1070,13 @@ namespace midifx
                 
                 if (useRateHz()) // Use hertz
                 {
-                    float hzRate = fadeRate_ ? map((float)activeNoteQueue[i].repeatCounter, 0.0f, (float)numOfRepeats_, rateEndInHz_, rateStartInHz_) : rateInHz_;
+                    float hzRate = fadeRate_ ? mapFloat((float)activeNoteQueue[i].repeatCounter, 0.0f, (float)numOfRepeats_, rateEndInHz_, rateStartInHz_) : rateInHz_;
 
                     activeNoteQueue[i].nextTriggerDelta = (1.0f / hzRate) * secs2micros;
                 }
                 else // Synced
                 {
-                    float mult = fadeRate_ ? map((float)activeNoteQueue[i].repeatCounter, 0.0f, (float)numOfRepeats_, rateEndMult_, rateStartMult_) : multiplier_;
+                    float mult = fadeRate_ ? mapFloat((float)activeNoteQueue[i].repeatCounter, 0.0f, (float)numOfRepeats_, rateEndMult_, rateStartMult_) : multiplier_;
 
                     activeNoteQueue[i].nextTriggerDelta = clockConfig.step_micros * 16 * mult; // 1/8th note, 120 bpm, 124992 * 16 * 0.125 = 249984 / 124992 = 2 steps, 16 / 2 = 8
                 }
