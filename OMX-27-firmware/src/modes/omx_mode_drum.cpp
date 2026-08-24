@@ -277,7 +277,22 @@ void OmxModeDrum::onEncoderChanged(Encoder::Update enc)
         
 		if (selParam == 1) // NoteNum
 		{
-            drumKey.noteNum = constrain(drumKey.noteNum + amt, 0, 127);
+			uint8_t prevNoteNum = drumKey.noteNum;
+			uint8_t newNoteNum = constrain(drumKey.noteNum + amt, 0, 127);
+
+			drumKey.noteNum = newNoteNum;
+            
+			// Trigger the new note while turning encoder if the key is being held
+			if(isDrumKeyHeld() && newNoteNum != prevNoteNum)
+			{
+				// Serial.println("NoteNum Changed. Prev: " + String(prevNoteNum) + " New: " + String(newNoteNum));
+
+				drumKeyUp(selDrumKey + 1);
+				// Apply changes
+        		activeDrumKit.drumKeys[selDrumKey] = drumKey;
+				// drumKey.noteNum = newNoteNum;
+				drumKeyDown(selDrumKey + 1);
+			}
 		}
 		else if (selParam == 2) // Chan
 		{
@@ -609,6 +624,21 @@ void OmxModeDrum::onKeyUpdate(OMXKeypadEvent e)
 					potSettings.potbank = b;
 					potBankAuxTriggerFlash((uint8_t)b);
 					MM::sendControlChange(90, potSettings.potbank, sysSettings.midiChannel);
+					omxDisp.displayMessage("Pot Bank " + String(b + 1));
+				}
+				else if (thisKey == 16 || thisKey == 17)
+				{
+					// Copy / paste the selected drum key (key 15 left as a gap after the pot-bank pair)
+					if (thisKey == 16)
+					{
+						tempDrumKey.CopyFrom(activeDrumKit.drumKeys[selDrumKey]);
+						omxDisp.displayMessage("Copied " + String(selDrumKey + 1));
+					}
+					else // thisKey == 17
+					{
+						activeDrumKit.drumKeys[selDrumKey].CopyFrom(tempDrumKey);
+						omxDisp.displayMessage("Pasted " + String(selDrumKey + 1));
+					}
 				}
 			}
 
@@ -880,6 +910,9 @@ void OmxModeDrum::updateLEDs()
 
 		strip.setPixelColor(3, BLUE); // Load
 		strip.setPixelColor(4, ORANGE); // Save
+
+		strip.setPixelColor(16, ORANGE); // Copy drum key (AUX + 16)
+		strip.setPixelColor(17, RED);    // Paste drum key (AUX + 17)
 
 		omxLeds.drawOctaveKeys(11, 12, midiSettings.octave);
 
@@ -1263,6 +1296,8 @@ void OmxModeDrum::drumKeyDown(uint8_t keyIndex)
 	if (noteGroup.noteNumber == 255)
 		return;
 
+	// Serial.println("drumKeyDown: " + String(noteGroup.noteNumber));
+
     selDrumKey = keyIndex - 1;
 
 	noteGroup.unknownLength = true;
@@ -1284,6 +1319,8 @@ void OmxModeDrum::drumKeyUp(uint8_t keyIndex)
 
 	if (noteGroup.noteNumber == 255)
 		return;
+
+	// Serial.println("drumKeyUp: " + String(noteGroup.noteNumber));
 
     auto drumKey = activeDrumKit.drumKeys[keyIndex - 1];
 

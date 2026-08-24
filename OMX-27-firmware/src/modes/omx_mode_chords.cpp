@@ -1132,6 +1132,7 @@ void OmxModeChords::onKeyUpdate(OMXKeypadEvent e)
 				potSettings.potbank = b;
 				potBankAuxTriggerFlash((uint8_t)b);
 				MM::sendControlChange(90, potSettings.potbank, sysSettings.midiChannel);
+				omxDisp.displayMessage("Pot Bank " + String(b + 1));
 			}
 			else if (!mfxQuickEdit_ && (thisKey == 1 || thisKey == 2)) // Change Param selection
 			{
