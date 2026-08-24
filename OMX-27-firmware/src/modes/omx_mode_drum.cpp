@@ -911,6 +911,9 @@ void OmxModeDrum::updateLEDs()
 		strip.setPixelColor(3, BLUE); // Load
 		strip.setPixelColor(4, ORANGE); // Save
 
+		strip.setPixelColor(16, ORANGE); // Copy drum key (AUX + 16)
+		strip.setPixelColor(17, RED);    // Paste drum key (AUX + 17)
+
 		omxLeds.drawOctaveKeys(11, 12, midiSettings.octave);
 
         uint8_t mfxIndex = activeDrumKit.drumKeys[selDrumKey].midifx;
