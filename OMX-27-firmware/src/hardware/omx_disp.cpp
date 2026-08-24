@@ -701,7 +701,7 @@ void OmxDisp::dispValues16(int8_t valueArray[], uint8_t valueCount, int8_t minVa
 		{
 			if (valueArray[i] >= middleValue)
 			{
-				float valuePerc = constrain(map((float)valueArray[i], (float)middleValue, (float)maxValue, 0.0f, 1.0f), 0.0f, 1.0f);
+				float valuePerc = constrain(mapFloat((float)valueArray[i], (float)middleValue, (float)maxValue, 0.0f, 1.0f), 0.0f, 1.0f);
 				uint8_t valueHeight = max(halfBoxHeight * valuePerc, 0);
 				display.fillRect(xPos, boxStartY + (halfBoxHeight + 1) - valueHeight, width, valueHeight + 1, fgColor);
 
@@ -712,7 +712,7 @@ void OmxDisp::dispValues16(int8_t valueArray[], uint8_t valueCount, int8_t minVa
 			}
 			else
 			{
-				float valuePerc = 1.0f - constrain(map((float)valueArray[i], (float)minValue, (float)middleValue, 0.0f, 1.0f), 0.0f, 1.0f);
+				float valuePerc = 1.0f - constrain(mapFloat((float)valueArray[i], (float)minValue, (float)middleValue, 0.0f, 1.0f), 0.0f, 1.0f);
 				uint8_t valueHeight = constrain((boxHeight - halfBoxHeight) * valuePerc, 0, halfBoxHeight - 3);
 				display.fillRect(xPos, boxStartY + halfBoxHeight + 1, width, valueHeight + 1, fgColor);
 				// display.fillRect(i + 3, boxStartY + halfBoxHeight + 1, boxWidth - 4, valueHeight - 2, bgColor);
@@ -720,7 +720,7 @@ void OmxDisp::dispValues16(int8_t valueArray[], uint8_t valueCount, int8_t minVa
 		}
 		else
 		{
-			float valuePerc = constrain(map((float)valueArray[i], (float)minValue, (float)maxValue, 0.0f, 1.0f), 0.0f, 1.0f);
+			float valuePerc = constrain(mapFloat((float)valueArray[i], (float)minValue, (float)maxValue, 0.0f, 1.0f), 0.0f, 1.0f);
 			uint8_t valueHeight = constrain(boxHeight * valuePerc, 0, boxHeight - 1);
 			display.fillRect(xPos, boxStartY + boxHeight - valueHeight, width, valueHeight + 1, fgColor);
 		}
