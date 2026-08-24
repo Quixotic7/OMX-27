@@ -1,5 +1,6 @@
 #include "omx_mode_midi_keyboard.h"
 #include "../config.h"
+#include "../globals.h"
 #include "../consts/colors.h"
 #include "../utils/omx_util.h"
 #include "../utils/cvNote_util.h"
@@ -8,7 +9,8 @@
 #include "../midi/midi.h"
 #include "../utils/music_scales.h"
 #include "../midi/noteoffs.h"
-// #include "sequencer.h"
+#include "../utils/pot_bank_aux.h"
+#include "sequencer.h"
 
 // const int kSelMidiFXOffColor = SALMON;
 // const int kMidiFXOffColor = RED;
@@ -23,6 +25,7 @@ enum MIKeyModePage {
     MIPAGE_POTSANDMACROS,
     MIPAGE_SCALES,
     MIPAGE_CFG,
+    MIPAGE_CLOCK_SOURCE,
 	MIPAGE_VERSION
 };
 
@@ -35,6 +38,7 @@ OmxModeMidiKeyboard::OmxModeMidiKeyboard()
 	params.addPage(4); // PotBank, Thru, Macro, Macro Channel
 	params.addPage(4); // Root, Scale, Lock Scale Notes, Group notes. 
 	params.addPage(4); // Pot CC CFG
+	params.addPage(4); // MIPAGE_CLOCK_SOURCE
 	params.addPage(4); // MIPAGE_VERSION
 
 	// subModeMidiFx.setNoteOutputFunc(&OmxModeMidiKeyboard::onNotePostFXForwarder, this);
@@ -284,6 +288,8 @@ void OmxModeMidiKeyboard::onEncoderChanged(Encoder::Update enc)
 		if (selParam == 1)
 		{
 			potSettings.potbank = constrain(potSettings.potbank + amt, 0, NUM_CC_BANKS - 1);
+			// send a CC to the editor here
+			MM::sendControlChange(90, potSettings.potbank, sysSettings.midiChannel);
 		}
 		if (selParam == 2)
 		{
@@ -325,7 +331,7 @@ void OmxModeMidiKeyboard::onEncoderChanged(Encoder::Update enc)
 					if (prevPat >= 0)
 					{
 						scaleConfig.lockedState = scaleConfig.lockScale;
-						scaleConfig.group16state = scaleConfig.group16;
+						scaleConfig.groupedState = scaleConfig.group16;
 					}
 					scaleConfig.lockScale = false;
 					scaleConfig.group16 = false;
@@ -336,7 +342,7 @@ void OmxModeMidiKeyboard::onEncoderChanged(Encoder::Update enc)
 					if (prevPat < 0)
 					{
 						scaleConfig.lockScale = scaleConfig.lockedState;
-						scaleConfig.group16 = scaleConfig.group16state;
+						scaleConfig.group16 = scaleConfig.groupedState;
 					}
 				}
 			}
@@ -365,6 +371,17 @@ void OmxModeMidiKeyboard::onEncoderChanged(Encoder::Update enc)
 		else if (selParam == 4)
 		{
 			cvNoteUtil.triggerMode = constrain(cvNoteUtil.triggerMode + amt, 0, 1);
+		}
+	}
+	else if (selPage == MIPAGE_CLOCK_SOURCE)
+	{
+		if (selParam == 1)
+		{
+			sequencer.clockSource = constrain(sequencer.clockSource + amt, 0, 1);
+		}
+		if (selParam == 2)
+		{
+			clockConfig.send_always = constrain(clockConfig.send_always + amt, 0, 1);
 		}
 	}
 
@@ -431,6 +448,10 @@ void OmxModeMidiKeyboard::onKeyUpdate(OMXKeypadEvent e)
 	if (thisKey == 0)
 	{
 		midiSettings.midiAUX = e.down();
+		if (!e.down())
+		{
+			potBankAuxClearFlash();
+		}
 	}
 	// REGULAR KEY PRESSES
 	else
@@ -450,6 +471,23 @@ void OmxModeMidiKeyboard::onKeyUpdate(OMXKeypadEvent e)
 					{
 						int amt = thisKey == 11 ? -1 : 1;
 						midiSettings.octave = constrain(midiSettings.octave + amt, -5, 4);
+					}
+					else if (thisKey == 13 || thisKey == 14) // Pot bank (wrapped)
+					{
+						const int n = NUM_CC_BANKS;
+						int b = potSettings.potbank;
+						if (thisKey == 13)
+						{
+							b = (b + n - 1) % n;
+						}
+						else
+						{
+							b = (b + 1) % n;
+						}
+						potSettings.potbank = b;
+						potBankAuxTriggerFlash((uint8_t)b);
+						MM::sendControlChange(90, potSettings.potbank, sysSettings.midiChannel);
+						omxDisp.displayMessage("Pot Bank " + String(b + 1));
 					}
 					else if (auxMacroManager_.isMFXQuickEditEnabled() == false && (thisKey == 1 || thisKey == 2)) // Change Param selection
 					{
@@ -555,6 +593,25 @@ void OmxModeMidiKeyboard::updateLEDs()
 	if (midiSettings.midiAUX)
 	{
         auxMacroManager_.UpdateAUXLEDS(mfxIndex_);
+
+		// Pot bank preview (prev/next colors) or the switch flash, on keys 13 & 14
+		{
+			uint32_t fc;
+			bool lit;
+			if (potBankAuxPollFlash(&fc, &lit))
+			{
+				strip.setPixelColor(13, lit ? fc : LEDOFF);
+				strip.setPixelColor(14, lit ? fc : LEDOFF);
+			}
+			else
+			{
+				uint32_t c13;
+				uint32_t c14;
+				potBankAuxPreviewColors((uint8_t)potSettings.potbank, &c13, &c14);
+				strip.setPixelColor(13, c13);
+				strip.setPixelColor(14, c14);
+			}
+		}
 	}
 	else
 	{
@@ -641,6 +698,13 @@ void OmxModeMidiKeyboard::onDisplayUpdate()
 				omxDisp.setLegend(1, "CLR", "STOR");
 				omxDisp.setLegend(2, "QUANT", "1/" + String(kArpRates[clockConfig.globalQuantizeStepIndex]));
 				omxDisp.setLegend(3, "CV M", cvNoteUtil.getTriggerModeDispName());
+			}
+			else if (params.getSelPage() == MIPAGE_CLOCK_SOURCE)
+			{
+				omxDisp.clearLegends();
+
+				omxDisp.setLegend(0, "CLKS", sequencer.clockSource ? "Ext" : "Int");
+				omxDisp.setLegend(1, "SEND", clockConfig.send_always ? "ON" : "OFF"); // Always send clock or not
 			}
 
 			omxDisp.dispGenericMode2(params.getNumPages(), params.getSelPage(), params.getSelParam(), encoderSelect && !midiSettings.midiAUX);
