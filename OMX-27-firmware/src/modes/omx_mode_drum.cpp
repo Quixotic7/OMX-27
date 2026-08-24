@@ -277,7 +277,22 @@ void OmxModeDrum::onEncoderChanged(Encoder::Update enc)
         
 		if (selParam == 1) // NoteNum
 		{
-            drumKey.noteNum = constrain(drumKey.noteNum + amt, 0, 127);
+			uint8_t prevNoteNum = drumKey.noteNum;
+			uint8_t newNoteNum = constrain(drumKey.noteNum + amt, 0, 127);
+
+			drumKey.noteNum = newNoteNum;
+            
+			// Trigger the new note while turning encoder if the key is being held
+			if(isDrumKeyHeld() && newNoteNum != prevNoteNum)
+			{
+				// Serial.println("NoteNum Changed. Prev: " + String(prevNoteNum) + " New: " + String(newNoteNum));
+
+				drumKeyUp(selDrumKey + 1);
+				// Apply changes
+        		activeDrumKit.drumKeys[selDrumKey] = drumKey;
+				// drumKey.noteNum = newNoteNum;
+				drumKeyDown(selDrumKey + 1);
+			}
 		}
 		else if (selParam == 2) // Chan
 		{
@@ -1263,6 +1278,8 @@ void OmxModeDrum::drumKeyDown(uint8_t keyIndex)
 	if (noteGroup.noteNumber == 255)
 		return;
 
+	// Serial.println("drumKeyDown: " + String(noteGroup.noteNumber));
+
     selDrumKey = keyIndex - 1;
 
 	noteGroup.unknownLength = true;
@@ -1284,6 +1301,8 @@ void OmxModeDrum::drumKeyUp(uint8_t keyIndex)
 
 	if (noteGroup.noteNumber == 255)
 		return;
+
+	// Serial.println("drumKeyUp: " + String(noteGroup.noteNumber));
 
     auto drumKey = activeDrumKit.drumKeys[keyIndex - 1];
 
