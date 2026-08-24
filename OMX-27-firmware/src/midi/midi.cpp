@@ -63,7 +63,31 @@ namespace MM
 			HWMIDI.setHandleControlChange(handleControlChange);
 			HWMIDI.setHandleSystemExclusive(OnSysExHW);
 		#else
-			HWMIDI.begin();
+			// Teensy (3.x/4.x): usbMIDI is auto-initialised by the core (no begin()/
+			// turnThruOff), but its input handlers still need registering - otherwise
+			// USB MIDI input is read but never dispatched, so norns' screen-mirror
+			// SysEx (NL_CMD_MIRROR_EN etc.) never reaches OnSysEx and mirroring never
+			// turns on. Register the same handlers the RP2040 path uses.
+			HWMIDI.begin(MIDI_CHANNEL_OMNI);
+			HWMIDI.turnThruOff();
+
+			usbMIDI.setHandleNoteOn(handleNoteOn);
+			usbMIDI.setHandleNoteOff(handleNoteOff);
+			usbMIDI.setHandleClock(handleClock);
+			usbMIDI.setHandleStart(handleStart);
+			usbMIDI.setHandleStop(handleStop);
+			usbMIDI.setHandleContinue(handleContinue);
+			usbMIDI.setHandleControlChange(handleControlChange);
+			usbMIDI.setHandleSystemExclusive(OnSysEx);
+
+			HWMIDI.setHandleNoteOn(handleNoteOn);
+			HWMIDI.setHandleNoteOff(handleNoteOff);
+			HWMIDI.setHandleClock(handleClock);
+			HWMIDI.setHandleStart(handleStart);
+			HWMIDI.setHandleStop(handleStop);
+			HWMIDI.setHandleContinue(handleContinue);
+			HWMIDI.setHandleControlChange(handleControlChange);
+			HWMIDI.setHandleSystemExclusive(OnSysExHW);
 		#endif
 	}
 	// #### Inbound MIDI callbacks
@@ -302,6 +326,7 @@ namespace MM
 		}
 #else
 		usbMIDI.sendSysEx(length, sysexData, hasBeginEnd);
+		usbMIDI.send_now(); // flush now so norns receives chunks promptly (the RP2040 path drains its own FIFO)
 #endif
 	}
 
