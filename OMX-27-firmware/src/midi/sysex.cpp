@@ -142,7 +142,7 @@ void SysEx::sendCurrentState()
 
 	sysexData[3] = 0x0F; // ConFig;
 
-	sysexData[4] = DEVICE_ID;	  // Device 01, ie, dev board
+	sysexData[4] = deviceID;	  // runtime device id (editable in CONFIG mode)
 	sysexData[5] = MAJOR_VERSION; // major version
 	sysexData[6] = MINOR_VERSION; // minor version
 	sysexData[7] = POINT_VERSION; // point version

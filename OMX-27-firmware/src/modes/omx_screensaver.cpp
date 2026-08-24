@@ -28,7 +28,7 @@ void OmxScreensaver::onPotChanged(int potIndex, int prevValue, int newValue, int
 
 void OmxScreensaver::updateScreenSaverState()
 {
-	if (screenSaverCounter > screensaverInterval)
+	if (screensaverEnabled && screenSaverCounter > (unsigned long)screensaverTimeoutSec * 1000UL)
 	{
 		if (!screenSaverActive)
         {
