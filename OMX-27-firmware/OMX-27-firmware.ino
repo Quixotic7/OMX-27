@@ -791,7 +791,17 @@ void loop()
 		{
 			// set mode
 			//			int modesize = NUM_OMX_MODES;
-			sysSettings.newmode = (OMXMode)constrain(sysSettings.newmode + amt, 0, NUM_OMX_MODES - 1);
+			int newMode = constrain((int)sysSettings.newmode + amt, 0, NUM_OMX_MODES - 1);
+#ifndef OMXMODESEQ
+			// The S1/S2 sequencers are compiled out (kept behind OMXMODESEQ), so skip
+			// their slots in the mode rotation instead of landing on a dead no-op.
+			int skipDir = (amt < 0) ? -1 : 1;
+			while ((newMode == MODE_S1 || newMode == MODE_S2) && newMode > 0 && newMode < (NUM_OMX_MODES - 1))
+			{
+				newMode += skipDir;
+			}
+#endif
+			sysSettings.newmode = (OMXMode)newMode;
 			// omxDisp.dispMode();
 			// omxDisp.bumpDisplayTimer();
 			omxDisp.setDirty();
