@@ -23,9 +23,9 @@
 #include "src/midi/midi.h"
 #include "src/consts/colors.h"
 #include "src/ClearUI/ClearUI.h"
-#ifdef OMXMODESEQ
+// sequencer.h declares the `sequencer` object (clockSource + timing config) which
+// is used globally even when the old S1/S2 sequencer MODE is compiled out.
 #include "src/modes/sequencer.h"
-#endif
 #include "src/midi/noteoffs.h"
 #include "src/hardware/storage.h"
 #include "src/midi/sysex.h"
@@ -372,7 +372,20 @@ void saveHeader()
 
 	storage->write(EEPROM_HEADER_ADDRESS + 38, potSettings.potbank);
 
-	// 38 bytes
+	// CONFIG-mode global settings (offsets 40-50; the 40-63 range is a free gap
+	// between the header and EEPROM_PATTERN_ADDRESS at 64).
+	uint16_t bpm = (uint16_t)clockConfig.clockbpm;
+	storage->write(EEPROM_HEADER_ADDRESS + 40, (uint8_t)(bpm & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 41, (uint8_t)((bpm >> 8) & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 42, (uint8_t)sequencer.clockSource);
+	storage->write(EEPROM_HEADER_ADDRESS + 43, (uint8_t)clockConfig.send_always);
+	storage->write(EEPROM_HEADER_ADDRESS + 44, (uint8_t)midiSettings.midiSoftThru);
+	storage->write(EEPROM_HEADER_ADDRESS + 45, (uint8_t)midiSettings.midiInToCV);
+	storage->write(EEPROM_HEADER_ADDRESS + 46, deviceID);
+	storage->write(EEPROM_HEADER_ADDRESS + 47, ledBrightness);
+	storage->write(EEPROM_HEADER_ADDRESS + 48, (uint8_t)screensaverEnabled);
+	storage->write(EEPROM_HEADER_ADDRESS + 49, (uint8_t)(screensaverTimeoutSec & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 50, (uint8_t)((screensaverTimeoutSec >> 8) & 0xFF));
 }
 
 // returns true if the header contained initialized data
@@ -447,6 +460,21 @@ bool loadHeader(void)
 	cvNoteUtil.triggerMode = constrain(storage->read(EEPROM_HEADER_ADDRESS + 37), 0, 1);
 
 	potSettings.potbank = constrain(storage->read(EEPROM_HEADER_ADDRESS + 38), 0, NUM_CC_BANKS-1);
+
+	// CONFIG-mode global settings
+	uint16_t bpm = (uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 40) | ((uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 41) << 8);
+	clockConfig.clockbpm = constrain((int)bpm, 40, 300);
+	omxUtil.resetClocks(); // apply the loaded tempo
+	sequencer.clockSource = (bool)storage->read(EEPROM_HEADER_ADDRESS + 42);
+	clockConfig.send_always = (bool)storage->read(EEPROM_HEADER_ADDRESS + 43);
+	midiSettings.midiSoftThru = (bool)storage->read(EEPROM_HEADER_ADDRESS + 44);
+	midiSettings.midiInToCV = (bool)storage->read(EEPROM_HEADER_ADDRESS + 45);
+	deviceID = constrain((int)storage->read(EEPROM_HEADER_ADDRESS + 46), 0, 127);
+	ledBrightness = constrain((int)storage->read(EEPROM_HEADER_ADDRESS + 47), 5, 255);
+	strip.setBrightness(ledBrightness);
+	screensaverEnabled = (bool)storage->read(EEPROM_HEADER_ADDRESS + 48);
+	uint16_t ssTimeout = (uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 49) | ((uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 50) << 8);
+	screensaverTimeoutSec = constrain((int)ssTimeout, 5, 3600);
 
 	// digitalWrite(BLUELED, HIGH);
 	return true;

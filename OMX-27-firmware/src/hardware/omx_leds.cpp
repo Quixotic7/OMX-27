@@ -13,7 +13,7 @@ void OmxLeds::initSetup()
 {
 	strip.begin();						 // INITIALIZE NeoPixel strip object (REQUIRED)
 	strip.show();						 // Turn OFF all pixels ASAP
-	strip.setBrightness(LED_BRIGHTNESS); // Set BRIGHTNESS to about 1/5 (max = 255)
+	strip.setBrightness(ledBrightness); // runtime brightness (defaults to LED_BRIGHTNESS)
 	for (int i = 0; i < LED_COUNT; i++)
 	{ // For each pixel...
 		strip.setPixelColor(i, HALFWHITE);

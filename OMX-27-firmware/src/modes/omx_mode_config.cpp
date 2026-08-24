@@ -18,6 +18,7 @@ enum ConfigPage
 	CFGPAGE_MIDI,
 	CFGPAGE_SCALE,
 	CFGPAGE_CV,	   // In->CV, Trigger, -, Pots (launches pot config)
+	CFGPAGE_DISPLAY, // LED brightness, Screensaver, Timeout
 	CFGPAGE_SYSTEM, // Device ID, -, Save, Clear Storage
 	CFGPAGE_VERSION, // full-screen version label, like MIDI mode's last page
 	CFGPAGE_COUNT
@@ -29,6 +30,7 @@ OmxModeConfig::OmxModeConfig()
 	params.addPage(4); // MIDI   : Channel, Thru, Macro, Macro Ch
 	params.addPage(4); // SCALE  : Root, Scale, Lock, Group
 	params.addPage(4); // CV     : In->CV, Trigger, [gap], Pots
+	params.addPage(3); // DISPLAY: LED Bright, Screensaver, Timeout
 	params.addPage(4); // SYSTEM : Device ID, [gap], Save, Clear Storage
 	params.addPage(1); // VERSION: rendered as a label
 }
@@ -276,6 +278,18 @@ void OmxModeConfig::onEncoderChangedEditParam(Encoder::Update enc)
 		else if (param == 1)
 			cvNoteUtil.triggerMode = constrain(cvNoteUtil.triggerMode + amt, 0, 1);
 		break;
+	case CFGPAGE_DISPLAY:
+		if (param == 0) // LED brightness
+		{
+			ledBrightness = constrain(ledBrightness + amt, 5, 255);
+			strip.setBrightness(ledBrightness);
+			omxLeds.setDirty();
+		}
+		else if (param == 1) // Screensaver on/off
+			screensaverEnabled = constrain(screensaverEnabled + amt, 0, 1);
+		else if (param == 2) // Screensaver timeout (seconds)
+			screensaverTimeoutSec = constrain(screensaverTimeoutSec + amt * 5, 5, 3600);
+		break;
 	case CFGPAGE_SYSTEM:
 		if (param == 0) // Device ID
 			deviceID = constrain(deviceID + amt, 0, 127);
@@ -471,6 +485,11 @@ void OmxModeConfig::onDisplayUpdate()
 		omxDisp.setLegend(0, "InCV", midiSettings.midiInToCV ? "ON" : "OFF");
 		omxDisp.setLegend(1, "TRIG", cvNoteUtil.getTriggerModeDispName());
 		omxDisp.setLegend(3, "POTS", "Edit");
+		break;
+	case CFGPAGE_DISPLAY:
+		omxDisp.setLegend(0, "BRHT", (int)ledBrightness);
+		omxDisp.setLegend(1, "SAVR", screensaverEnabled ? "ON" : "OFF");
+		omxDisp.setLegend(2, "TIME", (int)screensaverTimeoutSec);
 		break;
 	case CFGPAGE_SYSTEM:
 		omxDisp.setLegend(0, "DEV", (int)deviceID);

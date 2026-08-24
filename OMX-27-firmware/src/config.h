@@ -43,6 +43,9 @@ extern const char* VERSION_STRING;
 
 const int DEVICE_ID = 2;
 extern uint8_t deviceID; // runtime, editable in CONFIG mode (defaults to DEVICE_ID)
+extern uint8_t ledBrightness;          // runtime LED brightness (defaults to LED_BRIGHTNESS)
+extern bool screensaverEnabled;        // CONFIG: screensaver on/off
+extern uint16_t screensaverTimeoutSec; // CONFIG: seconds of inactivity before screensaver
 
 // DAC
 extern Adafruit_MCP4725 dac;
