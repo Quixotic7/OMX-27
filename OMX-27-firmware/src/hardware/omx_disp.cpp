@@ -15,8 +15,6 @@ OmxDisp::OmxDisp()
 {
 }
 
-
-
 void OmxDisp::setup()
 {
 	initializeDisplay();
@@ -25,6 +23,9 @@ void OmxDisp::setup()
 
 void OmxDisp::clearDisplay()
 {
+	if(dispLockedTimer > 0)
+		return;
+
 	// Clear display
 	display.display();
 	setDirty();
@@ -41,7 +42,7 @@ void OmxDisp::drawStartupScreen()
 	drawLoading();
 	// Display version
     display.clearDisplay();
-    displayMessageTimed("v" + String(MAJOR_VERSION) + "." + String(MINOR_VERSION) + "." + String(POINT_VERSION), 1);
+    displayMessageTimed(String(MAJOR_VERSION) + "." + String(MINOR_VERSION) + "." + String(POINT_VERSION), 1);
     display.display();
 }
 
@@ -119,6 +120,11 @@ void OmxDisp::chordBalanceMsg(int8_t balArray[], float velArray[], uint8_t secs)
 
 void OmxDisp::renderMessage()
 {
+	if(isDispLocked())
+	{
+		return;
+	}
+
 	if (specialMsgType_ == 0)
 	{
 		display.fillRect(0, 0, 128, 32, BLACK);
@@ -135,9 +141,14 @@ void OmxDisp::renderMessage()
 	}
 }
 
+bool OmxDisp::isDispLocked()
+{
+	return dispLockedTimer > 0;
+}
+
 bool OmxDisp::isMessageActive()
 {
-	return messageTextTimer > 0;
+	return messageTextTimer > 0 || isDispLocked();
 }
 
 void OmxDisp::u8g2centerText(const char *s, int16_t x, int16_t y, uint16_t w, uint16_t h)
@@ -732,35 +743,8 @@ void OmxDisp::dispValues16(int8_t valueArray[], uint8_t valueCount, int8_t minVa
 	// }
 }
 
-void OmxDisp::dispParamBar(int8_t potValue, int8_t targetValue, int8_t minValue, int8_t maxValue, bool pickedUp, bool centered, const char* bankName, const char* paramName)
+void OmxDisp::drawPotPickupBar(int8_t potValue, int8_t targetValue, int8_t minValue, int8_t maxValue, bool pickedUp, bool centered)
 {
-	if (isMessageActive())
-	{
-		renderMessage();
-		return;
-	}
-
-	display.fillRect(0, 0, 128, 32, BLACK);
-
-	// if (showLabels)
-	// {
-	// 	int8_t selIndex = constrain(selected - 16, -1, 127);
-	// 	dispLabelParams(selIndex, encSelActive, labels, labelCount, false);
-	// }
-
-	u8g2_display.setFontMode(1);
-	// u8g2_display.setFont(FONT_LABELS);
-	u8g2_display.setCursor(0, 0);
-
-	u8g2_display.setFont(FONT_LABELS);
-	u8g2leftText(bankName, 2, hline - 3, 128 - 4, 10);
-	u8g2_display.setFont(FONT_TENFAT);
-	u8g2leftText(paramName, 2, 18, 92 - 4, 12);
-
-	u8g2_display.setFont(FONT_BIG);
-	tempString = String(targetValue);
-	u8g2centerText(tempString.c_str(), 92, 18, 128 - 96 - 4, 22);
-
 	float potPerc = map(potValue, minValue, maxValue, 0, 1000) / 1000.0f;
 	float targetPerc = map(targetValue, minValue, maxValue, 0, 1000) / 1000.0f;
 
@@ -795,6 +779,98 @@ void OmxDisp::dispParamBar(int8_t potValue, int8_t targetValue, int8_t minValue,
 		display.fillRect(boxStartX + potWidth - 2, boxStartY - 3, 3, 1, BLACK);
 		display.fillRect(boxStartX + potWidth - 1, boxStartY - 2, 1, 1, BLACK);
 	}
+}
+
+void OmxDisp::dispPickupBarLabelTimed(const char* label, int8_t potValue, int8_t targetValue, int8_t minValue, int8_t maxValue, bool pickedUp, bool centered)
+{
+	bool initLock = dispLockedTimer > 0;
+	dispLockedTimer = MESSAGE_TIMEOUT_US;
+
+	if (!initLock && dirtyDisplayTimer <= displayRefreshRate)
+	{
+		return;
+	}
+
+
+	display.fillRect(0, 0, 128, 32, BLACK);
+	
+	// u8g2_display.setFontMode(1);
+	// u8g2_display.setCursor(0, 0);
+
+	// u8g2_display.setFont(FONT_LABELS);
+	// u8g2leftText(bankName, 2, hline - 3, 128 - 4, 10);
+	// u8g2_display.setFont(FONT_TENFAT);
+	// u8g2leftText(paramName, 2, 18, 92 - 4, 12);
+
+	// u8g2_display.setFont(FONT_BIG);
+	// tempString = String(dispValue);
+	// u8g2centerText(tempString.c_str(), 92, 18, 128 - 96 - 4, 22);
+
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_TENFAT);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	u8g2centerText(label, 2, 18, 128 - 4, 12);
+
+	drawPotPickupBar(potValue, targetValue, minValue, maxValue, pickedUp, centered);
+
+	forceShowDisplay();
+}
+
+void OmxDisp::dispPickupBarValueTimed(int8_t dispValue, int8_t potValue, int8_t targetValue, int8_t minValue, int8_t maxValue, bool pickedUp, bool centered, const char* bankName, const char* paramName)
+{
+	bool initLock = dispLockedTimer > 0;
+	dispLockedTimer = MESSAGE_TIMEOUT_US;
+
+	if (!initLock && dirtyDisplayTimer <= displayRefreshRate)
+	{
+		return;
+	}
+
+	display.fillRect(0, 0, 128, 32, BLACK);
+	
+	u8g2_display.setFontMode(1);
+	u8g2_display.setCursor(0, 0);
+
+	u8g2_display.setFont(FONT_LABELS);
+	u8g2leftText(bankName, 2, hline - 3, 128 - 4, 10);
+	u8g2_display.setFont(FONT_TENFAT);
+	u8g2leftText(paramName, 2, 18, 92 - 4, 12);
+
+	u8g2_display.setFont(FONT_BIG);
+	tempString = String(dispValue);
+	u8g2centerText(tempString.c_str(), 92, 18, 128 - 96 - 4, 22);
+
+	drawPotPickupBar(potValue, targetValue, minValue, maxValue, pickedUp, centered);
+
+	setDirty();
+	showDisplay();
+}
+
+void OmxDisp::dispParamBar(int8_t potValue, int8_t targetValue, int8_t minValue, int8_t maxValue, bool pickedUp, bool centered, const char* bankName, const char* paramName)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	u8g2_display.setFontMode(1);
+	// u8g2_display.setFont(FONT_LABELS);
+	u8g2_display.setCursor(0, 0);
+
+	u8g2_display.setFont(FONT_LABELS);
+	u8g2leftText(bankName, 2, hline - 3, 128 - 4, 10);
+	u8g2_display.setFont(FONT_TENFAT);
+	u8g2leftText(paramName, 2, 18, 92 - 4, 12);
+
+	u8g2_display.setFont(FONT_BIG);
+	tempString = String(targetValue);
+	u8g2centerText(tempString.c_str(), 92, 18, 128 - 96 - 4, 22);
+
+	drawPotPickupBar(potValue, targetValue, minValue, maxValue, pickedUp, centered);
 }
 
 void OmxDisp::dispSlots(const char *slotNames[], uint8_t slotCount, uint8_t selected, uint8_t animPos, bool encSelActive, bool showLabels, const char *labels[], uint8_t labelCount)
@@ -895,8 +971,12 @@ void OmxDisp::dispSlots(const char *slotNames[], uint8_t slotCount, uint8_t sele
 		display.drawLine(63, yPos + slotHeight, 63, 25, WHITE);
 	}
 }
-
 void OmxDisp::dispCenteredSlots(const char *slotNames[], uint8_t slotCount, uint8_t selected, bool encoderSelect, bool showLabels, bool centerLabels, const char *labels[], uint8_t labelCount)
+{
+	dispCenteredSlots(FONT_VALUES, slotNames, slotCount, selected, encoderSelect, showLabels, centerLabels, labels, labelCount);
+}
+
+void OmxDisp::dispCenteredSlots(const uint8_t *slotFont, const char *slotNames[], uint8_t slotCount, uint8_t selected, bool encoderSelect, bool showLabels, bool centerLabels, const char *labels[], uint8_t labelCount)
 {
 	if (isMessageActive())
 	{
@@ -910,7 +990,7 @@ void OmxDisp::dispCenteredSlots(const char *slotNames[], uint8_t slotCount, uint
 
 	for (uint8_t i = 0; i < slotCount; i++)
 	{
-		dispParamLabel(i * slotWidth, 10, slotWidth, 18, selected == i, 1, encoderSelect, true, slotNames[i], FONT_VALUES, 1, true);
+		dispParamLabel(i * slotWidth, 10, slotWidth, 18, selected == i, 1, encoderSelect, true, slotNames[i], slotFont, 1, true);
 	}
 
 	// dispParamLabel(32, 10, 32, 18, selected == 1, 1, encoderSelect, true, octaveName, FONT_VALUES, 1, true);
@@ -923,6 +1003,56 @@ void OmxDisp::dispCenteredSlots(const char *slotNames[], uint8_t slotCount, uint
 	}
 }
 
+void OmxDisp::dispSeqKeyboard(int8_t notesAsKeys[], bool showLabels, const char *labels[], uint8_t labelCount)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// Find and split up black and white notes
+	bool blackNotes[10];
+	bool whiteNotes[16];
+
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		if (i < 10)
+		{
+			blackNotes[i] = false;
+		}
+		whiteNotes[i] = false;
+	}
+
+	for (uint8_t i = 0; i < 6; i++)
+	{
+		int8_t key = notesAsKeys[i];
+
+		if(key >= 1 && key <= 26)
+		{
+			if(key >= 11)
+			{
+				whiteNotes[key - 11] = true;
+			}
+			else
+			{
+				blackNotes[key - 1] = true;
+			}
+		}
+	}
+
+	drawKeyboard(blackNotes, whiteNotes);
+
+	if (showLabels)
+	{
+		// int8_t selIndex = constrain(selected - 16, -1, 127);
+		dispLabelParams(-1, true, labels, labelCount, true);
+	}
+
+}
+
 void OmxDisp::dispKeyboard(int rootNote, int noteNumbers[], bool showLabels, const char *labels[], uint8_t labelCount)
 {
 	if (isMessageActive())
@@ -931,19 +1061,19 @@ void OmxDisp::dispKeyboard(int rootNote, int noteNumbers[], bool showLabels, con
 		return;
 	}
 
-	const uint8_t wkWidth = 7;
-	const uint8_t wkInc = 6;
+	// const uint8_t wkWidth = 7;
+	// const uint8_t wkInc = 6;
 
-	const uint8_t wkHeight = 22;
-	const uint8_t wkStartX = 16;
-	const uint8_t wkStartY = 10;
+	// const uint8_t wkHeight = 22;
+	// const uint8_t wkStartX = 16;
+	// const uint8_t wkStartY = 10;
 
-	const uint8_t bkWidth = 7;
-	const uint8_t bkInc = 6;
+	// const uint8_t bkWidth = 7;
+	// const uint8_t bkInc = 6;
 
-	const uint8_t bkHeight = 16;
-	const uint8_t bkStartX = 13;
-	const uint8_t bkStartY = 9;
+	// const uint8_t bkHeight = 16;
+	// const uint8_t bkStartX = 13;
+	// const uint8_t bkStartY = 9;
 
 	display.fillRect(0, 0, 128, 32, BLACK);
 
@@ -1026,6 +1156,106 @@ void OmxDisp::dispKeyboard(int rootNote, int noteNumbers[], bool showLabels, con
 		}
 	}
 
+	// // draw white keys
+	// for (uint8_t i = 0; i < 16; i++)
+	// {
+	// 	if (whiteNotes[i] == false)
+	// 	{
+	// 		// display.fillRect(startX + (wkWidth * i), wkStartY, wkWidth, wkHeight, WHITE);
+	// 		display.drawRect(wkStartX + (wkInc * i), wkStartY, wkWidth, wkHeight, WHITE);
+	// 	}
+	// }
+
+	// for (uint8_t i = 0; i < 16; i++)
+	// {
+	// 	if (whiteNotes[i])
+	// 	{
+	// 		display.drawRect(wkStartX + (wkInc * i), wkStartY, wkWidth, wkHeight, BLACK);
+	// 		display.fillRect(wkStartX + (wkInc * i) + 1, wkStartY, wkWidth - 2, wkHeight, WHITE);
+	// 	}
+	// }
+
+	// uint8_t bOffset = 0;
+
+	// // draw black keys
+	// // Two additional keys for sides
+	// for (uint8_t i = 0; i < 12; i++)
+	// {
+	// 	bool blackOn = false;
+
+	// 	if (i == 1 || i == 3 || i == 6 || i == 8 || i == 11)
+	// 	{
+	// 		bOffset += 6;
+	// 	}
+
+	// 	uint8_t xStart = bkStartX + bOffset + (bkInc * i);
+
+	// 	if (i > 0 && i < 11)
+	// 	{
+	// 		blackOn = blackNotes[i - 1];
+	// 	}
+	// 	else
+	// 	{
+	// 		display.fillRect(xStart, bkStartY, bkWidth, bkHeight, BLACK);
+	// 		display.drawRect(xStart + 1, bkStartY + 1, bkWidth - 2, bkHeight - 2, WHITE);
+	// 		display.fillRect(xStart + 2, bkStartY, bkWidth - 4, bkHeight - 1, BLACK);
+	// 		continue;
+	// 		;
+	// 	}
+
+	// 	if (blackOn)
+	// 	{
+	// 		display.fillRect(xStart, bkStartY, bkWidth, bkHeight, BLACK);
+	// 		display.fillRect(xStart + 1, bkStartY + 1, bkWidth - 2, bkHeight - 2, WHITE);
+	// 	}
+	// 	else
+	// 	{
+	// 		// display.fillRect(startX + (wkWidth * i), wkStartY, wkWidth, wkHeight, WHITE);
+	// 		display.fillRect(xStart, bkStartY, bkWidth, bkHeight, BLACK);
+	// 		display.drawRect(xStart + 1, bkStartY + 1, bkWidth - 2, bkHeight - 2, WHITE);
+	// 	}
+	// }
+
+	// display.fillRect(0, 10, 16, 32, BLACK);	  // trim left side
+	// display.fillRect(113, 10, 15, 32, BLACK); // trim right side
+	// display.drawLine(18, 10, 110, 10, WHITE); // Cap the top
+
+	// if (!whiteNotes[0])
+	// {
+	// 	display.drawLine(16, 24, 16, 31, WHITE); // Left wall
+	// }
+
+	// if (!whiteNotes[15])
+	// {
+	// 	display.drawLine(112, 24, 112, 31, WHITE); // Right wall
+	// }
+
+	drawKeyboard(blackNotes, whiteNotes);
+
+	if (showLabels)
+	{
+		// int8_t selIndex = constrain(selected - 16, -1, 127);
+		dispLabelParams(-1, true, labels, labelCount, true);
+	}
+}
+
+
+void OmxDisp::drawKeyboard(bool blackNotes[10], bool whiteNotes[16])
+{
+	const uint8_t wkWidth = 7;
+	const uint8_t wkInc = 6;
+
+	const uint8_t wkHeight = 22;
+	const uint8_t wkStartX = 16;
+	const uint8_t wkStartY = 10;
+
+	const uint8_t bkWidth = 7;
+	const uint8_t bkInc = 6;
+
+	const uint8_t bkHeight = 16;
+	const uint8_t bkStartX = 13;
+	const uint8_t bkStartY = 9;
+
 	// draw white keys
 	for (uint8_t i = 0; i < 16; i++)
 	{
@@ -1098,12 +1328,6 @@ void OmxDisp::dispKeyboard(int rootNote, int noteNumbers[], bool showLabels, con
 	if (!whiteNotes[15])
 	{
 		display.drawLine(112, 24, 112, 31, WHITE); // Right wall
-	}
-
-	if (showLabels)
-	{
-		// int8_t selIndex = constrain(selected - 16, -1, 127);
-		dispLabelParams(-1, true, labels, labelCount, true);
 	}
 }
 
@@ -1419,9 +1643,33 @@ void OmxDisp::UpdateMessageTextTimer()
 		if (messageTextTimer <= 0)
 		{
 			setDirty();
+			dirtyDisplayTimer = displayRefreshRate + 1;
 			messageTextTimer = 0;
 		}
 	}
+
+	if(dispLockedTimer > 0)
+	{
+		dispLockedTimer -= sysSettings.timeElasped;
+		if (dispLockedTimer <= 0)
+		{
+			setDirty();
+			dirtyDisplayTimer = displayRefreshRate + 1;
+			dispLockedTimer = 0;
+		}
+	}
+}
+
+void OmxDisp::forceShowDisplay()
+{
+	display.display();
+	dirtyDisplay = false;
+	dirtyDisplayTimer = 0;
+}
+
+bool OmxDisp::canShowDisplay()
+{
+	return dirtyDisplay && (dirtyDisplayTimer > displayRefreshRate);
 }
 
 void OmxDisp::showDisplay()
@@ -1433,7 +1681,8 @@ void OmxDisp::showDisplay()
 		// below, so the mirror tracks changes with low latency. streamFrame() has
 		// its own rate cap + delta, so this is cheap.
 		nornsLink.streamFrame();
-		if (dirtyDisplayTimer > displayRefreshRate)
+		// !isDispLocked() lets FORM/pot-pickup UI temporarily hold the OLED.
+		if (dirtyDisplayTimer > displayRefreshRate && !isDispLocked())
 		{
 			display.display();
 			dirtyDisplay = false;

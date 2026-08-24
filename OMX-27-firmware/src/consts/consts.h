@@ -50,6 +50,7 @@
 
 // Comment out defines to disable modes if needed for debug build
 #define OMXMODEGRIDS
+// #define OMXMODESEQ
 
 // HARDWARE Pin for CVGATE_PIN = 13 on beta1 boards, 22 on bodge/midi, 23 on 1.0
 #if DEV

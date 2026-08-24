@@ -276,6 +276,70 @@ void OmxUtil::allOff()
 	}
 }
 
+int8_t OmxUtil::getNoteNumber(uint8_t keyNum, MusicScales *scale)
+{
+	if(keyNum < 1 || keyNum >= 27) return -1;
+
+	int adjnote = notes[keyNum] + (midiSettings.octave * 12); // adjust key for octave range
+
+	if (scale != nullptr)
+	{
+		if (scaleConfig.group16)
+		{
+			adjnote = scale->getGroup16Note(keyNum, midiSettings.octave);
+		}
+		else
+		{
+			if (scaleConfig.lockScale && scale->isNoteInScale(adjnote) == false)
+			{
+				adjnote = -1;
+			}
+		}
+	}
+
+    return adjnote;
+}
+
+int8_t OmxUtil::noteNumberToKeyNumber(int8_t noteNumber)
+{
+	if(noteNumber < 0 || noteNumber > 127) return -1;
+
+	// int octave = (noteNumber / 12) - 5;
+
+	// int startNote = notes[11] + (octave * 12);
+	// int adjNote = noteNumber - octave;
+
+	int viewStartNote = notes[11] + (midiSettings.octave * 12); // 59 + -60 = -1 or 59
+	int viewEndNote = notes[26] + (midiSettings.octave * 12);
+
+	int lookupIndex = 0; // 60 - 59 = 1
+
+	if(noteNumber >= viewStartNote && noteNumber <= viewEndNote)
+	{
+		lookupIndex = noteNumber - viewStartNote;
+	}
+	else
+	{
+		// int startNote = (notes[11] - 12) + ((octave) * 12);
+		// lookupIndex = noteNumber - startNote; 
+
+		lookupIndex = noteNumber % 12 + 1;
+
+		if((midiSettings.octave + 5) % 2 == 0)
+		{
+			lookupIndex += 12;
+		}
+	}
+
+	// int baseNote = noteNumber % 12;
+	// int octave = noteNumber / 12;
+
+	// int lookupIndex = 
+	// // 0,1  2,3,  4,5
+	// uint8_t lookupIndex = noteNumber % 26;
+	return midiKeyMap[lookupIndex];
+}
+
 void OmxUtil::midiNoteOff(int notenum, int channel)
 {
 	// we use the key state captured at the time we pressed the key to send the correct note off message

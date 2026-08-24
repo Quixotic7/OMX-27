@@ -34,6 +34,7 @@ static inline float mapFloat(float x, float inMin, float inMax, float outMin, fl
 const int MAJOR_VERSION = 1;
 const int MINOR_VERSION = 15;
 const int POINT_VERSION = 0;
+extern const char* VERSION_STRING;
 
 // 1.13.2 - Adds CV Trigger modes for legato and regtrig
 // 1.13.3 - Bugfix for CV Trigger modes
@@ -50,6 +51,7 @@ enum OMXMode
 	MODE_MIDI = 0,
 	MODE_DRUM,
 	MODE_CHORDS,
+	MODE_FORM,
 	MODE_S1,
 	MODE_S2,
 	MODE_GRIDS,
@@ -76,6 +78,9 @@ enum MIDIFXTYPE
 };
 
 extern const OMXMode DEFAULT_MODE;
+
+#define NUM_MIDIFX_GROUPS 5
+#define NUM_MIDIFX_SLOTS 8
 
 enum FUNCKEYMODE
 {
@@ -383,6 +388,32 @@ struct MidiNoteGroup
 	uint32_t noteonMicros = 0;
 	bool unknownLength = false;
 	bool noteOff = false; // Set true if note off, corresponding note on should have stepLength of 0
+
+	// Keeping commented out to save on storage
+	// void Print()
+	// {
+	// 	Serial.print("channel: ");
+	// 	Serial.print(channel);
+	// 	Serial.print(" noteNumber: ");
+	// 	Serial.print(noteNumber);
+	// 	Serial.print(" prevNoteNumber: ");
+	// 	Serial.print(prevNoteNumber);
+	// 	Serial.print(" velocity: ");
+	// 	Serial.print(velocity);
+	// 	Serial.print(" stepLength: ");
+	// 	Serial.print(stepLength);
+	// 	Serial.print(" sendMidi: ");
+	// 	Serial.print(sendMidi);
+	// 	Serial.print(" sendCV: ");
+	// 	Serial.print(sendCV);
+	// 	Serial.print(" noteonMicros: ");
+	// 	Serial.print(noteonMicros);
+	// 	Serial.print(" unknownLength: ");
+	// 	Serial.print(unknownLength);
+	// 	Serial.print(" noteOff: ");
+	// 	Serial.print(noteOff);
+	// 	Serial.print("\n");
+	// }
 };
 
 #define NUM_DISP_PARAMS 5
@@ -403,6 +434,8 @@ extern const char *mfxPassthroughEditMsg;
 extern const char *exitMsg;
 extern const char *paramOffMsg;
 extern const char *paramOnMsg;
+extern const char *bool2lightswitchMsg[];
+extern const char *bool2Msg[];
 
 extern const char *modes[];
 extern const char *macromodes[];
