@@ -214,7 +214,7 @@ namespace FormOmni
             mute = other->mute;
             for (uint8_t i = 0; i < 6; i++)
                 notes[i] = other->notes[i];
-            for (uint8_t i = 0; i < 4; i++)
+            for (uint8_t i = 0; i < 5; i++)
                 potVals[i] = other->potVals[i];
             vel = other->vel;
             nudge = other->nudge;

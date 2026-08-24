@@ -5,7 +5,7 @@ const OMXMode DEFAULT_MODE = MODE_MIDI;
 // v39 - merge of FormSequencer (FORM mode + shared improvements) into the q7-2026 line.
 // Both branches independently used v38 for divergent layouts; bumped to 39 so existing
 // saves re-initialize cleanly instead of being misread against the merged layout.
-const uint8_t EEPROM_VERSION = 40;
+const uint8_t EEPROM_VERSION = 41;
 
 const char* VERSION_STRING = "ALPHA";
 

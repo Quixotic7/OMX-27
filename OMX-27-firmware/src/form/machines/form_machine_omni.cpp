@@ -4,6 +4,7 @@
 #include "../../consts/colors.h"
 #include "../../consts/consts.h"
 #include "../../utils/omx_util.h"
+#include "../../midi/midi.h" // MM::sendControlChange for per-step CC locks
 #include "../../hardware/omx_disp.h"
 #include "../../hardware/omx_leds.h"
 #include "omni_note_editor.h"
@@ -667,7 +668,7 @@ namespace FormOmni
         case TRACKMODE_RAND:
         {
             auto track = getTrack();
-            int8_t jumpstep = random(0, track->len);
+            int8_t jumpstep = random(0, track->getLength());
             return jumpstep;
         }
         break;
@@ -685,7 +686,7 @@ namespace FormOmni
 
             while (jumpstep == currentStepIndex)
             {
-                jumpstep = random(0, track->len);
+                jumpstep = random(0, track->getLength());
             }
 
             return jumpstep;
@@ -741,7 +742,7 @@ namespace FormOmni
 
         while (tempShuffleVec.size() > 0)
         {
-            uint8_t randIndex = random(0, tempShuffleVec.size() - 1);
+            uint8_t randIndex = random(0, tempShuffleVec.size()); // exclusive max: cover the last index
             shuffleVec.push_back(tempShuffleVec[randIndex]);
             tempShuffleVec.erase(tempShuffleVec.begin() + randIndex);
         }
@@ -808,7 +809,7 @@ namespace FormOmni
         case STEPFUNC_RANDJUMP:
         {
             auto track = getTrack();
-            int8_t jumpstep = random(0, track->len);
+            int8_t jumpstep = random(0, track->getLength());
             return jumpstep;
         }
         // Randomly does a function or NONE
@@ -876,8 +877,33 @@ namespace FormOmni
 
         if (seq_.mute == 0)
         {
+            // Per-step CC locks: send this step's pot values on the machine's pot-bank CCs.
+            // TODO: "CC Fade" (potMode 1) should interpolate over the step; for now both
+            // modes send the value once on trigger like "CC Step".
+            if (seq_.sendMidi)
+            {
+                for (uint8_t p = 0; p < NUM_CC_POTS; p++)
+                {
+                    int8_t v = step->potVals[p];
+                    if (v >= 0)
+                        MM::sendControlChange(pots[seq_.potBank][p], v, seq_.channel + 1);
+                }
+            }
+
+            // Monophonic: play only the last set note of the step.
+            int8_t monoNoteIdx = -1;
+            if (seq_.monoPhonic)
+            {
+                for (int8_t i = 0; i < 6; i++)
+                    if (step->notes[i] >= 0 && step->notes[i] <= 127)
+                        monoNoteIdx = i;
+            }
+
             for (int8_t i = 0; i < 6; i++)
             {
+                if (seq_.monoPhonic && i != monoNoteIdx)
+                    continue;
+
                 int8_t noteNumber = step->notes[i];
 
                 if (noteNumber >= 0 && noteNumber <= 127)
@@ -2068,7 +2094,8 @@ namespace FormOmni
             }
             else if (param == 1)
             {
-                selStep->condition = constrain(selStep->condition + amtSlow, 0, 35);
+                // 0-8 are the special conditions; 9-43 map to the 35 A:B ratio rows (abIndex = condition-9)
+                selStep->condition = constrain(selStep->condition + amtSlow, 0, 9 + 35 - 1);
             }
             else if (param == 2)
             {
@@ -2538,11 +2565,19 @@ namespace FormOmni
     // AUX + Top 4 = Increment play direction mode
     void FormMachineOmni::onAUXFunc(uint8_t funcKey) {}
 
+    // Bump whenever the OmniSeq layout changes so old saves are skipped rather than
+    // blitted into a mismatched struct. (The global EEPROM_VERSION also gates loads,
+    // but this makes an OmniSeq change safe on its own.)
+    static const uint8_t kOmniSaveVersion = 1;
+
     int FormMachineOmni::saveToDisk(int startingAddress, Storage *storage)
 	{
         int saveSize = sizeof(OmniSeq);
 
-        Serial.println("Omni Save Size = " + String(saveSize));
+        // Serial.println("Omni Save Size = " + String(saveSize));
+
+        storage->write(startingAddress, kOmniSaveVersion);
+        startingAddress += 1;
 
         auto saveBytesPtr = (byte *)(&seq_);
         for (int j = 0; j < saveSize; j++)
@@ -2559,17 +2594,25 @@ namespace FormOmni
 	{
 		int saveSize = sizeof(OmniSeq);
 
-        auto current = (byte *)&seq_;
-        for (int j = 0; j < saveSize; j++)
+        uint8_t ver = storage->read(startingAddress);
+        startingAddress += 1;
+
+        // Only blit if the on-disk layout matches; otherwise leave seq_ at defaults
+        // but still advance the address so later machines/patterns stay aligned.
+        if (ver == kOmniSaveVersion)
         {
-            *current = storage->read(startingAddress + j);
-            current++;
+            auto current = (byte *)&seq_;
+            for (int j = 0; j < saveSize; j++)
+            {
+                *current = storage->read(startingAddress + j);
+                current++;
+            }
         }
+        startingAddress += saveSize;
 
         resetPlayback(true);
         onEnabled();
 
-        startingAddress += saveSize;
         return startingAddress;
 	}
 }
