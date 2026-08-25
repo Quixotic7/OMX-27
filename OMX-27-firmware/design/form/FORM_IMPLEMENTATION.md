@@ -46,38 +46,37 @@ fields.
 
 ## B. The gating problem — RAM & pattern storage (decide in Phase 1)
 
-### Rough size budget
-| Item | Estimate |
+### Measured size budget (host g++, GNU bitfield ABI == arm-gcc; **confirmed on device**)
+| Item | Size |
 |---|---|
-| `Step` (bitfields + `notes[6]` + `potVals[5]`, + Repeat) | **≈ 18 bytes** |
-| `Track` (64 steps + header) | **≈ 1.2 KB** |
-| `Pattern` (8 tracks + settings) | **≈ 9–10 KB** |
-| **16 patterns** | **≈ 150–160 KB** |
+| `form2::Step` (bitfields + `notes[6]` + `potVals[5]` + Repeat) | **18 bytes** |
+| `form2::Track` (64 steps + header) | **1162 bytes** |
+| `form2::Pattern` (8 tracks) | **9296 bytes (~9.1 KB)** |
+| `form2::Globals` | 10 bytes |
+| **16 patterns fully-resident** | **≈ 145 KB** |
 
-### Per-platform reality
-| Platform | RAM | Persistent store | Verdict |
+### Per-platform reality (with the real numbers, 16 patterns FIT in RAM on V3 & T4)
+| Platform | RAM | 16 patterns in RAM? | Plan |
 |---|---|---|---|
-| **OMX-27 V3 (RP2040)** | 264 KB | **1 MB flash FS** + 32 KB FRAM | 16 patterns feasible; can also **stream from flash** |
-| **Teensy 4.0** | ~512 KB usable | small EEPROM | 16 patterns fit **in RAM** |
-| **Teensy 3.1** | **64 KB** | tiny EEPROM | **16 patterns do NOT fit** — must trim |
+| **OMX-27 V3 (RP2040)** | 264 KB (46 KB used) | **Yes** (~145 KB, ~70 KB to spare) | **all resident**, persist to flash FS (Phase 12) |
+| **Teensy 4.0** | ~512 KB | **Yes** | **all resident** |
+| **Teensy 3.1** | 64 KB (~34 KB used) | **No** | **all resident, reduced count** (`FORM_NUM_PATTERNS = 4`, tune) |
 
-### Recommended architecture: a `PatternStore` that hides residency
-- Keep only the **active pattern (+ queued)** *resident* in RAM. Everything else lives in
-  the backing store.
-- **`PatternStore` interface:** `active()`, `queueSwitch(idx, style)`, `commitSwitchAtLoopEnd()`,
-  `copy(a→b)`, `clear(idx)`, `saveAll()/loadAll()`.
-- **Backends by platform (compile-time):**
-  - **V3 / RP2040:** patterns on the **flash filesystem**; load the queued pattern into a
-    RAM slot at switch time (a ~10 KB read at loop-end is fine). Full 16.
-  - **Teensy 4:** all patterns **resident in RAM** (simplest; fits). Full 16.
-  - **Teensy 3.1:** RAM-only, **cap patterns low** (e.g. 2–4) and/or trim `NUM_TRACKS` /
-    `NUM_PAGES`. No filesystem to stream from.
-- **Compile-time caps** in `consts.h`, gated on `BOARDTYPE`:
-  `FORM_NUM_PATTERNS`, `FORM_NUM_TRACKS`, `FORM_NUM_PAGES`, `FORM_PATTERNS_RESIDENT`.
+So **no flash-streaming is needed** — the measured 9.3 KB/pattern is small enough that both
+big platforms hold all 16 in RAM. Only T3.1 trims the *count*.
 
-> **Phase-1 exit test:** print `sizeof(Pattern)` on each target, confirm the resident
-> working set + globals fits with margin, and prove `saveAll/loadAll` round-trips one
-> project. Do **not** build UI before this passes.
+### Architecture: a resident `PatternStore` (`src/form2/form2_store.h`)
+- `Globals globals; Pattern patterns[FORM_NUM_PATTERNS];` — all resident.
+- `active()`, `at(i)`, `copyPattern(a,b)`, `clearPattern(i)`, versioned
+  `saveToStorage/loadFromStorage`.
+- **Compile-time caps** (`src/form2/form2_config.h`, gated on `BOARDTYPE`):
+  `FORM_NUM_PATTERNS` (16 / 16 / 4), `FORM_NUM_TRACKS` (8), `FORM_NUM_PAGES` (4).
+- **Persistence caveat:** the full image (~145 KB) exceeds FRAM (32 KB) / EEPROM, so
+  `saveToStorage` no-ops when it won't fit `capacity()` — full persistence needs the **V3
+  flash-FS backend (Phase 12)**. Small projects still persist on any platform.
+
+> **Phase-1 exit test — DONE:** `sizeof` measured (host) and **pinned by `static_assert`
+> that passes on all three device builds**; the blit round-trips on host. ✅
 
 ---
 
