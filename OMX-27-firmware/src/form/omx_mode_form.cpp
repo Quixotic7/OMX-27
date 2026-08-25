@@ -1256,9 +1256,8 @@ void OmxModeForm::onDisplayUpdate()
 	if (formView_ == FORMVIEW_MIX && heldTrackKey_ >= 0 && omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE)
 	{
 		auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
-		static const char *kPlayModes[5] = {"FWD", "REV", "FWD PONG", "REV PONG", "RANDOM"};
 		uint8_t pm = mixPlayModeIndex(omni->trackPtr());
-		omxDisp.dispTrackHold(heldTrackKey_ + 1, omni->getMute(), omni->getSolo(), kPlayModes[pm]);
+		omxDisp.dispTrackHold(heldTrackKey_ + 1, omni->getMute(), omni->getSolo(), pm);
 		return;
 	}
 

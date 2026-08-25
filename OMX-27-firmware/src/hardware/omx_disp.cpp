@@ -532,7 +532,36 @@ static void drawKeyBoxRow(uint8_t count, const bool *fill, uint8_t y)
 	}
 }
 
-void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, const char *playMode)
+// Little play-direction icon centred at (cx, cy). 0 fwd, 1 rev, 2 fwd-pong, 3 rev-pong, 4 random.
+static void drawPlayIcon(uint8_t mode, int cx, int cy)
+{
+	const int h = 4; // half-height
+	switch (mode)
+	{
+	case 0: // forward: right triangle
+		display.fillTriangle(cx - 4, cy - h, cx - 4, cy + h, cx + 4, cy, WHITE);
+		break;
+	case 1: // reverse: left triangle
+		display.fillTriangle(cx + 4, cy - h, cx + 4, cy + h, cx - 4, cy, WHITE);
+		break;
+	case 2: // fwd-pong: two triangles meeting inward  >|<
+		display.fillTriangle(cx - 8, cy - h, cx - 8, cy + h, cx - 2, cy, WHITE);
+		display.fillTriangle(cx + 8, cy - h, cx + 8, cy + h, cx + 2, cy, WHITE);
+		break;
+	case 3: // rev-pong: two triangles pointing outward  <|>
+		display.fillTriangle(cx - 2, cy - h, cx - 2, cy + h, cx - 8, cy, WHITE);
+		display.fillTriangle(cx + 2, cy - h, cx + 2, cy + h, cx + 8, cy, WHITE);
+		break;
+	case 4: // random: scattered dots
+		display.fillRect(cx - 7, cy - 3, 2, 2, WHITE);
+		display.fillRect(cx - 2, cy + 2, 2, 2, WHITE);
+		display.fillRect(cx + 3, cy - 4, 2, 2, WHITE);
+		display.fillRect(cx + 5, cy + 1, 2, 2, WHITE);
+		break;
+	}
+}
+
+void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t playModeIndex)
 {
 	display.fillRect(0, 0, 128, 32, BLACK);
 	u8g2_display.setFontMode(1);
@@ -545,29 +574,32 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, const cha
 	snprintf(buf, sizeof(buf), "TRACK %u", (unsigned)trackNum);
 	u8g2centerText(buf, 0, 11, 128, 8);
 
-	// State cells: MUTE / SOLO (filled when active) + play-mode label.
+	// M / S cells (filled/inverted when active).
 	u8g2_display.setFont(FONT_LABELS);
-	const struct { const char *s; int x, w; bool active; } cells[3] = {
-		{"MUTE", 3, 32, muted},
-		{"SOLO", 39, 32, soloed},
-		{playMode, 75, 50, false},
+	const int cellY = 19, cellH = 12, cellW = 14;
+	const struct { const char *s; int x; bool active; } ms[2] = {
+		{"M", 24, muted},
+		{"S", 44, soloed},
 	};
-	for (uint8_t i = 0; i < 3; i++)
+	for (uint8_t i = 0; i < 2; i++)
 	{
-		if (cells[i].active)
+		if (ms[i].active)
 		{
-			display.fillRect(cells[i].x, 19, cells[i].w, 12, WHITE);
+			display.fillRect(ms[i].x, cellY, cellW, cellH, WHITE);
 			u8g2_display.setForegroundColor(BLACK);
 			u8g2_display.setBackgroundColor(WHITE);
 		}
 		else
 		{
-			display.drawRect(cells[i].x, 19, cells[i].w, 12, WHITE);
+			display.drawRect(ms[i].x, cellY, cellW, cellH, WHITE);
 			u8g2_display.setForegroundColor(WHITE);
 			u8g2_display.setBackgroundColor(BLACK);
 		}
-		u8g2centerText(cells[i].s, cells[i].x, 28, cells[i].w, 8);
+		u8g2centerText(ms[i].s, ms[i].x, 28, cellW, 8);
 	}
+
+	// Play-direction icon (right side).
+	drawPlayIcon(playModeIndex, 95, 25);
 }
 
 void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool *topFill, uint8_t topCount,

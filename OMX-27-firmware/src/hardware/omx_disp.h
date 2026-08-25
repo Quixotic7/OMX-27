@@ -47,9 +47,9 @@ public:
 	// (single-row layout).
 	void dispKeyFunctionSplit(const char *topLabel, const bool *topFill, uint8_t topCount,
 							  const char *bottomLabel, const bool *bottomFill, uint8_t bottomCount);
-	// Held-track status (Mix): "TRACK n" with MUTE / SOLO cells (filled when active) and
-	// the play-mode label.
-	void dispTrackHold(uint8_t trackNum, bool muted, bool soloed, const char *playMode);
+	// Held-track status (Mix): "TRACK n" with M / S cells (filled when active) and a
+	// play-direction icon (playModeIndex 0-4 = fwd/rev/fwd-pong/rev-pong/random).
+	void dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t playModeIndex);
 	void dispGenericModeLabelSmallText(const char *label, uint8_t numPages, int8_t selectedPage);
 
 	// Displays a header and options below
