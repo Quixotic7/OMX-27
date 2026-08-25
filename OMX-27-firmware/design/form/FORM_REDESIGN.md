@@ -33,16 +33,18 @@ the track menu); global 5-segment CC meter on the top OLED row._
 |---|---|---|
 | Track engine | 8 slots, switchable machine types (OMNI/EUCL/…) | **one engine per track** (the OMNI step sequencer); **no machine types / no picker** |
 | Knobs | Pot-mode matrix (K4 rate, K5 UI-mode, …) | **Pot bank** (5 knobs → 5 CCs), **per track**, like MI mode |
-| Modes | K5 selects CONFIG/MIX/LENGTH/TRANSPOSE/STEP/NOTEEDIT | **5 views**: **Mix · Step · Transpose · Notes · Patterns** |
-| View switch | AUX + 13–18 (and AUX sometimes behaves differently) | **AUX layer identical everywhere**, on **AUX + 13–17**; the **current view flashes** |
-| Zoom/pages | K1 page × K2 zoom (1/2/4 bar), 16-of-64 slice | **Always 16 steps**; **4 fixed pages/track**, on keys 3–6 in Step view |
+| Modes | K5 selects CONFIG/MIX/LENGTH/TRANSPOSE/STEP/NOTEEDIT | **6 views**: **Mix · Step · Transpose · Notes · Patterns · MI** |
+| View switch | AUX + 13–18 (and AUX sometimes behaves differently) | **AUX layer identical everywhere**, on **AUX + 13–18**; the **current view flashes** |
+| Zoom/pages | K1 page × K2 zoom (1/2/4 bar), 16-of-64 slice | **Always 16 steps**; **4 pages/track**, on the **AUX layer (keys 6–9)** |
 | Per-step edit | step-hold palette (funcs) | **8 step-edit modes** on keys 3–10 (Note / Velocity / Step Length / Repeat / Chance / Math / Function / MIDI FX); hold a step → 10-key value palette on keys 1–10; hold a mode key → set its default on keys 11–20 |
+| Copy / paste | buffer (steps only) | **F1 = Copy, F2 = Paste/Cut** — the same buffer logic in every view except Mix, at **step / track / pattern** scope; doubles as **undo** (§3.5) |
 | CC locks | UI-only, never sent | **P-Locks**: hold a step + turn a knob → lock a CC, resolved through the track's pot bank |
-| Step funcs | on the step-hold palette | back as the **Function** step-mode (no separate view) |
-| Playback range | (n/a) | **AUX page keys (6–9)**: click = select · double-click = solo/loop · hold+press = loop range (§6); page **length** via F3 (§5) |
-| Patterns | (n/a) | **16 patterns** (whole-sequencer snapshots) — the **Patterns view**; tap to switch, style-selectable (Finish Loop / Next Bar / Instant / Chained) (§4.5) |
+| Step funcs | on the step-hold palette | back as the **Function** step-mode — same functions as the current OMNI |
+| Playback range | (n/a) | **AUX page keys (6–9)**: click = select · double-click = solo one page · hold+press = loop range (§6); page **length** via F3 (§5) |
+| Patterns | (n/a) | **patterns** (whole-sequencer snapshots) — the **Patterns view**; tap to switch, style-selectable (Finish Loop / Next Bar / Instant / Chained). One project, count RAM-limited (§4.5) |
 | Live recording | (n/a) | **AUX + 3 = rec arm**; play the keyboard while running → notes quantize into the selected track (§7) |
 | Live play | (n/a) | **MI view** — the MI-mode keyboard, as a 6th view, for live playing (§4.6) |
+| Config | knob-mode matrix | **Track menu** (encoder): per-track settings up front, global (**BPM / clock / scale / root / swing / groove**) in back; first page a 2-octave mini-keyboard (§2.5) |
 
 ---
 
@@ -59,6 +61,26 @@ the track menu); global 5-segment CC meter on the top OLED row._
   segments**, one per knob, each drawing a horizontal line whose length = that knob's
   current CC value (0–127). The active bank's five live CC values are therefore always on
   screen — this is the persistent knob feedback (addresses "the knobs are invisible").
+- **Page indicator (all views):** a persistent row of **4 short lines** near the top of
+  the OLED — one per page — **1 px tall for a normal page, 2 px for the active page**. So
+  page state is always visible, not only while holding AUX (addresses "page state is
+  AUX-only").
+
+---
+
+## 2.5 The track menu — all config lives here
+
+The **encoder** opens/drives a **menu of param pages** (the same param model the current
+FORM uses). It is the config surface for everything that isn't a per-step edit:
+
+- **Front pages = the selected track's settings** shown up front (MIDI channel, output,
+  pot bank, rate, etc.). The **first page is a 2-octave mini-keyboard**.
+- **Back pages = global settings:** **BPM**, **clock** (internal / external), **scale**,
+  **root**, **swing**, **groove**.
+- Layout mirrors the current build of FORM (track params front, global in back).
+
+This replaces the old knob-mode matrix as the home for BPM/scale/etc., and is what "the
+track's parameter menu" (§2) refers to.
 
 ---
 
@@ -76,6 +98,28 @@ the track menu); global 5-segment CC meter on the top OLED row._
   their current CC #s).
 - Finally makes the long-dead `Step::potVals[5]` model do something
   (`DESIGN_NOTES.md §4b`).
+
+---
+
+## 3.5 Copy / paste / undo (one buffer model, everywhere)
+
+**F1 = Copy, F2 = Paste/Cut** — the same logic the current OMNI already runs, applied
+identically to **steps, tracks, and patterns** (and it's the only thing F1/F2 do outside
+Mix, §1). One buffer:
+
+- **F1 copies** the selected item into the buffer (non-destructive).
+- **F2 pastes** the buffer into the selected item. Right after a copy, F2 always pastes.
+- Selecting an item that **has content** and hitting F2 **cuts** it (moves it to the
+  buffer, clearing the source); the **next** item you select + F2 **pastes**; hitting it
+  again **cuts**. It toggles cut ⇄ paste as you move around.
+- **Empty items are never loaded into the buffer** — so once something is in the buffer it
+  stays until you copy/cut something else. (Example: only step 1 has notes → cut step 1 →
+  paste it back into step 1 → now keep F2-pasting it into the other 15 empty steps.)
+- **This is also the undo:** any **clear/cut goes into the buffer**, so **F2 pastes it
+  back**. There is no separate undo stack.
+- Scope follows the view: **Notes** = step copy/paste between steps; **Step** = step
+  clear/cut/paste; **Patterns** = pattern copy/paste; **Mix** = whole-track (F1/F2 are
+  mute/solo in Mix, so track copy/paste is **hold a track → 25 = copy · 26 = paste**).
 
 ---
 
@@ -102,8 +146,8 @@ Mix is for **mixing / performance**, not step editing.
   the low row mirrors the per-track controls.
 - **Hold a track → per-track controls on the low row:** **11 = Mute · 12 = Solo · 14–18 =
   play mode** — 14 forward · 15 reverse · 16 forward-pong · 17 reverse-pong · **18 random-
-  page** ("random-page" plays each *enabled* page of the pattern in random order). (13 free.)
-- **Whole-track copy/paste** now needs a new gesture (F1/F2 became mute/solo) — see §10.
+  page** ("random-page" plays each *enabled* page of the pattern in random order) · **25 =
+  copy track · 26 = paste track** (the §3.5 buffer). (13 free.)
 
 → `form_redesign.json` **state 1** + `form_mix.json` (hold-track & rate detail).
 
@@ -123,22 +167,28 @@ active mode is lit bright, the others dim:
 | 10 | **MIDI FX** | per-step MIDI-FX routing |
 
 **Editing in the active mode:**
-- **Quick-click a step (11–26) = clear that step** (Elektron-style).
+- **Single-click a step (11–26) = clear it.** The cleared step goes to the copy buffer, so
+  **F2 pastes it back** if you didn't mean it (§3.5). _(Double-click is no longer used —
+  it was axed to remove the click-vs-hold collision.)_
 - **Hold a step (11–26)** → the **top row keys 1–10 become the value palette** for the
   current mode; tap one to set that step's value. **Press AUX while holding = reset that
-  step to the mode's default.** (Turning a pot-bank knob while holding still lays a CC
-  P-Lock, §3.)
+  step to the mode's default** (AUX has no other job while a step is held). Turning a
+  pot-bank knob while holding still lays a CC P-Lock (§3).
 - **Hold a mode key (3–10)** → **keys 11–20 become the value palette for the mode's
   DEFAULT** value (what steps use until given an explicit value); tap one to set it.
+- **F1 / F2 = copy / paste the selected step** (§3.5). To reach the Notes chord editor,
+  switch to the **Notes view** (AUX + 16).
 
-**The value palette is 10 keys, contents per mode:**
+**The value palette (keys 1–10) per mode:**
 - **Note** — 10 notes: **chromatic** = 10 notes from **C** in the current octave;
   **scale on** = the current scale's notes only.
-- **Velocity / Step Length / Repeat / Chance** — the 10 keys span the value range.
+- **Velocity / Step Length / Chance** — the 10 keys span the value range.
+- **Repeat** — **1 · 2 · 3 (quick triplet) · 4** (ratchet count).
 - **Math (conditional trig)** — **key 1 = Fill · key 2 = !Fill**; **keys 3–6 = ratio A**
   (1–4) · **keys 7–10 = ratio B** (1–4). E.g. key 3 + key 10 = **1:4** (fires 1 of every 4
-  loops). 
-- **Function** — the 10 keys are the function list. **MIDI FX** — the MIDI-FX slots.
+  loops).
+- **Function** — the **current OMNI step functions** (RSET / reverse / forward / pong /
+  rand-jump / rand / jump-to-step). **MIDI FX** — the track's MIDI-FX slots.
 
 **Pages** are on the **AUX layer** (keys 6–9 — select / solo / loop-range, §6);
 **F3 (F1+F2) = structure layer** sets **page length** (tap steps, §5).
@@ -153,8 +203,9 @@ active mode is lit bright, the others dim:
 → `form_redesign.json` **state 7**.
 
 ### 4.4 Notes  _(chord/note entry — reworked for in-editor step nav)_
-Enter with a **double-click** on a step (Mix/Step view) — that stays. The rework lets
-you **step through and edit without leaving the editor**:
+Enter via the **AUX view selector (AUX + 16)** — the double-click-a-step shortcut is gone
+with the Step-view double-click. The view lets you **step through and edit without leaving
+the editor**:
 
 - **Keyboard starts at F4 (key 15).** The playable piano is now **keys 3–10 (sharps) +
   15–26 (naturals)** = F4→C6 (~1.5 octaves). The sharps 3–10 line up as the black keys
@@ -171,23 +222,26 @@ you **step through and edit without leaving the editor**:
 - **Step-change feedback:** no persistent cursor. On any step change (11/12, F3-jump, or
   encoder) the new step's stored notes **flash briefly, then settle** — a quick preview
   of what's on the step you landed on.
-- **Change page** while here: via the **AUX layer** (keys 3–6), like everywhere else (§6).
+- **Change page** while here: via the **AUX layer** (keys 6–9), like everywhere else (§6).
 - **OLED:** above the keyboard render, a strip of **16 small boxes** (one **filled** =
-  the step being edited) and, to its right, the **page number** (1–4).
+  the step being edited) and, to its right, the **page number** (1–4). (Plus the global
+  CC meter + page indicator, §2.)
 
 → `form_redesign.json` **state 6** (and `form_notes.json` for the detail).
 
 ### 4.5 Patterns
 A **pattern** is a snapshot of the whole sequencer — all 8 tracks' step data plus their
-settings (pot bank, play mode, pages/length, rate). You get **16 patterns** per project,
-so you can build sections (verse / chorus / fill) and switch between them.
+settings (pot bank, play mode, pages/length, rate). Switch between patterns to build
+sections (verse / chorus / fill). **One project only** (the device has no room for
+multiple), and the **pattern count is RAM-limited** — up to 16 on the low row, but may end
+up fewer depending on what fits (see §10).
 
-- **Low row (keys 11–26) = the 16 pattern slots.** Current pattern = WHITE; patterns with
+- **Low row (keys 11–26) = the pattern slots.** Current pattern = WHITE; patterns with
   content = dim color; queued = blinking; empty = off. **Tap a slot to switch.**
 - **Top row keys 3–6 = switch style:** **3 Finish Loop · 4 Next Bar · 5 Instant · 6
   Chained** (active style lit bright). This governs *when* a tapped pattern takes over —
   at loop end, at the next bar, immediately, or appended to a chain.
-- **F1 / F2 (keys 1–2) = copy / paste** a pattern; **clear** = hold a slot (proposed).
+- **F1 / F2 = copy / paste** a pattern (the §3.5 buffer — cut also clears, so it's undo).
   _(Pattern **chaining** / song mode builds on the "Chained" style — see §10.)_
 
 → `form_patterns.json`.
@@ -241,11 +295,15 @@ flashes**:
 Free: 5, 10, 19–26. No pot-bank shortcut here (bank is a menu setting, §2). **MIDI-FX is
 no longer on AUX** — it's a Step-view mode now (§4.2).
 
-**Page keys (6–9) — select / solo / loop-range:**
-- **Single-click** a page = make it the **active edit page** (what the views show/edit).
-- **Double-click** a page = **solo/loop only that page** (and select it).
-- **Hold page A, press page B** = **loop the range A–B**; the **first (held) page is the
-  active** one.
+**Page keys (6–9) — select / solo / loop-range** (there is **no separate page-mute** — a
+page is "muted" simply by not being in the enabled set):
+- **Single-click** a page = make it the **active edit page** (what the views show/edit);
+  doesn't change what plays.
+- **Double-click** a page = **enable only that page** — it plays, the others go muted.
+  (e.g. double-click page 2 → only page 2 plays.)
+- **Hold page A, press page B** = **enable the range A–B**, the rest muted; the **first
+  (held) page is the active** one. (e.g. hold page 2, press page 4 → pages 2–4 play, page
+  1 muted.)
 
 **Page-key colors:**
 | State | Color |
@@ -295,9 +353,6 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 | Step has a P-Lock | MAGENTA | `#ff00ff` |
 | Playhead (firing / silent) | WHITE / RED | `#ffffff` / `#ff0000` |
 | Beyond page length | off | `#000000` |
-| Page: current edit page | WHITE | `#ffffff` |
-| Page: exists, not current | LOWWHITE | `#202020` |
-| Page: active for playback (F3) | GREEN | `#00ff00` |
 | Step modes (Note/Vel/Len/Repeat/Chance/Math/Func/MFX), active bright / dim | ORANGE YELLOW GREEN CYAN BLUE PURPLE MAGENTA ROSE | `#ff8000 #ffff00 #00ff00 #00ffff #0000ff #7f00ff #ff00ff #ff0080` |
 | Value palette: available / current-value / root | dim-blue / LTYELLOW / periwinkle | `#000090` / `#ffff80` / `#a2a2ff` |
 | View (AUX): current (flashing) / other | WHITE / LOWWHITE | `#ffffff` / `#202020` |
@@ -315,34 +370,40 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
    F3 = jump-to-step; **live MIDI audition** on key-hold when stopped (§4.5).
 5. **CC meter** → 5-segment line meter on the top OLED row, every view (§2).
 6. **Step view = 8 hold-modes** on keys 3–10 (Note / Velocity / Step Length / Repeat /
-   Chance / Math / Function / MIDI FX). Hold step → value palette on keys 1–10; hold mode
-   key → default on keys 11–20; AUX-while-holding-step = reset to default; **quick-click a
-   step = clear it** (§4.2). **Function is back** as a mode.
+   Chance / Math / Function / MIDI FX). Hold step → value palette 1–10; hold mode key →
+   default 11–20; AUX-while-holding-step = reset to default; **single-click a step = clear
+   it** (→ buffer); **double-click removed** (§4.2). Repeat = 1/2/3-triplet/4; Function =
+   the current OMNI functions.
 7. **Math** = **conditional trig**: key 1 = Fill, key 2 = !Fill, keys 3–6 = ratio A (1–4),
    keys 7–10 = ratio B (1–4) → e.g. 3+10 = 1:4.
-8. **Pages** → on the **AUX layer** (AUX + 6–9): click = select · double-click = solo/loop
-   · hold+press = loop range; color scheme green/blue/yellow/red (§6). MIDI-FX off AUX.
-9. **Mix = performance view** (§4.1): tap-play the low row; F1 = mute, F2 = solo, F3 =
-   track rate; **hold a track** → mute/solo/**play mode** (fwd/rev/pong/rev-pong/random-
-   page) on the low row; double-click a track = enter Step.
-10. **Note mode & Notes view** → **keep both** (quick per-step palette vs full chord entry).
-11. **Patterns** → a view (AUX + 17); **16 snapshots** on the low row; **top row 3–6 =
-    switch style** (Finish Loop / Next Bar / Instant / Chained); F1/F2 copy/paste (§4.5).
-12. **Live recording** → **AUX + 3 arm**, AUX + 4 overdub/replace; play the keyboard while
-    running → notes quantize into the selected track (§7).
-13. **MI view** → a 6th view (AUX + 18); the MI-mode keyboard for live playing (§4.6).
+8. **Pages** → on the **AUX layer** (AUX + 6–9): click = select · double-click = solo one
+   page · hold+press = loop range; **muting is implicit** (out-of-loop = muted). Colors
+   green/blue/very-dim/yellow (§6).
+9. **Mix = performance view** (§4.1): low row triggers the programmed steps; F1 = mute, F2
+   = solo, F3 = track rate; **hold a track** → mute/solo/play-mode + **25 copy / 26 paste
+   track** on the low row; double-click a track = enter Step.
+10. **Copy / paste / undo** → one buffer, **F1 = Copy, F2 = Paste/Cut** everywhere but Mix,
+    at step/track/pattern scope; empty items not buffered; clear/cut → buffer = undo (§3.5).
+11. **Track menu** (encoder) = all config: per-track up front (first page a 2-oct
+    mini-keyboard), global (BPM / clock / scale / root / swing / groove) in back (§2.5).
+12. **Note mode & Notes view** → **keep both** (quick per-step palette vs full chord entry).
+13. **Patterns** → a view (AUX + 17); snapshots on the low row; **top row 3–6 = switch
+    style** (Finish Loop / Next Bar / Instant / Chained). **One project, count RAM-limited**
+    (§4.5).
+14. **Live recording** → **AUX + 3 arm**, AUX + 4 overdub/replace; keyboard notes quantize
+    into the selected track (§7).
+15. **MI view** → a 6th view (AUX + 18); the MI-mode keyboard for live playing (§4.6).
+16. **OLED** → CC meter + a **4-line page indicator** (2 px = active page), every view (§2).
 
 ### Still open
-- **Pattern switch timing** — queued-to-loop-end default; add hold-tap = instant? And
-  **pattern chaining / song mode** (later).
+- **Pattern count** — how many patterns actually fit in RAM (target 16). And **switch-style
+  default** + **chaining / song mode** (builds on "Chained").
 - **Live-rec extras** — count-in / metronome; a **quantize-off** free-record option.
-- **Whole-track copy/paste** — F1/F2 are now mute/solo in Mix, so track copy/paste needs a
-  new gesture (a hold-track option? a Mix menu?).
-- **Key 13** in the hold-track low row (11 mute, 12 solo, 14–18 play mode) — unused; assign
-  or leave.
+- **Note-mode chords** — a step is polyphonic; does the 10-note palette add or replace, and
+  how does it build a chord vs. the Notes view?
 - **10-value granularity** — velocity/chance/length across only 10 keys is coarse; add
   encoder fine-tune while a step is held?
-- **F1 tap-vs-hold** (Notes copy vs …), **P-Lock color MAGENTA** — as before.
+- **Repeat/MIDI-FX ranges** — MIDI-FX slot count; **P-Lock color MAGENTA** — confirm.
 
 ---
 

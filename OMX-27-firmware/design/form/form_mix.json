@@ -6,45 +6,203 @@
   "ledCount": 27,
   "convention": "key 0 = AUX; keys 1-10 black; keys 11-26 white. '#000000' = off. Detail frames for the Mix (mixing/performance) view: per-track controls revealed by holding a track, and the F3 track-rate layer. See FORM_REDESIGN.md 4.1.",
   "keyMap": [
-    { "key": 0,  "role": "aux",   "note": null, "name": "AUX" },
-    { "key": 1,  "role": "black", "note": 61, "name": "C#4" },
-    { "key": 2,  "role": "black", "note": 63, "name": "D#4" },
-    { "key": 3,  "role": "black", "note": 66, "name": "F#4" },
-    { "key": 4,  "role": "black", "note": 68, "name": "G#4" },
-    { "key": 5,  "role": "black", "note": 70, "name": "A#4" },
-    { "key": 6,  "role": "black", "note": 73, "name": "C#5" },
-    { "key": 7,  "role": "black", "note": 75, "name": "D#5" },
-    { "key": 8,  "role": "black", "note": 78, "name": "F#5" },
-    { "key": 9,  "role": "black", "note": 80, "name": "G#5" },
-    { "key": 10, "role": "black", "note": 82, "name": "A#5" },
-    { "key": 11, "role": "white", "note": 59, "name": "B3" },
-    { "key": 12, "role": "white", "note": 60, "name": "C4" },
-    { "key": 13, "role": "white", "note": 62, "name": "D4" },
-    { "key": 14, "role": "white", "note": 64, "name": "E4" },
-    { "key": 15, "role": "white", "note": 65, "name": "F4" },
-    { "key": 16, "role": "white", "note": 67, "name": "G4" },
-    { "key": 17, "role": "white", "note": 69, "name": "A4" },
-    { "key": 18, "role": "white", "note": 71, "name": "B4" },
-    { "key": 19, "role": "white", "note": 72, "name": "C5" },
-    { "key": 20, "role": "white", "note": 74, "name": "D5" },
-    { "key": 21, "role": "white", "note": 76, "name": "E5" },
-    { "key": 22, "role": "white", "note": 77, "name": "F5" },
-    { "key": 23, "role": "white", "note": 79, "name": "G5" },
-    { "key": 24, "role": "white", "note": 81, "name": "A5" },
-    { "key": 25, "role": "white", "note": 83, "name": "B5" },
-    { "key": 26, "role": "white", "note": 84, "name": "C6" }
+    {
+      "key": 0,
+      "role": "aux",
+      "note": null,
+      "name": "AUX"
+    },
+    {
+      "key": 1,
+      "role": "black",
+      "note": 61,
+      "name": "C#4"
+    },
+    {
+      "key": 2,
+      "role": "black",
+      "note": 63,
+      "name": "D#4"
+    },
+    {
+      "key": 3,
+      "role": "black",
+      "note": 66,
+      "name": "F#4"
+    },
+    {
+      "key": 4,
+      "role": "black",
+      "note": 68,
+      "name": "G#4"
+    },
+    {
+      "key": 5,
+      "role": "black",
+      "note": 70,
+      "name": "A#4"
+    },
+    {
+      "key": 6,
+      "role": "black",
+      "note": 73,
+      "name": "C#5"
+    },
+    {
+      "key": 7,
+      "role": "black",
+      "note": 75,
+      "name": "D#5"
+    },
+    {
+      "key": 8,
+      "role": "black",
+      "note": 78,
+      "name": "F#5"
+    },
+    {
+      "key": 9,
+      "role": "black",
+      "note": 80,
+      "name": "G#5"
+    },
+    {
+      "key": 10,
+      "role": "black",
+      "note": 82,
+      "name": "A#5"
+    },
+    {
+      "key": 11,
+      "role": "white",
+      "note": 59,
+      "name": "B3"
+    },
+    {
+      "key": 12,
+      "role": "white",
+      "note": 60,
+      "name": "C4"
+    },
+    {
+      "key": 13,
+      "role": "white",
+      "note": 62,
+      "name": "D4"
+    },
+    {
+      "key": 14,
+      "role": "white",
+      "note": 64,
+      "name": "E4"
+    },
+    {
+      "key": 15,
+      "role": "white",
+      "note": 65,
+      "name": "F4"
+    },
+    {
+      "key": 16,
+      "role": "white",
+      "note": 67,
+      "name": "G4"
+    },
+    {
+      "key": 17,
+      "role": "white",
+      "note": 69,
+      "name": "A4"
+    },
+    {
+      "key": 18,
+      "role": "white",
+      "note": 71,
+      "name": "B4"
+    },
+    {
+      "key": 19,
+      "role": "white",
+      "note": 72,
+      "name": "C5"
+    },
+    {
+      "key": 20,
+      "role": "white",
+      "note": 74,
+      "name": "D5"
+    },
+    {
+      "key": 21,
+      "role": "white",
+      "note": 76,
+      "name": "E5"
+    },
+    {
+      "key": 22,
+      "role": "white",
+      "note": 77,
+      "name": "F5"
+    },
+    {
+      "key": 23,
+      "role": "white",
+      "note": 79,
+      "name": "G5"
+    },
+    {
+      "key": 24,
+      "role": "white",
+      "note": 81,
+      "name": "A5"
+    },
+    {
+      "key": 25,
+      "role": "white",
+      "note": 83,
+      "name": "B5"
+    },
+    {
+      "key": 26,
+      "role": "white",
+      "note": 84,
+      "name": "C6"
+    }
   ],
   "notes": "Mix per-track controls. Hold a track key (3-10) OR hold F3 to reveal on the low row: 11=Mute, 12=Solo, 13=free, 14-18=play mode (14 forward, 15 reverse, 16 forward-pong, 17 reverse-pong, 18 random-page). The active play mode is bright, others dim. F3 (hold F1+F2) additionally puts the track RATE on the top row 3-10.",
   "states": [
     {
       "state": 1,
       "name": "Mix — hold a track (controls)",
-      "notes": "Holding track 1 (key3, WHITE). The low row reveals per-track controls: 11=Mute (dim red = available), 12=Solo (dim yellow), 13=free, 14-18 = play mode: 14 forward (WHITE = active), 15 reverse, 16 forward-pong, 17 reverse-pong, 18 random-page (dim in their hues). Random-page plays each enabled page in random order. Other tracks keep their colors on the top row.",
+      "notes": "Holding track 1 (key3, WHITE). The low row reveals per-track controls: 11=Mute (dim red), 12=Solo (dim yellow), 13=free, 14-18 = play mode (14 forward=WHITE active, 15 reverse, 16 forward-pong, 17 reverse-pong, 18 random-page, dim in their hues), 25=copy track (DKCYAN), 26=paste track (DKGREEN). Random-page plays each enabled page in random order. Other tracks keep their colors on the top row.",
       "leds": [
-        "#000000", "#000000", "#000000",
-        "#ffffff", "#ffff00", "#00ff00", "#ff0000", "#00ffff", "#0000ff", "#202020", "#202020",
-        "#800000", "#4c4d00", "#000000", "#ffffff", "#4d2600", "#004c4d", "#00004d", "#4d004c",
-        "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"
+        "#000000",
+        "#000000",
+        "#000000",
+        "#ffffff",
+        "#ffff00",
+        "#00ff00",
+        "#ff0000",
+        "#00ffff",
+        "#0000ff",
+        "#202020",
+        "#202020",
+        "#800000",
+        "#4c4d00",
+        "#000000",
+        "#ffffff",
+        "#4d2600",
+        "#004c4d",
+        "#00004d",
+        "#4d004c",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#004c4d",
+        "#264d00"
       ],
       "keyNotes": {
         "3": "Held track (WHITE)",
@@ -54,27 +212,83 @@
         "15": "Play: reverse",
         "16": "Play: forward-pong",
         "17": "Play: reverse-pong",
-        "18": "Play: random-page"
+        "18": "Play: random-page",
+        "25": "Copy track",
+        "26": "Paste track"
       },
       "pots": [
-        { "pot": 1, "label": "K1", "note": "Pot bank CC21", "value": 100 },
-        { "pot": 2, "label": "K2", "note": "Pot bank CC22", "value": 64 },
-        { "pot": 3, "label": "K3", "note": "Pot bank CC23", "value": 40 },
-        { "pot": 4, "label": "K4", "note": "Pot bank CC24", "value": 80 },
-        { "pot": 5, "label": "K5", "note": "Pot bank CC7", "value": 120 }
+        {
+          "pot": 1,
+          "label": "K1",
+          "note": "Pot bank CC21",
+          "value": 100
+        },
+        {
+          "pot": 2,
+          "label": "K2",
+          "note": "Pot bank CC22",
+          "value": 64
+        },
+        {
+          "pot": 3,
+          "label": "K3",
+          "note": "Pot bank CC23",
+          "value": 40
+        },
+        {
+          "pot": 4,
+          "label": "K4",
+          "note": "Pot bank CC24",
+          "value": 80
+        },
+        {
+          "pot": 5,
+          "label": "K5",
+          "note": "Pot bank CC7",
+          "value": 120
+        }
       ],
-      "encoder": { "note": "(hold-mode)", "press": "" },
-      "screen": { "note": "Track controls", "text": "Trk1  MUTE SOLO\nPlay: FWD" }
+      "encoder": {
+        "note": "(hold-mode)",
+        "press": ""
+      },
+      "screen": {
+        "note": "Track controls",
+        "text": "Trk1  MUTE SOLO\nPlay: FWD"
+      }
     },
     {
       "state": 2,
       "name": "Mix — F3 track rate",
       "notes": "Holding F3 (F1+F2, keys 1&2 LTCYAN/MINT) puts the selected track's RATE on the top row 3-10 (active rate WHITE=key6, others dim cyan), and mirrors the per-track controls on the low row (Mute/Solo/play mode).",
       "leds": [
-        "#000000", "#80ffff", "#00ff80",
-        "#004c4d", "#004c4d", "#004c4d", "#ffffff", "#004c4d", "#004c4d", "#004c4d", "#004c4d",
-        "#800000", "#4c4d00", "#000000", "#ffffff", "#4d2600", "#004c4d", "#00004d", "#4d004c",
-        "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"
+        "#000000",
+        "#80ffff",
+        "#00ff80",
+        "#004c4d",
+        "#004c4d",
+        "#004c4d",
+        "#ffffff",
+        "#004c4d",
+        "#004c4d",
+        "#004c4d",
+        "#004c4d",
+        "#800000",
+        "#4c4d00",
+        "#000000",
+        "#ffffff",
+        "#4d2600",
+        "#004c4d",
+        "#00004d",
+        "#4d004c",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#004c4d",
+        "#264d00"
       ],
       "keyNotes": {
         "1": "F1 (held)",
@@ -82,17 +296,50 @@
         "6": "Active track rate (WHITE); 3-10 = rate options",
         "11": "Mute",
         "12": "Solo",
-        "14": "Play mode: forward (active)"
+        "14": "Play mode: forward (active)",
+        "25": "Copy track",
+        "26": "Paste track"
       },
       "pots": [
-        { "pot": 1, "label": "K1", "note": "Pot bank CC21", "value": 100 },
-        { "pot": 2, "label": "K2", "note": "Pot bank CC22", "value": 64 },
-        { "pot": 3, "label": "K3", "note": "Pot bank CC23", "value": 40 },
-        { "pot": 4, "label": "K4", "note": "Pot bank CC24", "value": 80 },
-        { "pot": 5, "label": "K5", "note": "Pot bank CC7", "value": 120 }
+        {
+          "pot": 1,
+          "label": "K1",
+          "note": "Pot bank CC21",
+          "value": 100
+        },
+        {
+          "pot": 2,
+          "label": "K2",
+          "note": "Pot bank CC22",
+          "value": 64
+        },
+        {
+          "pot": 3,
+          "label": "K3",
+          "note": "Pot bank CC23",
+          "value": 40
+        },
+        {
+          "pot": 4,
+          "label": "K4",
+          "note": "Pot bank CC24",
+          "value": 80
+        },
+        {
+          "pot": 5,
+          "label": "K5",
+          "note": "Pot bank CC7",
+          "value": 120
+        }
       ],
-      "encoder": { "note": "(hold-mode)", "press": "" },
-      "screen": { "note": "Track rate", "text": "Trk1 Rate 1/16\nPlay: FWD" }
+      "encoder": {
+        "note": "(hold-mode)",
+        "press": ""
+      },
+      "screen": {
+        "note": "Track rate",
+        "text": "Trk1 Rate 1/16\nPlay: FWD"
+      }
     }
   ]
 }

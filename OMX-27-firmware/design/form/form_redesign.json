@@ -148,19 +148,17 @@
     },
     {
       "state": 5,
-      "name": "Step + F3 — structure (pages / length)",
-      "notes": "Holding F3 (F1+F2, keys 1&2 LTCYAN/MINT) opens the structure layer, temporarily replacing the mode row. Tap PAGE keys 3-6 = which pages loop (tap one = only it; tap two = inclusive range) — here 1&4 => 1-2-3-4 active (GREEN). Tap STEP keys = current page length — here 12, so keys 23-26 dark. (Page selection for editing also lives here — see FORM_REDESIGN.md 9.)",
+      "name": "Step + F3 — set page length",
+      "notes": "Holding F3 (F1+F2, keys 1&2 LTCYAN/MINT) sets the CURRENT page's length: tap a STEP key for how many steps the page has. Here length=12, so keys 23-26 (steps 13-16) go dark. The mode row (3-10) is inactive while F3 is held. (Which pages LOOP + page select now live on the AUX page keys 6-9, not here.)",
       "leds": [
         "#000000", "#80ffff", "#00ff80",
-        "#00ff00", "#00ff00", "#00ff00", "#00ff00", "#000000", "#000000", "#000000", "#000000",
+        "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff", "#00004d",
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#000000", "#000000", "#000000", "#000000"
       ],
       "keyNotes": {
         "1": "F1 (held)",
         "2": "F2 (held)",
-        "3": "Page 1 — plays (GREEN)",
-        "6": "Page 4 — plays (GREEN)",
         "22": "Last step (page length = 12)",
         "23": "Beyond page length (off)"
       },
