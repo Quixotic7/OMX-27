@@ -53,6 +53,9 @@ namespace FormOmni
     const uint8_t kZoomMults[] = {1,2,4};
     const uint8_t kPageMax[] = {4,2,1};
 
+    // v2: fixed 4 pages of 16 steps (zoom retired; zoomLevel_ stays 0).
+    static const uint8_t kFormNumPages = 4;
+
     // 0, 0.33333, 0.66666, 0.83333
     // 0, 0.25, 0.5, 0.75, 1.0
     // 0, 0.083333, 0.166666, 0.083333
@@ -216,8 +219,8 @@ namespace FormOmni
             break;
         case OMNIPAGE_NAV:
         {
-            omxFormGlobal.potPickups[0].SetValRemap(activePage_, 0, kPageMax[zoomLevel_] - 1);
-            omxFormGlobal.potPickups[1].SetValRemap(zoomLevel_, 0, 2);
+            omxFormGlobal.potPickups[0].SetValRemap(activePage_, 0, kFormNumPages - 1);
+            omxFormGlobal.potPickups[1].SetValRemap(zoomLevel_, 0, 2); // zoom retired (unused)
             omxFormGlobal.potPickups[4].SetValRemap(omniUiMode_, 0, OMNIUIMODE_COUNT - 1);
         }
         break;
@@ -1246,15 +1249,12 @@ namespace FormOmni
         {
             if (potIndex == 0)
             {
-                activePage_ = omxFormGlobal.potPickups[0].UpdatePotGetMappedValue(prevValue, newValue, 0, kPageMax[zoomLevel_] - 1);
+                // v2: fixed 4 pages of 16 (zoom retired) — page 0-3.
+                activePage_ = omxFormGlobal.potPickups[0].UpdatePotGetMappedValue(prevValue, newValue, 0, kFormNumPages - 1);
                 omxFormGlobal.potPickups[0].DisplayValue("Page", activePage_ + 1);
             }
-            else if (potIndex == 1)
-            {
-                zoomLevel_ = omxFormGlobal.potPickups[1].UpdatePotGetMappedValue(prevValue, newValue, 0, 2);
-                tempString = "Zoom " + String(kZoomMults[zoomLevel_]) + "x";
-                omxFormGlobal.potPickups[1].DisplayLabel(tempString.c_str());
-            }
+            // potIndex == 1 (was Zoom) is retired in v2 — the grid is always 16 steps.
+            // zoomLevel_ stays 0, so kZoomMults[0]=1 / kPageMax[0]=4 everywhere.
         }
 
         
