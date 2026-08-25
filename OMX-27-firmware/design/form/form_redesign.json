@@ -4,7 +4,7 @@
   "device": "OMX-27",
   "name": "FORM — redesign (v2 views + pot banks)",
   "ledCount": 27,
-  "convention": "key 0 = AUX; keys 1-10 = black keys (top row) incl. F1(1) F2(2) and tracks/pages/modes on 3-10; keys 11-26 = white keys (16-step row). '#000000' = off. Proposed v2 model: knobs are always a per-track POT BANK (like MI mode, bank set in the track menu); 4 VIEWS (Mix/Step/Transpose/Notes) switched on a unified AUX layer (13-16); always 16 steps; 4 pages/track in Step view; per-step edit-mode selector (VEL/LEN/CHANCE) + CC P-Locks. Step functions dropped from v2. See FORM_REDESIGN.md.",
+  "convention": "key 0 = AUX; keys 1-10 = black keys (top row); keys 11-26 = white keys (16-step row). '#000000' = off. v2 model: single-engine 8-track sequencer (no machine types); knobs = per-track POT BANK (bank set in track menu); 4 VIEWS (Mix/Step/Transpose/Notes) on AUX 13-16; always 16 steps, 4 pages/track. Step view: top row 3-10 = 8 step-edit modes; hold a step -> value palette on 1-10; hold a mode key -> default on 11-20. See FORM_REDESIGN.md.",
   "keyMap": [
     { "key": 0,  "role": "aux",   "note": null, "name": "AUX" },
     { "key": 1,  "role": "black", "note": 61, "name": "C#4" },
@@ -34,12 +34,12 @@
     { "key": 25, "role": "white", "note": 83, "name": "B5" },
     { "key": 26, "role": "white", "note": 84, "name": "C6" }
   ],
-  "notes": "Proposal draft. Legend: step row LTBLUE=has notes, DKBLUE=empty, MAGENTA=has a CC P-Lock, WHITE=playhead(firing)/RED=silent, off=beyond page length. Knobs = the current track's pot bank (5 CCs, bank chosen in the track menu). 4 views (Mix/Step/Transpose/Notes) on the AUX layer (13-16), current view flashes. Step view: pages on 3-6, per-step edit-mode VEL/LEN/CHANCE on 7-9; F3 (hold F1+F2) = structure layer (pages=playback range, steps=page length); hold F1 + page = jump page. Step functions dropped from v2.",
+  "notes": "Proposal draft. Single-engine 8-track sequencer. Step view top row (3-10) = 8 step-edit modes: Note(orange) Velocity(yellow) StepLength(green) Repeat(cyan) Chance(blue) Math(purple) Function(magenta) MIDIFX(rose); active bright, others dim. Hold a step -> top row 1-10 = value palette for the active mode (Note = 10 notes, chromatic-from-C or in-scale); AUX-while-holding = reset step to default. Hold a mode key -> keys 11-20 = the mode's DEFAULT value. Knobs still P-Lock CCs. Step row: LTBLUE=notes, DKBLUE=empty, WHITE=playhead. See FORM_REDESIGN.md.",
   "states": [
     {
       "state": 1,
       "name": "Mix view (select tracks)",
-      "notes": "FORM is an 8-track sequencer; every track is the same engine (no machine types). Keys 3-10 = the 8 tracks, each in its own track color (seqColors): selected=WHITE, muted=RED, empty=dim, fired-this-step=INDIGO flash. Here: track1=selected WHITE, track2=YELLOW, track3=GREEN, track4=muted RED, track5=CYAN, track6=BLUE, tracks7-8=empty(dim). Tap=select, double-click=enter that track's Step view, F3(hold F1+F2)+tap=mute, F1/F2+tap=copy/paste whole track. Step row = selected track's pattern with WHITE playhead (key15). Knobs = this track's pot bank.",
+      "notes": "8-track sequencer, every track the same engine (no machine types). Keys 3-10 = the 8 tracks, each in its own track color (seqColors): selected=WHITE, muted=RED, empty=dim, fired-this-step=INDIGO. Here track1=selected(WHITE), track2=YELLOW, track3=GREEN, track4=muted(RED), track5=CYAN, track6=BLUE, tracks7-8=empty(dim). Tap=select, double-click=enter Step view, F3(hold F1+F2)+tap=mute, F1/F2+tap=copy/paste whole track. Step row = selected track's pattern, WHITE playhead. Knobs = track pot bank.",
       "leds": [
         "#000000", "#000000", "#000000",
         "#ffffff", "#ffff00", "#00ff00", "#ff0000", "#00ffff", "#0000ff", "#202020", "#202020",
@@ -47,62 +47,112 @@
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff"
       ],
       "keyNotes": {
-        "3": "Track 1 — selected (WHITE). Double-click = open Step view; F3+tap = mute",
-        "4": "Track 2 (its track color)",
+        "3": "Track 1 — selected (WHITE). Double-click = open Step; F3+tap = mute",
         "6": "Track 4 — muted (RED)",
         "9": "Track 7 — empty (dim)",
         "15": "Playhead"
       },
       "pots": [
-        { "pot": 1, "label": "K1", "note": "Pot bank CC21 (selected track's bank)", "value": 100 },
+        { "pot": 1, "label": "K1", "note": "Pot bank CC21 (selected track)", "value": 100 },
         { "pot": 2, "label": "K2", "note": "Pot bank CC22", "value": 64 },
         { "pot": 3, "label": "K3", "note": "Pot bank CC23", "value": 40 },
         { "pot": 4, "label": "K4", "note": "Pot bank CC24", "value": 80 },
         { "pot": 5, "label": "K5", "note": "Pot bank CC7", "value": 120 }
       ],
-      "encoder": { "note": "Turn = select param (incl. this track's Pot Bank); AUX+turn = edit", "press": "Toggle select/edit" },
-      "screen": { "note": "Top row = 5-seg CC meter; track summary below", "text": "▔▔ ▔▔▔ ▔ ▔▔▔▔ ▔▔\nMIX Trk1 OMNI Bnk1" }
+      "encoder": { "note": "Turn = select param (incl. Pot Bank); AUX+turn = edit", "press": "Toggle select/edit" },
+      "screen": { "note": "Top row = 5-seg CC meter; track summary", "text": "▔▔ ▔▔▔ ▔ ▔▔▔▔ ▔▔\nMIX Trk1 Bnk1" }
     },
     {
       "state": 2,
-      "name": "Step view (pages 3-6, edit-mode 7-9)",
-      "notes": "Per-track step editing. Keys 3-6 = pages 1-4 (current page WHITE=page2, others LOWWHITE). Keys 7-9 = per-step edit-mode selector: VEL(orange, active) / LEN / CHANCE (dim); key10 reserved. Hold a step to edit the active mode with encoder/±; turning a pot-bank knob while holding still P-Locks a CC. Step row: LTBLUE=notes, DKBLUE=empty, MAGENTA(key17)=has a P-Lock, WHITE(key13)=playhead. Hold F3 (F1+F2) = structure layer; hold F1 + page = jump page.",
+      "name": "Step — mode selector (top row 3-10)",
+      "notes": "Locked to one track. Top row keys 3-10 = 8 step-edit modes: 3 Note(active, ORANGE), 4 Velocity, 5 Step Length, 6 Repeat, 7 Chance, 8 Math, 9 Function, 10 MIDI FX (inactive shown dim in their hues). Tap to pick the mode. Step row = current page pattern (Note mode: LTBLUE=has notes, DKBLUE=empty, WHITE=playhead key15). Now hold a step to set its value (state 3), or hold a mode key to set the default (state 4).",
       "leds": [
         "#000000", "#000000", "#000000",
-        "#202020", "#ffffff", "#202020", "#202020", "#ff8000", "#004c4d", "#4c4d00", "#000000",
-        "#a8a8ff", "#00004d", "#ffffff", "#00004d", "#a8a8ff", "#00004d", "#ff00ff", "#00004d",
+        "#ff8000", "#4c4d00", "#264d00", "#004c4d", "#00004d", "#26004d", "#4d004c", "#4d0026",
+        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#ffffff", "#00004d", "#a8a8ff", "#00004d",
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff"
       ],
       "keyNotes": {
-        "3": "Page 1",
-        "4": "Page 2 — current edit page (WHITE)",
-        "5": "Page 3",
-        "6": "Page 4",
-        "7": "Edit-mode VEL (active, bright)",
-        "8": "Edit-mode LEN (gate length)",
-        "9": "Edit-mode CHANCE (probability)",
-        "10": "(reserved)",
-        "13": "Playhead",
-        "17": "Step with a CC P-Lock (MAGENTA)"
+        "3": "Mode: Note (active, bright ORANGE)",
+        "4": "Mode: Velocity",
+        "5": "Mode: Step Length",
+        "6": "Mode: Repeat",
+        "7": "Mode: Chance",
+        "8": "Mode: Math",
+        "9": "Mode: Function",
+        "10": "Mode: MIDI FX",
+        "15": "Playhead"
       },
       "pots": [
-        { "pot": 1, "label": "K1", "note": "Pot bank CC21 (hold a step + turn to P-Lock)", "value": 100 },
+        { "pot": 1, "label": "K1", "note": "Pot bank CC21", "value": 100 },
         { "pot": 2, "label": "K2", "note": "Pot bank CC22", "value": 64 },
         { "pot": 3, "label": "K3", "note": "Pot bank CC23", "value": 40 },
         { "pot": 4, "label": "K4", "note": "Pot bank CC24", "value": 80 },
         { "pot": 5, "label": "K5", "note": "Pot bank CC7", "value": 120 }
       ],
-      "encoder": { "note": "Turn = select step param; AUX+turn = edit", "press": "Toggle select/edit" },
-      "screen": { "note": "5-seg CC meter on top row; step editor below", "text": "▔▔ ▔▔▔ ▔ ▔▔▔▔ ▔▔\nSTEP p2/4 VEL s13" }
+      "encoder": { "note": "Turn = select param; AUX+turn = edit", "press": "Toggle select/edit" },
+      "screen": { "note": "5-seg CC meter; mode + page", "text": "▔▔ ▔▔▔ ▔ ▔▔▔▔ ▔▔\nSTEP p2 mode:NOTE" }
     },
     {
       "state": 3,
-      "name": "Step + F3 — structure layer",
-      "notes": "Holding F3 (F1+F2, keys 1 & 2 lit LTCYAN/MINT) opens the structure layer. Tap PAGE keys 3-6 to set which pages loop (tap one = only it; tap two = inclusive range) — here pages 1&4 => 1-2-3-4 all active (GREEN). Tap STEP keys to set the CURRENT page's length — here length=12, so keys 23-26 (steps 13-16) go dark.",
+      "name": "Step — hold a step (value palette 1-10)",
+      "notes": "Holding step 4 (key15, WHITE) with Note mode active: the TOP ROW keys 1-10 become the note palette. Chromatic from C in the current octave: 1=C(root, periwinkle), 2=C#, 3=D, 4=D#, 5=E, 6=F, 7=F#(this step's note, LTYELLOW), 8=G, 9=G#, 10=A; in-scale mode would show only scale notes. Tap a key to set the step's note. Press AUX (while holding) = reset the step to the mode default. Turning a pot-bank knob still P-Locks a CC.",
+      "leds": [
+        "#000000",
+        "#a2a2ff", "#000090", "#000090", "#000090", "#000090", "#000090", "#ffff80", "#000090", "#000090", "#000090",
+        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#ffffff", "#00004d", "#a8a8ff", "#00004d",
+        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff"
+      ],
+      "keyNotes": {
+        "1": "Value = C (root)",
+        "7": "Value = F# — this step's current note (LTYELLOW)",
+        "10": "Value = A (last of 10)",
+        "15": "Held step (WHITE). Press AUX = reset to default"
+      },
+      "pots": [
+        { "pot": 1, "label": "K1", "note": "Pot bank CC21 (turn = P-Lock this step)", "value": 100 },
+        { "pot": 2, "label": "K2", "note": "Pot bank CC22", "value": 64 },
+        { "pot": 3, "label": "K3", "note": "Pot bank CC23", "value": 40 },
+        { "pot": 4, "label": "K4", "note": "Pot bank CC24", "value": 80 },
+        { "pot": 5, "label": "K5", "note": "Pot bank CC7", "value": 120 }
+      ],
+      "encoder": { "note": "Optional fine-tune of the value while held", "press": "" },
+      "screen": { "note": "Step value", "text": "NOTE  step4\n= F#4  (dflt A4)" }
+    },
+    {
+      "state": 4,
+      "name": "Step — hold a mode key (set default 11-20)",
+      "notes": "Holding the Note mode key (key3, bright) sets the mode's DEFAULT value on keys 11-20 (the value used by steps with no explicit override). Same 10-note palette, now on the low row: 11=C(root), 16=current default note (LTYELLOW), etc. Keys 21-26 unused. Other mode keys stay dim on the top row.",
+      "leds": [
+        "#000000", "#000000", "#000000",
+        "#ff8000", "#4c4d00", "#264d00", "#004c4d", "#00004d", "#26004d", "#4d004c", "#4d0026",
+        "#a2a2ff", "#000090", "#000090", "#000090", "#000090", "#ffff80", "#000090", "#000090",
+        "#000090", "#000090", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"
+      ],
+      "keyNotes": {
+        "3": "Note mode — HELD (bright), setting its default",
+        "11": "Default = C (root)",
+        "16": "Default = current default note (LTYELLOW)",
+        "20": "Default value palette ends at key 20"
+      },
+      "pots": [
+        { "pot": 1, "label": "K1", "note": "Pot bank CC21", "value": 100 },
+        { "pot": 2, "label": "K2", "note": "Pot bank CC22", "value": 64 },
+        { "pot": 3, "label": "K3", "note": "Pot bank CC23", "value": 40 },
+        { "pot": 4, "label": "K4", "note": "Pot bank CC24", "value": 80 },
+        { "pot": 5, "label": "K5", "note": "Pot bank CC7", "value": 120 }
+      ],
+      "encoder": { "note": "Optional fine-tune of the default", "press": "" },
+      "screen": { "note": "Mode default", "text": "NOTE default\n= A4" }
+    },
+    {
+      "state": 5,
+      "name": "Step + F3 — structure (pages / length)",
+      "notes": "Holding F3 (F1+F2, keys 1&2 LTCYAN/MINT) opens the structure layer, temporarily replacing the mode row. Tap PAGE keys 3-6 = which pages loop (tap one = only it; tap two = inclusive range) — here 1&4 => 1-2-3-4 active (GREEN). Tap STEP keys = current page length — here 12, so keys 23-26 dark. (Page selection for editing also lives here — see FORM_REDESIGN.md 9.)",
       "leds": [
         "#000000", "#80ffff", "#00ff80",
         "#00ff00", "#00ff00", "#00ff00", "#00ff00", "#000000", "#000000", "#000000", "#000000",
-        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#ff00ff", "#00004d",
+        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff", "#00004d",
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#000000", "#000000", "#000000", "#000000"
       ],
       "keyNotes": {
@@ -124,34 +174,9 @@
       "screen": { "note": "Structure", "text": "PLAY 1-2-3-4\np2 len 12" }
     },
     {
-      "state": 4,
-      "name": "Step — P-Lock (hold step + knob)",
-      "notes": "Holding step 6 (key17, WHITE = held) and turning a pot-bank knob locks a CC value on that step (independent of the VEL/LEN/CHANCE mode on keys 7-9). The locked SLOT is stored; the CC# follows the track's pot bank at playback (bank1 K1=CC21 here). Release and the step shows MAGENTA. OLED lists locked slots -> resolved CC#/value.",
-      "leds": [
-        "#000000", "#000000", "#000000",
-        "#202020", "#ffffff", "#202020", "#202020", "#ff8000", "#004c4d", "#4c4d00", "#000000",
-        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#ffffff", "#00004d",
-        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff"
-      ],
-      "keyNotes": {
-        "4": "Page 2 (current)",
-        "7": "Edit-mode VEL (active)",
-        "17": "Held step (WHITE) — turning a knob P-Locks a CC here"
-      },
-      "pots": [
-        { "pot": 1, "label": "K1", "note": "LOCKED -> CC21 = 100 (via track bank1)", "value": 100 },
-        { "pot": 2, "label": "K2", "note": "Pot bank CC22 (unlocked)", "value": null },
-        { "pot": 3, "label": "K3", "note": "Pot bank CC23 (unlocked)", "value": null },
-        { "pot": 4, "label": "K4", "note": "Pot bank CC24 (unlocked)", "value": null },
-        { "pot": 5, "label": "K5", "note": "Pot bank CC7 (unlocked)", "value": null }
-      ],
-      "encoder": { "note": "Turn = step params (active mode)", "press": "Toggle select/edit" },
-      "screen": { "note": "P-Lock", "text": "Step6 P-Lock\nK1 CC21=100" }
-    },
-    {
-      "state": 5,
+      "state": 6,
       "name": "Notes view (chord/note entry)",
-      "notes": "Keyboard STARTS at F4 (key15). Playable piano = keys 3-10 (sharps) + 15-26 (naturals) = F4-C6. C major example: roots (C5=19,C6=26) periwinkle, in-scale whites dim blue, out-of-scale sharps off. Current step chord C5-E5-G5 lit LTYELLOW (19/21/23). Key1(F1)=copy step, Key2(F2)=paste step; hold F1+F2=jump-to-step. Key11=prev step, Key12=next step (one per click, DKBLUE), Key13=unused, Key14=clear (DKRED). Live MIDI audition on key-hold when stopped. OLED: 5-seg CC meter + 16 step-boxes + page number.",
+      "notes": "Full chord/note editor (deeper than the Step Note mode). Keyboard STARTS at F4 (key15): piano = keys 3-10 (sharps) + 15-26 (naturals), F4-C6. C major example: roots (C5=19,C6=26) periwinkle, in-scale whites dim blue, out-of-scale sharps off. Chord C5-E5-G5 lit LTYELLOW. F1(1)=copy step, F2(2)=paste step; hold F1+F2=jump-to-step. Key11=prev, Key12=next (one per click), Key13=unused, Key14=clear. Live MIDI audition on hold when stopped. OLED: 5-seg CC meter + 16 step-boxes + page number.",
       "leds": [
         "#000000",
         "#004c4d", "#264d00", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
@@ -159,16 +184,13 @@
         "#ffff80", "#000090", "#ffff80", "#000090", "#ffff80", "#000090", "#000090", "#a2a2ff"
       ],
       "keyNotes": {
-        "1": "F1 = copy step (hold F1+F2 = jump-to-step overlay)",
+        "1": "F1 = copy step (hold F1+F2 = jump-to-step)",
         "2": "F2 = paste step",
-        "11": "Prev step (one per click)",
-        "12": "Next step (one per click)",
+        "11": "Prev step",
+        "12": "Next step",
         "14": "Clear step",
         "15": "F4 — keyboard starts here",
-        "19": "C5 — chord note (LTYELLOW), also scale root",
-        "21": "E5 — chord note",
-        "23": "G5 — chord note",
-        "26": "C6 — scale root (periwinkle)"
+        "19": "C5 — chord note / root"
       },
       "pots": [
         { "pot": 1, "label": "K1", "note": "Pot bank CC21", "value": 100 },
@@ -177,13 +199,13 @@
         { "pot": 4, "label": "K4", "note": "Pot bank CC24", "value": 80 },
         { "pot": 5, "label": "K5", "note": "Pot bank CC7", "value": 120 }
       ],
-      "encoder": { "note": "Turn = change step (0-63); step flashes briefly on change", "press": "Toggle select/edit" },
-      "screen": { "note": "Top pixel row = 5-seg CC meter; 16 step-boxes (filled=current) + page number over the keyboard render", "text": "▔▔ ▔▔▔ ▔ ▔▔▔▔ ▔▔\n▣▢▢▢▢▢▢▢▢▢▢▢▢▢▢▢ p1" }
+      "encoder": { "note": "Turn = change step (0-63); step flashes on change", "press": "Toggle select/edit" },
+      "screen": { "note": "CC meter + step-boxes + page", "text": "▔▔ ▔▔▔ ▔ ▔▔▔▔ ▔▔\n▣▢▢▢▢▢▢▢▢▢▢▢▢▢▢▢ p1" }
     },
     {
-      "state": 6,
+      "state": 7,
       "name": "Transpose view",
-      "notes": "Per-step transpose lane within the page length (len=9 here; 20-26 off): TZERO #0000ff = 0, THIGH #8080ff = up, TLOW #000020 = down. Shortcuts: key3 random-arm, key9 randomize, key10 clear, keys1/2 = F1/F2 copy/cut.",
+      "notes": "Per-step transpose lane within the page length (len=9; 20-26 off): TZERO #0000ff=0, THIGH #8080ff=up, TLOW #000020=down. Shortcuts: key3 random-arm, key9 randomize, key10 clear, keys1/2 = F1/F2 copy/cut.",
       "leds": [
         "#000000",
         "#80ffff", "#00ff80", "#80ffff", "#000000", "#000000", "#000000", "#000000", "#000000", "#ff8000", "#ff0000",
@@ -207,9 +229,9 @@
       "screen": { "note": "Transpose", "text": "TRANSPOSE\nLen9  +2" }
     },
     {
-      "state": 7,
+      "state": 8,
       "name": "AUX layer (held) — same everywhere",
-      "notes": "Holding AUX shows one consistent control layer in every view, and the CURRENT VIEW flashes (Step = key14, WHITE flashing). key0=AUX (RED). 1=Play/Pause (GREEN), 2=Reset (ORANGE). 11/12 = octave -/+. 13-16 = views Mix/Step/Transpose/Notes (current flashes). No pot-bank shortcut — pot bank is set in the track menu.",
+      "notes": "Holding AUX shows one control layer in every view; the CURRENT VIEW flashes (Step=key14, WHITE). key0=AUX(RED). 1=Play/Pause(GREEN), 2=Reset(ORANGE). 11/12=octave -/+. 13-16 = views Mix/Step/Transpose/Notes. No pot-bank shortcut (bank set in track menu). (While holding a STEP, AUX instead resets that step to the mode default — see state 3.)",
       "leds": [
         "#ff0000",
         "#00ff00", "#ff8000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
@@ -228,7 +250,7 @@
         "16": "View: Notes"
       },
       "pots": [
-        { "pot": 1, "label": "K1", "note": "Pot bank (unchanged while AUX held)", "value": 100 },
+        { "pot": 1, "label": "K1", "note": "Pot bank (unchanged)", "value": 100 },
         { "pot": 2, "label": "K2", "note": "Pot bank", "value": 64 },
         { "pot": 3, "label": "K3", "note": "Pot bank", "value": 40 },
         { "pot": 4, "label": "K4", "note": "Pot bank", "value": 80 },
