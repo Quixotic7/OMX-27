@@ -92,8 +92,10 @@ Mix is for **mixing / performance**, not step editing.
 - **Keys 3–10 = the 8 tracks** (per-track `seqColors`; selected WHITE, muted RED, empty
   dim, fired-this-step INDIGO). **Tap** = select · **double-click** = enter Step view ·
   **hold** = per-track controls on the low row (below).
-- **Low row (11–26) = live keyboard:** tapping a key **plays its note** (audition / jam) —
-  it does *not* open the note editor here. It also shows the selected track's pattern.
+- **Low row (11–26) = the selected track's pattern.** Tapping a step **plays that step's
+  programmed notes** — you're jamming the *sequence* (triggering the steps you wrote), not
+  a chromatic keyboard. It does not open the note editor. (For live chromatic playing, use
+  the **MI view**, §4.6.)
 - **F1 = Mute, F2 = Solo** (modifiers): hold **F1 + tap a track** = mute; hold **F2 + tap a
   track** = solo. Hold **F1 + tap a step** = toggle that single step's mute.
 - **F3 (hold F1+F2) = track rate:** top row 3–10 = rate options for the selected track;
@@ -197,8 +199,9 @@ for **live playing** — jam over the running sequencer without touching the pat
 - Full piano across keys **1–26** (scale-aware colors: roots periwinkle, in-scale dim
   blue, out-of-scale off; pressed keys white). Octave = AUX + 11/12.
 - Plays the **selected track's** channel/pot-bank; with **REC armed** (§7) it also records.
-- No step editing here — it's the performance keyboard. (Distinct from Notes-view chord
-  entry and the Mix low-row keyboard.)
+- No step editing here — it's the performance keyboard. It's the **only chromatic
+  keyboard for live play**: Notes-view is for chord *entry* into steps, and the Mix low-row
+  triggers the *programmed steps* (not chromatic).
 
 → `form_mi.json`.
 
@@ -262,9 +265,9 @@ Play notes into the sequencer while it runs.
 
 - **Arm** with **AUX + 3** (latching; the key is red while armed). A REC indicator shows on
   the OLED.
-- **While armed + playing,** notes you play — on the **Notes-view keyboard** or the
-  **Mix low-row keyboard** — are **recorded into the selected track**, **quantized to the
-  nearest step** on the current page. Multiple notes on one step = a chord.
+- **While armed + playing,** notes you play — on the **MI view** or the **Notes-view
+  keyboard** — are **recorded into the selected track**, **quantized to the nearest step**
+  on the current page. Multiple notes on one step = a chord.
 - **Rec mode (AUX + 4): overdub** (default — adds to a step's existing notes) or
   **replace** (overwrites the step).
 - Live audition still sounds each note as you play it (§4.5 audition also works when

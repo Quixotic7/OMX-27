@@ -39,7 +39,7 @@
     {
       "state": 1,
       "name": "Mix view (mixing / performance)",
-      "notes": "Mix = mixing/performance, not step editing. Keys 3-10 = the 8 tracks in their track colors (seqColors): selected=WHITE, muted=RED, empty=dim, fired=INDIGO. Track: tap=select, double-click=enter Step, HOLD=per-track controls on the low row (see form_mix.json). F1=Mute, F2=Solo modifiers (F1/F2 + tap a track); F3(F1+F2)=track rate. LOW ROW (11-26): tapping a key PLAYS its note (jam/audition), and shows the selected track's pattern; hold F1 + a step = toggle that step's mute. Knobs = track pot bank.",
+      "notes": "Mix = mixing/performance, not step editing. Keys 3-10 = the 8 tracks in their track colors (seqColors): selected=WHITE, muted=RED, empty=dim, fired=INDIGO. Track: tap=select, double-click=enter Step, HOLD=per-track controls on the low row (see form_mix.json). F1=Mute, F2=Solo modifiers (F1/F2 + tap a track); F3(F1+F2)=track rate. LOW ROW (11-26) = the selected track's pattern: tapping a step PLAYS that step's PROGRAMMED notes (jam the sequence, not a chromatic keyboard); hold F1 + a step = toggle that step's mute. (Live chromatic play = MI view.) Knobs = track pot bank.",
       "leds": [
         "#000000", "#000000", "#000000",
         "#ffffff", "#ffff00", "#00ff00", "#ff0000", "#00ffff", "#0000ff", "#202020", "#202020",
@@ -50,7 +50,7 @@
         "3": "Track 1 — selected (WHITE). Double-click=open Step; hold=controls; F1+tap=mute; F2+tap=solo",
         "6": "Track 4 — muted (RED)",
         "9": "Track 7 — empty (dim)",
-        "11": "Low row = live keyboard (tap plays); shows pattern; F1+tap=step mute",
+        "11": "Low row = selected track's pattern; tap a step = play its programmed notes; F1+tap=step mute",
         "15": "Playhead"
       },
       "pots": [
