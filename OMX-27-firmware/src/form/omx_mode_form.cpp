@@ -1252,6 +1252,16 @@ void OmxModeForm::onDisplayUpdate()
 		return;
 	}
 
+	// Mix: while a track is held (no F-modifier), show its status (number, mute/solo, play mode).
+	if (formView_ == FORMVIEW_MIX && heldTrackKey_ >= 0 && omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE)
+	{
+		auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
+		static const char *kPlayModes[5] = {"FWD", "REV", "FWD PONG", "REV PONG", "RANDOM"};
+		uint8_t pm = mixPlayModeIndex(omni->trackPtr());
+		omxDisp.dispTrackHold(heldTrackKey_ + 1, omni->getMute(), omni->getSolo(), kPlayModes[pm]);
+		return;
+	}
+
 	auto selMachine = getSelectedMachine();
 
 	if(selMachine->doesConsumeDisplay())

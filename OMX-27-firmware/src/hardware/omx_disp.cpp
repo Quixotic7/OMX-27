@@ -532,6 +532,44 @@ static void drawKeyBoxRow(uint8_t count, const bool *fill, uint8_t y)
 	}
 }
 
+void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, const char *playMode)
+{
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+
+	// Title: TRACK n
+	u8g2_display.setFont(FONT_VALUES);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	char buf[16];
+	snprintf(buf, sizeof(buf), "TRACK %u", (unsigned)trackNum);
+	u8g2centerText(buf, 0, 11, 128, 8);
+
+	// State cells: MUTE / SOLO (filled when active) + play-mode label.
+	u8g2_display.setFont(FONT_LABELS);
+	const struct { const char *s; int x, w; bool active; } cells[3] = {
+		{"MUTE", 3, 32, muted},
+		{"SOLO", 39, 32, soloed},
+		{playMode, 75, 50, false},
+	};
+	for (uint8_t i = 0; i < 3; i++)
+	{
+		if (cells[i].active)
+		{
+			display.fillRect(cells[i].x, 19, cells[i].w, 12, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			display.drawRect(cells[i].x, 19, cells[i].w, 12, WHITE);
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		u8g2centerText(cells[i].s, cells[i].x, 28, cells[i].w, 8);
+	}
+}
+
 void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool *topFill, uint8_t topCount,
 								   const char *bottomLabel, const bool *bottomFill, uint8_t bottomCount)
 {
