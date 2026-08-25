@@ -186,6 +186,7 @@ private:
 	void onKeyUpdatePatterns(OMXKeypadEvent e);
 	void onDisplayPatterns();
 	void onDisplayMI();
+	void onKeyUpdateMix(OMXKeypadEvent e); // Mix-view track keys (mute/solo/select/open Step)
 
 	static const uint8_t kNumMachines = 8;
 

@@ -290,19 +290,13 @@ void OmxModeForm::setFormView(uint8_t view)
 	omxDisp.setDirty();
 }
 
-// While AUX is held, keys 13-18 are the view selector: the pending selection flashes,
-// the current (committed) view sits half-lit, the rest are dim.
+// While AUX is held, keys 13-18 are the view selector: the selected (pending) view is
+// lit WHITE, the rest dim. Whatever's lit is the view you'll drop into on release.
 void OmxModeForm::updateAuxViewLEDs()
 {
-	bool blink = omxLeds.getBlinkState();
 	for (uint8_t v = 0; v < FORMVIEW_COUNT; v++)
 	{
-		uint32_t col = LOWWHITE;
-		if (v == pendingView_)
-			col = blink ? WHITE : LEDOFF; // pending selection flashes
-		else if (v == formView_)
-			col = HALFWHITE; // the currently-active view
-		strip.setPixelColor(13 + v, col);
+		strip.setPixelColor(13 + v, v == pendingView_ ? WHITE : LOWWHITE);
 	}
 }
 
@@ -337,6 +331,50 @@ void OmxModeForm::onDisplayPatterns()
 void OmxModeForm::onDisplayMI()
 {
 	omxDisp.dispGenericModeLabelDoubleLine("MI VIEW", "(todo)", 0, 0);
+}
+
+// Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
+// single tap = select. (Low-row keys still go to the machine's step editor.)
+void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
+{
+	uint8_t thisKey = e.key();
+	if (thisKey < 3 || thisKey >= 11)
+		return;
+	uint8_t track = thisKey - 3;
+
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1) // Mute
+	{
+		if (!e.held() && e.down())
+		{
+			selectMachine(track);
+			auto m = getSelectedMachine();
+			m->setMute(!m->getMute());
+			omxDisp.displayMessage(m->getMute() ? "MUTE" : "UNMUTE");
+		}
+		return;
+	}
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2) // Solo
+	{
+		if (!e.held() && e.down())
+		{
+			selectMachine(track);
+			auto m = getSelectedMachine();
+			m->setSolo(!m->getSolo());
+			omxDisp.displayMessage(m->getSolo() ? "SOLO" : "UNSOLO");
+		}
+		return;
+	}
+
+	// No modifier: double-click opens Step view; single tap selects the track.
+	if (!e.down() && e.clicks() == 2)
+	{
+		selectMachine(track);
+		setFormView(FORMVIEW_STEP);
+	}
+	else if (!e.held() && e.down())
+	{
+		selectMachine(track);
+	}
 }
 
 void OmxModeForm::updateShortcutMode()
@@ -811,6 +849,12 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	{
 		return; // stub: swallow keys
 	}
+	// Mix view: intercept the track keys (3-10); low-row keys fall through to the machine.
+	if (formView_ == FORMVIEW_MIX && !keyConsumed && thisKey >= 3 && thisKey < 11)
+	{
+		onKeyUpdateMix(e);
+		return;
+	}
 
 	if(selMachine->doesConsumeKeys())
 	{
@@ -1026,7 +1070,9 @@ void OmxModeForm::updateLEDs()
 		for (uint8_t i = 0; i < kNumMachines; i++)
 		{
 			bool isMuted = machines_[i]->getMute();
-			int color = isMuted ? RED : getMachineColor(i);
+			// Mix view: per-track colours (seqColors). Other views keep the machine colour.
+			int trackColor = (formView_ == FORMVIEW_MIX) ? seqColors[i] : getMachineColor(i);
+			int color = isMuted ? RED : trackColor;
 
 			if(i == selectedMachine_)
 			{
