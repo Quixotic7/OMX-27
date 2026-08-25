@@ -171,24 +171,36 @@ active mode is lit bright, the others dim:
   **F2 pastes it back** if you didn't mean it (§3.5). _(Double-click is no longer used —
   it was axed to remove the click-vs-hold collision.)_
 - **Hold a step (11–26)** → the **top row keys 1–10 become the value palette** for the
-  current mode; tap one to set that step's value. **Press AUX while holding = reset that
-  step to the mode's default** (AUX has no other job while a step is held). Turning a
-  pot-bank knob while holding still lays a CC P-Lock (§3).
+  current mode; tap to set that step's value. **Press AUX while holding = reset that step
+  to the mode's default** (AUX has no other job while a step is held). Turning a pot-bank
+  knob while holding still lays a CC P-Lock (§3).
+- **Fine values via encoder:** the 10 keys are *coarse*. For a precise value (and for
+  **microtiming**, which has no key palette), select that parameter in the **track menu**
+  and **turn the encoder while holding the step**.
 - **Hold a mode key (3–10)** → **keys 11–20 become the value palette for the mode's
   DEFAULT** value (what steps use until given an explicit value); tap one to set it.
-- **F1 / F2 = copy / paste the selected step** (§3.5). To reach the Notes chord editor,
-  switch to the **Notes view** (AUX + 16).
+- **F1 / F2 = copy / paste the selected step** (§3.5). The full chord editor is the
+  **Notes view** (AUX + 16).
 
 **The value palette (keys 1–10) per mode:**
-- **Note** — 10 notes: **chromatic** = 10 notes from **C** in the current octave;
-  **scale on** = the current scale's notes only.
-- **Velocity / Step Length / Chance** — the 10 keys span the value range.
+- **Note** — chord entry works exactly like today's note editor: while holding the step,
+  the **currently-held note keys define the step's notes** — hold several for a **chord**,
+  and a **fresh press (from no keys held) replaces**. (C-major example: hold step, hold
+  key 1 = C, add 3 = E, add 5 = G → a C-major chord; release all, press 3 alone → the step
+  becomes just E.) 10 notes: chromatic = 10 from **C** in the octave, or scale-on = the
+  scale's notes.
+- **Velocity** — 10 linear levels (key 10 = 127, key 1 ≈ 12; menu+encoder for exact).
+- **Step Length** — **0.5 · 0.75 · 1 · 2 · 4 · 6 · 8 · 16 · 32 · 64** (menu+encoder for
+  precise).
+- **Chance** — 10 probability levels (menu+encoder for exact).
 - **Repeat** — **1 · 2 · 3 (quick triplet) · 4** (ratchet count).
 - **Math (conditional trig)** — **key 1 = Fill · key 2 = !Fill**; **keys 3–6 = ratio A**
   (1–4) · **keys 7–10 = ratio B** (1–4). E.g. key 3 + key 10 = **1:4** (fires 1 of every 4
   loops).
 - **Function** — the **current OMNI step functions** (RSET / reverse / forward / pong /
-  rand-jump / rand / jump-to-step). **MIDI FX** — the track's MIDI-FX slots.
+  rand-jump / rand / jump-to-step).
+- **MIDI FX** — **Off + 5 FX slots** (same MIDI-FX as elsewhere on the OMX). Per-step, so
+  different steps can route through different FX slots (and it's P-lockable — true weirdness).
 
 **Pages** are on the **AUX layer** (keys 6–9 — select / solo / loop-range, §6);
 **F3 (F1+F2) = structure layer** sets **page length** (tap steps, §5).
@@ -234,7 +246,9 @@ A **pattern** is a snapshot of the whole sequencer — all 8 tracks' step data p
 settings (pot bank, play mode, pages/length, rate). Switch between patterns to build
 sections (verse / chorus / fill). **One project only** (the device has no room for
 multiple), and the **pattern count is RAM-limited** — up to 16 on the low row, but may end
-up fewer depending on what fits (see §10).
+up fewer. Counts are likely **platform-dependent**: **OMX-27 V3** has the most RAM;
+**Teensy 3.1 / 4** are tighter, so patterns and/or the number of **pages / tracks** may be
+trimmed per build to fit (see §10). We won't know the real ceilings until we try.
 
 - **Low row (keys 11–26) = the pattern slots.** Current pattern = WHITE; patterns with
   content = dim color; queued = blinking; empty = off. **Tap a slot to switch.**
@@ -332,8 +346,11 @@ Play notes into the sequencer while it runs.
   stopped, for auditioning without recording).
 - Recorded **velocity** = the track's current default (the OMX keys aren't velocity-
   sensitive) — tweak later in Velocity mode.
-- Open: **count-in / metronome**, and whether a **quantize-off** (free-timed) record is
-  wanted — see §10.
+- **Count-in:** if you start recording from a **stopped** transport, a **1-bar count-in**
+  plays first. Togglable in the **track menu**.
+- **Quantize-off (free-timed) record** rides on **per-step microtiming** — each recorded
+  note keeps a micro-offset from its step. Microtiming has no key palette; it's edited by
+  holding the step + the **menu param + encoder** (§4.2).
 
 ---
 
@@ -394,16 +411,19 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
     into the selected track (§7).
 15. **MI view** → a 6th view (AUX + 18); the MI-mode keyboard for live playing (§4.6).
 16. **OLED** → CC meter + a **4-line page indicator** (2 px = active page), every view (§2).
+17. **Note-mode chords** = the current note-editor logic: held note keys define the step;
+    hold several = chord, a fresh press replaces (§4.2).
+18. **Value granularity** → 10 keys are coarse; **menu param + encoder while holding the
+    step** gives exact values. Velocity = 10 linear (10→127); Step Length = 0.5/0.75/1/2/4/
+    6/8/16/32/64. **Microtiming** is menu+encoder only (no keys) → enables quantize-off (§7).
+19. **MIDI FX** = **Off + 5 slots**, per-step and P-lockable (§4.2).
+20. **Count-in** = 1 bar when starting from stopped; menu toggle (§7).
 
 ### Still open
-- **Pattern count** — how many patterns actually fit in RAM (target 16). And **switch-style
-  default** + **chaining / song mode** (builds on "Chained").
-- **Live-rec extras** — count-in / metronome; a **quantize-off** free-record option.
-- **Note-mode chords** — a step is polyphonic; does the 10-note palette add or replace, and
-  how does it build a chord vs. the Notes view?
-- **10-value granularity** — velocity/chance/length across only 10 keys is coarse; add
-  encoder fine-tune while a step is held?
-- **Repeat/MIDI-FX ranges** — MIDI-FX slot count; **P-Lock color MAGENTA** — confirm.
+- **RAM ceilings / per-platform trims** — real pattern / page / track counts per build
+  (V3 fullest; Teensy 3.1 / 4 tighter). Decide the trims once we measure.
+- **Pattern extras** — default switch-style; **chaining / song mode** (builds on "Chained").
+- **P-Lock color MAGENTA** — confirm.
 
 ---
 
