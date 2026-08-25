@@ -518,23 +518,43 @@ void OmxDisp::dispGenericModeLabel(const char *label, uint8_t numPages, int8_t s
 	}
 }
 
-void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const char *bottomLabel)
+void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool topFill[10],
+								   const char *bottomLabel, const bool bottomFill[16])
 {
+	const uint8_t bw = 6; // box width
+	const uint8_t bh = 4; // box height (same for both rows)
+	const uint8_t pitch = 7;
+
 	display.fillRect(0, 0, 128, 32, BLACK);
 	u8g2_display.setFontMode(1);
-	u8g2_display.setFont(FONT_LABELS);
+	u8g2_display.setFont(FONT_CHAR16); // 6x12 — readable
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
 
-	// Top label, then 10 boxes for the top keys aligned to the bottom of the top half.
-	u8g2centerText(topLabel, 0, 3, 128, 8);
+	// Top label (y0-10), then 10 top-key boxes hugging the bottom of the top half (y11-14).
+	u8g2centerText(topLabel, 0, 0, 128, 11);
+	uint8_t topStartX = (128 - (10 * pitch - 1)) / 2;
 	for (uint8_t i = 0; i < 10; i++)
-		display.drawRect(10 + i * 11, 10, 8, 4, WHITE);
+	{
+		int x = topStartX + i * pitch;
+		if (topFill && topFill[i])
+			display.fillRect(x, 11, bw, bh, WHITE);
+		else
+			display.drawRect(x, 11, bw, bh, WHITE);
+	}
 
-	// 16 boxes for the bottom keys aligned to the top of the bottom half, then bottom label.
+	// 16 bottom-key boxes hugging the top of the bottom half (y16-19; 1px gap at y15),
+	// then the bottom label (y21-31).
+	uint8_t botStartX = (128 - (16 * pitch - 1)) / 2;
 	for (uint8_t i = 0; i < 16; i++)
-		display.drawRect(8 + i * 7, 18, 6, 4, WHITE);
-	u8g2centerText(bottomLabel, 0, 25, 128, 8);
+	{
+		int x = botStartX + i * pitch;
+		if (bottomFill && bottomFill[i])
+			display.fillRect(x, 16, bw, bh, WHITE);
+		else
+			display.drawRect(x, 16, bw, bh, WHITE);
+	}
+	u8g2centerText(bottomLabel, 0, 21, 128, 11);
 }
 
 void OmxDisp::dispGenericModeLabelDoubleLine(const char *label1, const char *label2, uint8_t numPages, int8_t selectedPage)
