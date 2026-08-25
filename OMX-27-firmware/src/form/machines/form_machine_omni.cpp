@@ -1181,12 +1181,10 @@ namespace FormOmni
     {
         // Serial.println("onPotChanged: " + String(potIndex) + " " + String(prevValue) + " " + String(newValue));
 
-        // This guy is always setting the mode
+        // v2: K5 no longer selects the UI mode — views live on the AUX layer (AUX+13-18).
+        // (Knobs become pot banks in a later step.)
         if (potIndex == 4)
         {
-            uint8_t newUIMode = omxFormGlobal.potPickups[4].UpdatePotGetMappedValue(prevValue, newValue, 0, OMNIUIMODE_COUNT - 1);
-            changeUIMode(newUIMode, true);
-            omxFormGlobal.potPickups[4].DisplayLabel(kUIModeMsg[omniUiMode_]);
             return;
         }
 

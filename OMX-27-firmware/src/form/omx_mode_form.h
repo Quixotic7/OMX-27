@@ -176,7 +176,11 @@ public:
 private:
 	// ---- v2 shell: view router ----
 	uint8_t formView_ = FORMVIEW_MIX;
+	// While AUX is held, tapping a view key selects a pending view (preview + message);
+	// the switch is committed on AUX release so the AUX overlay stays up while you browse.
+	uint8_t pendingView_ = FORMVIEW_MIX;
 	void setFormView(uint8_t view);
+	void updateAuxViewLEDs(); // paint the view selector (keys 13-18) on the AUX overlay
 	// Container-rendered views:
 	void updatePatternsLEDs();
 	void onKeyUpdatePatterns(OMXKeypadEvent e);

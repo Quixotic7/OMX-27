@@ -290,6 +290,22 @@ void OmxModeForm::setFormView(uint8_t view)
 	omxDisp.setDirty();
 }
 
+// While AUX is held, keys 13-18 are the view selector: the pending selection flashes,
+// the current (committed) view sits half-lit, the rest are dim.
+void OmxModeForm::updateAuxViewLEDs()
+{
+	bool blink = omxLeds.getBlinkState();
+	for (uint8_t v = 0; v < FORMVIEW_COUNT; v++)
+	{
+		uint32_t col = LOWWHITE;
+		if (v == pendingView_)
+			col = blink ? WHITE : LEDOFF; // pending selection flashes
+		else if (v == formView_)
+			col = HALFWHITE; // the currently-active view
+		strip.setPixelColor(13 + v, col);
+	}
+}
+
 void OmxModeForm::updatePatternsLEDs()
 {
 	for (uint8_t i = 0; i < 16; i++)
@@ -715,7 +731,17 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	{
 		if (thisKey == 0)
 		{
+			bool wasAux = midiSettings.midiAUX;
 			midiSettings.midiAUX = e.down();
+			if (e.down() && !wasAux)
+			{
+				pendingView_ = formView_; // start browsing from the current view
+			}
+			// v2 shell: on AUX release, commit the view you browsed to while holding AUX.
+			else if (wasAux && !e.down() && pendingView_ != formView_)
+			{
+				setFormView(pendingView_);
+			}
 			return;
 		}
 	}
@@ -749,9 +775,12 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 				}
 				keyConsumed = true;
 			}
-			else if (thisKey >= 13 && thisKey <= 18) // v2 shell: switch view
+			else if (thisKey >= 13 && thisKey <= 18) // v2 shell: preview view (commit on AUX release)
 			{
-				setFormView(thisKey - 13);
+				static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI"};
+				pendingView_ = thisKey - 13;
+				omxDisp.displayMessage(kViewNames[pendingView_]);
+				omxLeds.setDirty();
 				keyConsumed = true;
 			}
 		}
@@ -965,6 +994,7 @@ void OmxModeForm::updateLEDs()
 	{
 		uint8_t selMFXIndex = getSelectedMachine()->getSelectedMidiFX();
 		auxMacroManager_.UpdateAUXLEDS(selMFXIndex);
+		updateAuxViewLEDs(); // v2 shell: overlay the view selector on keys 13-18
 		return;
 	}
 
