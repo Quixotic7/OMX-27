@@ -1,0 +1,119 @@
+{
+  "format": "omx27-led-design",
+  "version": 1,
+  "device": "OMX-27",
+  "name": "FORM — container (machine select)",
+  "ledCount": 27,
+  "convention": "key 0 = AUX; keys 1-10 = black keys / F1(1) F2(2) + machine slots; keys 11-26 = white keys (16-step row). Colors are '#RRGGBB', '#000000' = off. These states show the FORM CONTAINER: the top-row machine picker and the SELECTMACHINE type picker. The lower 16 keys are painted by whichever machine is selected (see form_omni.json / form_euclid.json).",
+  "keyMap": [
+    { "key": 0,  "role": "aux",   "note": null, "name": "AUX" },
+    { "key": 1,  "role": "black", "note": 61, "name": "C#4" },
+    { "key": 2,  "role": "black", "note": 63, "name": "D#4" },
+    { "key": 3,  "role": "black", "note": 66, "name": "F#4" },
+    { "key": 4,  "role": "black", "note": 68, "name": "G#4" },
+    { "key": 5,  "role": "black", "note": 70, "name": "A#4" },
+    { "key": 6,  "role": "black", "note": 73, "name": "C#5" },
+    { "key": 7,  "role": "black", "note": 75, "name": "D#5" },
+    { "key": 8,  "role": "black", "note": 78, "name": "F#5" },
+    { "key": 9,  "role": "black", "note": 80, "name": "G#5" },
+    { "key": 10, "role": "black", "note": 82, "name": "A#5" },
+    { "key": 11, "role": "white", "note": 59, "name": "B3" },
+    { "key": 12, "role": "white", "note": 60, "name": "C4" },
+    { "key": 13, "role": "white", "note": 62, "name": "D4" },
+    { "key": 14, "role": "white", "note": 64, "name": "E4" },
+    { "key": 15, "role": "white", "note": 65, "name": "F4" },
+    { "key": 16, "role": "white", "note": 67, "name": "G4" },
+    { "key": 17, "role": "white", "note": 69, "name": "A4" },
+    { "key": 18, "role": "white", "note": 71, "name": "B4" },
+    { "key": 19, "role": "white", "note": 72, "name": "C5" },
+    { "key": 20, "role": "white", "note": 74, "name": "D5" },
+    { "key": 21, "role": "white", "note": 76, "name": "E5" },
+    { "key": 22, "role": "white", "note": 77, "name": "F5" },
+    { "key": 23, "role": "white", "note": 79, "name": "G5" },
+    { "key": 24, "role": "white", "note": 81, "name": "A5" },
+    { "key": 25, "role": "white", "note": 83, "name": "B5" },
+    { "key": 26, "role": "white", "note": 84, "name": "C6" }
+  ],
+  "notes": "FORM hosts up to 8 pluggable sequencer 'machines' in the 8 top-row slots (keys 3-10). Each slot's LED shows its machine TYPE color: empty=off, OMNI=orange (#ff8000), EUCL=cyan (#00ffff). The SELECTED slot is WHITE (or SALMON #ff8080 if muted); a MUTED slot is RED. When a machine fires a step it flashes INDIGO (#4b0082) on its slot key. Keys 0/1/2 = AUX / F1 / F2 (function keys, unlit in base). The bottom 16 keys belong to the selected machine. Interaction: tap slot = select; double-tap slot = mute; HOLD slot = enter the type picker (state 3); F1(hold key1)=copy machine, F2(hold key2)=cut/paste, F1+F2=F3 machine shortcut.",
+  "states": [
+    {
+      "state": 1,
+      "name": "Base — machine select (stopped)",
+      "notes": "Resting FORM view, transport stopped. Top row: slot0(key3)=selected OMNI=WHITE, slot1(key4)=OMNI=ORANGE, slot2(key5)=EUCL=CYAN, slot3(key6)=EUCL=CYAN, slot4(key7)=empty=off, slot5(key8)=OMNI muted=RED, slots6-7=empty. Bottom row shows the selected OMNI machine's step pattern (LTBLUE #a8a8ff = step has notes, DKBLUE #00004d = step in-length but empty).",
+      "leds": [
+        "#000000", "#000000", "#000000",
+        "#ffffff", "#ff8000", "#00ffff", "#00ffff", "#000000", "#ff0000", "#000000", "#000000",
+        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff",
+        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff"
+      ],
+      "keyNotes": {
+        "0": "AUX — hold for shortcut layer (octave, play/reset)",
+        "1": "F1 — hold to copy a machine",
+        "2": "F2 — hold to cut/paste a machine",
+        "3": "Selected machine slot (WHITE). Tap=select, double-tap=mute, hold=type picker",
+        "5": "EUCL machine (CYAN type color)",
+        "8": "Muted machine (RED)",
+        "11": "Step 1 of selected machine's 16-step row"
+      },
+      "pots": [
+        { "pot": 1, "label": "K1", "note": "OMNI: Page (1-4)", "value": 0 },
+        { "pot": 2, "label": "K2", "note": "OMNI: Zoom (1/2/4 bar)", "value": 0 },
+        { "pot": 3, "label": "K3", "note": "OMNI: cross-page apply", "value": 0 },
+        { "pot": 4, "label": "K4", "note": "OMNI: rate / play-mode", "value": 64 },
+        { "pot": 5, "label": "K5", "note": "OMNI: UI mode select", "value": 0 }
+      ],
+      "encoder": { "note": "Turn = select parameter; AUX+turn = edit value", "press": "Toggle select/edit mode" },
+      "screen": { "note": "OMNI track summary", "text": "OMNI  P1 Z1\nLen16 Ch1 120" }
+    },
+    {
+      "state": 2,
+      "name": "Base — playing (playhead + trigger flash)",
+      "notes": "Transport running. The selected OMNI machine fired a note THIS step, so its slot key3 flashes INDIGO (#4b0082, overrides the WHITE selected color for one step). On the step row the playhead sits on step 5 (key15), which has notes, so it shows WHITE. If the playhead landed on an empty/muted step it would show RED instead. Other slots keep their type colors.",
+      "leds": [
+        "#000000", "#000000", "#000000",
+        "#4b0082", "#ff8000", "#00ffff", "#00ffff", "#000000", "#ff0000", "#000000", "#000000",
+        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#ffffff", "#00004d", "#00004d", "#a8a8ff",
+        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff"
+      ],
+      "keyNotes": {
+        "3": "Selected machine flashing INDIGO because it triggered this step",
+        "15": "Playhead (WHITE = step fired). RED here would mean the playhead is on a silent step"
+      },
+      "pots": [
+        { "pot": 1, "label": "K1", "note": "OMNI: Page (1-4)", "value": 0 },
+        { "pot": 2, "label": "K2", "note": "OMNI: Zoom (1/2/4 bar)", "value": 0 },
+        { "pot": 3, "label": "K3", "note": "OMNI: cross-page apply", "value": 0 },
+        { "pot": 4, "label": "K4", "note": "OMNI: rate / play-mode", "value": 64 },
+        { "pot": 5, "label": "K5", "note": "OMNI: UI mode select", "value": 0 }
+      ],
+      "encoder": { "note": "Turn = select parameter; AUX+turn = edit value", "press": "Toggle select/edit mode" },
+      "screen": { "note": "Playing", "text": "OMNI  P1 Z1\n> step 5/16" }
+    },
+    {
+      "state": 3,
+      "name": "Select machine (type picker)",
+      "notes": "Reached by HOLDING a top-row slot key (here slot0/key3, still WHITE). The lower keys become a machine-TYPE menu: key11=NONE (off, blinks DKRED #800000 when it is the current type), key12=OMNI (ORANGE), key13=EUCL (CYAN). The current type's key blinks; here the slot is OMNI so key12 pulses ORANGE<->off. Press 11/12/13 to set the type; release the held slot key to return to base. Top row still shows the other slots.",
+      "leds": [
+        "#000000", "#000000", "#000000",
+        "#ffffff", "#ff8000", "#00ffff", "#00ffff", "#000000", "#ff0000", "#000000", "#000000",
+        "#000000", "#ff8000", "#00ffff", "#000000", "#000000", "#000000", "#000000", "#000000",
+        "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"
+      ],
+      "keyNotes": {
+        "3": "Held slot being retyped (still shown WHITE = selected)",
+        "11": "Set type = NONE (empty). Blinks DKRED when NONE is current",
+        "12": "Set type = OMNI (ORANGE) — current type, blinking",
+        "13": "Set type = EUCL (CYAN)"
+      },
+      "pots": [
+        { "pot": 1, "label": "K1", "note": "(inactive in picker)", "value": null },
+        { "pot": 2, "label": "K2", "note": "(inactive)", "value": null },
+        { "pot": 3, "label": "K3", "note": "(inactive)", "value": null },
+        { "pot": 4, "label": "K4", "note": "(inactive)", "value": null },
+        { "pot": 5, "label": "K5", "note": "(inactive)", "value": null }
+      ],
+      "encoder": { "note": "(inactive in picker)", "press": "(inactive)" },
+      "screen": { "note": "Machine Type picker", "text": "Machine Type\nOMNI" }
+    }
+  ]
+}
