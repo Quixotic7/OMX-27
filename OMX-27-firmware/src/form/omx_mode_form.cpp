@@ -855,12 +855,8 @@ void OmxModeForm::onKeyHeldUpdate(OMXKeypadEvent e)
 	{
 	case FORMMODE_BASE:
 	{
-		if (thisKey >= 3 && thisKey < 11)
-		{
-			selectMachine(thisKey - 3);
-			changeFormMode(FORMMODE_SELECTMACHINE);
-			return;
-		}
+		// v2 single-engine: hold-a-track no longer opens the machine-type picker
+		// (every track is the OMNI engine). Held keys go straight to the machine.
 		selMachine->onKeyHeldUpdate(e);
 	}
 	break;
