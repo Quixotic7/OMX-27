@@ -64,11 +64,11 @@
     },
     {
       "state": 2,
-      "name": "Step view (pages on 3-6)",
-      "notes": "Per-track step editing. Keys 3-6 = pages 1-4 (7-10 unused); current edit page = WHITE (page2), others LOWWHITE. Step row = current page's 16 steps. Key17 MAGENTA = carries a CC P-Lock. WHITE playhead on key13. Hold step + turn knob = P-Lock; hold F3 (F1+F2) = structure layer (pages=playback range, steps=length).",
+      "name": "Step view (pages 3-6, edit-mode 7-10)",
+      "notes": "Per-track step editing. Keys 3-6 = pages 1-4 (current page WHITE=page2, others LOWWHITE). Keys 7-10 = per-step edit-mode selector: VEL(orange, active) / LEN / CHANCE / FUNC (dim). Hold a step to edit the active mode with encoder/±; turning a pot-bank knob while holding still P-Locks a CC. Step row = current page's 16 steps: LTBLUE=notes, DKBLUE=empty, MAGENTA(key17)=has a P-Lock, WHITE(key13)=playhead. Hold F3 (F1+F2) = structure layer (pages=playback range, steps=page length). Hold F1 + page = jump page.",
       "leds": [
         "#000000", "#000000", "#000000",
-        "#202020", "#ffffff", "#202020", "#202020", "#000000", "#000000", "#000000", "#000000",
+        "#202020", "#ffffff", "#202020", "#202020", "#ff8000", "#004c4d", "#4c4d00", "#264d00",
         "#a8a8ff", "#00004d", "#ffffff", "#00004d", "#a8a8ff", "#00004d", "#ff00ff", "#00004d",
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff"
       ],
@@ -77,6 +77,10 @@
         "4": "Page 2 — current edit page (WHITE)",
         "5": "Page 3",
         "6": "Page 4",
+        "7": "Edit-mode VEL (active, bright)",
+        "8": "Edit-mode LEN (gate length)",
+        "9": "Edit-mode CHANCE (probability)",
+        "10": "Edit-mode FUNC (step function)",
         "13": "Playhead",
         "17": "Step with a CC P-Lock (MAGENTA)"
       },
@@ -154,15 +158,16 @@
     {
       "state": 5,
       "name": "Step — P-Lock (hold step + knob)",
-      "notes": "Holding step 6 (key17, WHITE = held) and turning a knob locks a CC value on that step. The locked SLOT is stored; the CC# follows the track's pot bank at playback (bank1 K1=CC21 here). Release and the step shows MAGENTA. OLED lists locked slots -> resolved CC#/value.",
+      "notes": "Holding step 6 (key17, WHITE = held) and turning a pot-bank knob locks a CC value on that step (independent of the VEL/LEN/CHANCE/FUNC mode on keys 7-10). The locked SLOT is stored; the CC# follows the track's pot bank at playback (bank1 K1=CC21 here). Release and the step shows MAGENTA. OLED lists locked slots -> resolved CC#/value.",
       "leds": [
         "#000000", "#000000", "#000000",
-        "#202020", "#ffffff", "#202020", "#202020", "#000000", "#000000", "#000000", "#000000",
+        "#202020", "#ffffff", "#202020", "#202020", "#ff8000", "#004c4d", "#4c4d00", "#264d00",
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#ffffff", "#00004d",
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff"
       ],
       "keyNotes": {
         "4": "Page 2 (current)",
+        "7": "Edit-mode VEL (active)",
         "17": "Held step (WHITE) — turning a knob P-Locks a CC here"
       },
       "pots": [

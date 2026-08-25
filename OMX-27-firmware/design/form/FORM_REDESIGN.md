@@ -72,22 +72,32 @@ inherit it.
   view** · hold = machine-type picker.
 - Step row = selected track's pattern (OMNI: LTBLUE has-notes / DKBLUE empty / WHITE
   playhead). "Arrange / pick a track."
-- **Mute** no longer lives on double-click (that now opens the track). Needs a new home
-  — see §9.
+- **Mute = F3 (hold F1+F2) + tap a track.** (Keeps hold-track for the machine-type
+  picker; uses the F3 modifier for muting so the two don't collide.)
 
 → `form_redesign.json` **state 1**.
 
 ### 4.2 Step  _(per-track step editing, paged)_
-- **Keys 3–6 = pages 1–4** (7–10 unused). Tap to edit that page. Current page = WHITE,
-  others dim.
-- Step row = current page's 16 steps. **Hold step + turn knob = P-Lock** (§3); locked
-  steps show MAGENTA.
-- **Hold F3 (F1+F2)** = the structure layer (§5): tap pages = playback range, tap steps
-  = page length.
+- **Keys 3–6 = pages 1–4.** Tap to edit that page. Current page = WHITE, others dim.
+- **Keys 7–10 = per-step edit mode:** **VEL · LEN · CHANCE · FUNC** — chooses what
+  *holding a step* edits. The active mode is lit bright, the others dim.
+- **Hold a step (11–26)** to edit it in the active mode (velocity / gate length /
+  probability / step-function) with the encoder or ±. The value shows on the OLED.
+  **Turning a pot-bank knob while holding a step still lays a CC P-Lock** (§3, MAGENTA),
+  independent of the mode.
+  > Note "LEN" here = a single step's **gate length**; the PAGE's **step count** is set
+  > separately in the F3 structure layer (§5).
+- **Hold F3 (F1+F2) = structure layer** (§5): tap pages = playback range, tap steps =
+  page length (step count).
+- **Hold F1 + tap a page (3–6) = jump page** (also works from the other editors).
 
 → `form_redesign.json` **states 2, 4, 5**.
 
-### 4.3 Func  _(per-step functions — NEW)_
+### 4.3 Func  _(per-step functions — UNDER REVIEW)_
+> **Overlap:** step-functions are now also a **FUNC hold-mode in Step view** (§4.2, keys
+> 7–10). This dedicated view may be dropped in favour of that, or kept as a full-grid
+> function overview. See §9.
+
 - Dedicated view for step functions (was the step-hold palette). **Top keys 1–7 = the
   function palette**: `-- RSET << >> <> J? ???`
   (RED / ORANGE / DKYELLOW / GREEN / MAGENTA / ROSE / DIMORANGE).
@@ -201,15 +211,18 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
    F3 = jump-to-step; **live MIDI audition** on key-hold when stopped (§4.5).
 5. **Mix double-click** → enters the track's Step view (was mute).
 6. **CC meter** → 5-segment line meter on the top OLED row, every view (§2).
+7. **Mute** → **F3 (F1+F2) + tap a track** in Mix view.
+8. **Per-step params** → **Step-view hold-step mode selector on keys 7–10**
+   (VEL / LEN / CHANCE / FUNC); hold a step to edit the active mode; knobs still P-Lock (§4.2).
+9. **Change page from an editor** → **hold F1 + tap a page key (3–6)**.
 
 ### Still open
-- **Mute's new home** — double-click now opens the track. Where does mute go? (Long-hold
-  a slot? AUX + tap a slot? A Mix-view modifier?)
-- **Per-step length (gate) gesture** — proposed **F3 + top row** in the editor, but F3
-  already maps the low row to jump-to-step; confirm the top-row-sets-length / low-row-
-  jumps split, and the length range (1–16? gate in note-lengths?).
-- **Change page from an editor** — proposed **hold F1 + page key (3–6)**, but F1 tap =
-  copy; confirm the tap/hold split is acceptable (or pick another gesture).
+- **Func view vs FUNC hold-mode** — now that FUNC is a Step-view hold-mode (§4.2), do we
+  **drop the dedicated Func view**? If so the views become **Mix / Step / Transpose /
+  Notes** (AUX + 13–16). And is **Transpose** likewise better as a 5th hold-mode
+  (VEL/LEN/CHANCE/FUNC/**TPOSE**) than its own view?
+- **F1 tap-vs-hold** — F1 tap = copy, hold F1 + page = jump page. Confirm the split feels
+  ok (timing threshold).
 - **P-Lock step color** MAGENTA `#ff00ff` — ok?
 
 ---
