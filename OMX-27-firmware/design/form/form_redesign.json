@@ -232,11 +232,11 @@
     {
       "state": 8,
       "name": "AUX layer (held) — same everywhere",
-      "notes": "Holding AUX shows one control layer in every view. key0=AUX(RED). 1=Play/Pause(GREEN), 2=Reset(ORANGE). 3-6 = select edit PAGE 1-4 (current page WHITE=page2, others dim). 11/12=octave -/+. 13-16 = views Mix/Step/Transpose/Notes (current view flashes WHITE=Step key14). No pot-bank shortcut and NO MIDI-FX here (MIDI-FX is a Step mode now). While holding a STEP, AUX instead resets that step to the mode default.",
+      "notes": "Holding AUX shows one control layer in every view (see form_aux.json for the full labeled layout). key0=AUX(RED). 1=Play(GREEN), 2=Reset(ORANGE). 3-6 = edit PAGE 1-4 (current WHITE=page2). 7=REC arm (RED when armed), 8=rec mode (overdub/replace). 11/12=octave. 13-17 = views Mix/Step/Transpose/Notes/Patterns (current flashes WHITE=Step key14). No pot-bank shortcut, no MIDI-FX here. While holding a STEP, AUX resets that step to the mode default.",
       "leds": [
         "#ff0000",
-        "#00ff00", "#ff8000", "#202020", "#ffffff", "#202020", "#202020", "#000000", "#000000", "#000000", "#000000",
-        "#202020", "#202020", "#202020", "#ffffff", "#202020", "#202020", "#000000", "#000000",
+        "#00ff00", "#ff8000", "#202020", "#ffffff", "#202020", "#202020", "#ff0000", "#264d00", "#000000", "#000000",
+        "#202020", "#202020", "#202020", "#ffffff", "#202020", "#202020", "#202020", "#000000",
         "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"
       ],
       "keyNotes": {
@@ -247,12 +247,15 @@
         "4": "Page 2 — current edit page (WHITE)",
         "5": "Page 3",
         "6": "Page 4",
+        "7": "Record arm (RED = armed)",
+        "8": "Rec mode (overdub / replace)",
         "11": "Octave -",
         "12": "Octave +",
         "13": "View: Mix",
         "14": "View: Step — CURRENT, flashing",
         "15": "View: Transpose",
-        "16": "View: Notes"
+        "16": "View: Notes",
+        "17": "View: Patterns"
       },
       "pots": [
         { "pot": 1, "label": "K1", "note": "Pot bank (unchanged)", "value": 100 },

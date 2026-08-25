@@ -1,0 +1,80 @@
+{
+  "format": "omx27-led-design",
+  "version": 1,
+  "device": "OMX-27",
+  "name": "FORM — AUX layer (labeled)",
+  "ledCount": 27,
+  "convention": "key 0 = AUX; keys 1-10 black; keys 11-26 white. '#000000' = off. This is the AUX overlay you see while HOLDING AUX — identical in every view. See FORM_REDESIGN.md 6 & 7.",
+  "keyMap": [
+    { "key": 0,  "role": "aux",   "note": null, "name": "AUX" },
+    { "key": 1,  "role": "black", "note": 61, "name": "C#4" },
+    { "key": 2,  "role": "black", "note": 63, "name": "D#4" },
+    { "key": 3,  "role": "black", "note": 66, "name": "F#4" },
+    { "key": 4,  "role": "black", "note": 68, "name": "G#4" },
+    { "key": 5,  "role": "black", "note": 70, "name": "A#4" },
+    { "key": 6,  "role": "black", "note": 73, "name": "C#5" },
+    { "key": 7,  "role": "black", "note": 75, "name": "D#5" },
+    { "key": 8,  "role": "black", "note": 78, "name": "F#5" },
+    { "key": 9,  "role": "black", "note": 80, "name": "G#5" },
+    { "key": 10, "role": "black", "note": 82, "name": "A#5" },
+    { "key": 11, "role": "white", "note": 59, "name": "B3" },
+    { "key": 12, "role": "white", "note": 60, "name": "C4" },
+    { "key": 13, "role": "white", "note": 62, "name": "D4" },
+    { "key": 14, "role": "white", "note": 64, "name": "E4" },
+    { "key": 15, "role": "white", "note": 65, "name": "F4" },
+    { "key": 16, "role": "white", "note": 67, "name": "G4" },
+    { "key": 17, "role": "white", "note": 69, "name": "A4" },
+    { "key": 18, "role": "white", "note": 71, "name": "B4" },
+    { "key": 19, "role": "white", "note": 72, "name": "C5" },
+    { "key": 20, "role": "white", "note": 74, "name": "D5" },
+    { "key": 21, "role": "white", "note": 76, "name": "E5" },
+    { "key": 22, "role": "white", "note": 77, "name": "F5" },
+    { "key": 23, "role": "white", "note": 79, "name": "G5" },
+    { "key": 24, "role": "white", "note": 81, "name": "A5" },
+    { "key": 25, "role": "white", "note": 83, "name": "B5" },
+    { "key": 26, "role": "white", "note": 84, "name": "C6" }
+  ],
+  "notes": "The AUX layer, identical everywhere. 0=AUX(held). Transport: 1=Play/Pause(GREEN), 2=Reset(ORANGE). Pages: 3-6 = edit page 1-4 (current WHITE). Record: 7=REC arm(RED when armed), 8=rec mode overdub/replace(GREEN). Octave: 11/12 = -/+. Views: 13-17 = Mix/Step/Transpose/Notes/Patterns (current view flashes WHITE). Free keys: 9,10,18-26. No pot-bank or MIDI-FX here.",
+  "states": [
+    {
+      "state": 1,
+      "name": "AUX overlay (current view = Step, REC armed)",
+      "notes": "Everything the AUX layer offers, labeled. Current edit page = 2 (key4 WHITE). REC is armed (key7 RED). Rec mode = overdub (key8 GREEN). Current view = Step (key14 WHITE, flashing). Views: 13 Mix, 14 Step, 15 Transpose, 16 Notes, 17 Patterns.",
+      "leds": [
+        "#ff0000",
+        "#00ff00", "#ff8000", "#202020", "#ffffff", "#202020", "#202020", "#ff0000", "#264d00", "#000000", "#000000",
+        "#202020", "#202020", "#202020", "#ffffff", "#202020", "#202020", "#202020", "#000000",
+        "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"
+      ],
+      "keyNotes": {
+        "0": "AUX (held)",
+        "1": "Play / Pause",
+        "2": "Reset",
+        "3": "Page 1",
+        "4": "Page 2 — current edit page (WHITE)",
+        "5": "Page 3",
+        "6": "Page 4",
+        "7": "Record arm (RED = armed)",
+        "8": "Rec mode: overdub / replace",
+        "9": "(free)",
+        "10": "(free)",
+        "11": "Octave -",
+        "12": "Octave +",
+        "13": "View: Mix",
+        "14": "View: Step (CURRENT, flashing)",
+        "15": "View: Transpose",
+        "16": "View: Notes",
+        "17": "View: Patterns"
+      },
+      "pots": [
+        { "pot": 1, "label": "K1", "note": "Pot bank (unchanged while AUX held)", "value": 100 },
+        { "pot": 2, "label": "K2", "note": "Pot bank", "value": 64 },
+        { "pot": 3, "label": "K3", "note": "Pot bank", "value": 40 },
+        { "pot": 4, "label": "K4", "note": "Pot bank", "value": 80 },
+        { "pot": 5, "label": "K5", "note": "Pot bank", "value": 120 }
+      ],
+      "encoder": { "note": "(AUX layer)", "press": "" },
+      "screen": { "note": "AUX overlay", "text": "AUX  View:STEP\nPg2 REC Bnk1" }
+    }
+  ]
+}

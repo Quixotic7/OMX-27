@@ -33,13 +33,15 @@ in-editor step nav; global 5-segment CC meter on the top OLED row._
 |---|---|---|
 | Track engine | 8 slots, switchable machine types (OMNI/EUCL/…) | **one engine per track** (the OMNI step sequencer); **no machine types / no picker** |
 | Knobs | Pot-mode matrix (K4 rate, K5 UI-mode, …) | **Pot bank** (5 knobs → 5 CCs), **per track**, like MI mode |
-| Modes | K5 selects CONFIG/MIX/LENGTH/TRANSPOSE/STEP/NOTEEDIT | **4 views**: **Mix · Step · Transpose · Notes** |
-| View switch | AUX + 13–18 (and AUX sometimes behaves differently) | **AUX layer identical everywhere**, on **AUX + 13–16**; the **current view flashes** |
+| Modes | K5 selects CONFIG/MIX/LENGTH/TRANSPOSE/STEP/NOTEEDIT | **5 views**: **Mix · Step · Transpose · Notes · Patterns** |
+| View switch | AUX + 13–18 (and AUX sometimes behaves differently) | **AUX layer identical everywhere**, on **AUX + 13–17**; the **current view flashes** |
 | Zoom/pages | K1 page × K2 zoom (1/2/4 bar), 16-of-64 slice | **Always 16 steps**; **4 fixed pages/track**, on keys 3–6 in Step view |
 | Per-step edit | step-hold palette (funcs) | **8 step-edit modes** on keys 3–10 (Note / Velocity / Step Length / Repeat / Chance / Math / Function / MIDI FX); hold a step → 10-key value palette on keys 1–10; hold a mode key → set its default on keys 11–20 |
 | CC locks | UI-only, never sent | **P-Locks**: hold a step + turn a knob → lock a CC, resolved through the track's pot bank |
 | Step funcs | on the step-hold palette | back as the **Function** step-mode (no separate view) |
 | Playback range / length | (n/a) | Step view **F3 (F1+F2)**: tap **pages** = which pages loop; tap **steps** = current page **length 1–16** |
+| Patterns | (n/a) | **16 patterns** (whole-sequencer snapshots) — the **Patterns view**; tap to switch, queued to loop end (§4.5) |
+| Live recording | (n/a) | **AUX + 7 = rec arm**; play the keyboard while running → notes quantize into the selected track (§7) |
 
 ---
 
@@ -76,13 +78,13 @@ in-editor step nav; global 5-segment CC meter on the top OLED row._
 
 ---
 
-## 4. The four views
+## 4. The five views
 
 The **top row (keys 3–10)** changes meaning per view; the **step row (11–26)** is always
 the current 16 steps; **knobs are always the pot bank**; the **AUX layer is always the
 same** (§6). The **current edit page is shared** across the editing views (Step /
-Transpose / Notes) — you pick the page on keys 3–6 in **Step** view and the others
-inherit it.
+Transpose / Notes) and selected on the AUX layer. The five views are **Mix · Step ·
+Transpose · Notes · Patterns**.
 
 ### 4.1 Mix  _(≈ today's base view)_
 Mix is for **mixing / performance**, not step editing.
@@ -98,7 +100,7 @@ Mix is for **mixing / performance**, not step editing.
 - **Hold a track → per-track controls on the low row:** **11 = Mute · 12 = Solo · 14–18 =
   play mode** — 14 forward · 15 reverse · 16 forward-pong · 17 reverse-pong · **18 random-
   page** ("random-page" plays each *enabled* page of the pattern in random order). (13 free.)
-- **Whole-track copy/paste** now needs a new gesture (F1/F2 became mute/solo) — see §9.
+- **Whole-track copy/paste** now needs a new gesture (F1/F2 became mute/solo) — see §10.
 
 → `form_redesign.json` **state 1** + `form_mix.json` (hold-track & rate detail).
 
@@ -172,6 +174,20 @@ you **step through and edit without leaving the editor**:
 
 → `form_redesign.json` **state 6** (and `form_notes.json` for the detail).
 
+### 4.5 Patterns
+A **pattern** is a snapshot of the whole sequencer — all 8 tracks' step data plus their
+settings (pot bank, play mode, pages/length, rate). You get **16 patterns** per project,
+so you can build sections (verse / chorus / fill) and switch between them.
+
+- **Low row (keys 11–26) = the 16 pattern slots.** Current pattern = WHITE; patterns with
+  content = dim color; empty = off. **Tap a slot to switch** — the switch is **queued to
+  the end of the current pattern's loop** (the queued slot blinks until it takes over) so
+  it stays in time. _(Hold-tap = switch immediately — proposed.)_
+- **Top row = pattern ops:** **F1 = copy · F2 = paste** a pattern; **hold + clear** a
+  pattern. _(Pattern **chaining** / song mode is a later add — see §10.)_
+
+→ `form_patterns.json`.
+
 ---
 
 ## 5. Pages, playback range & length (Step view)
@@ -200,25 +216,47 @@ flashes**:
 | **1** | Play / Pause |
 | **2** | Reset |
 | **3 / 4 / 5 / 6** | Select edit **page 1–4** |
+| **7** | **Record arm** (toggle; red when armed) — §7 |
+| **8** | **Rec mode** — overdub / replace |
 | **11 / 12** | Octave − / + |
-| **13 / 14 / 15 / 16** | Switch view → **Mix / Step / Transpose / Notes** (current **flashes**) |
+| **13 / 14 / 15 / 16 / 17** | Switch view → **Mix / Step / Transpose / Notes / Patterns** (current **flashes**) |
 
-No pot-bank shortcut here (bank is a menu setting, §2). **MIDI-FX is no longer on AUX** —
-it's a Step-view mode now (§4.2). No view may reinterpret AUX differently — fixes
-"sometimes holding AUX works differently."
+Free: 9, 10, 18–26. No pot-bank shortcut here (bank is a menu setting, §2). **MIDI-FX is
+no longer on AUX** — it's a Step-view mode now (§4.2). No view may reinterpret AUX
+differently — fixes "sometimes holding AUX works differently."
 
-→ `form_redesign.json` **state 8**.
+→ `form_redesign.json` **state 8** + `form_aux.json` (fully-labeled layout).
 
 ---
 
-## 7. Always-16-step view
+## 7. Live note recording
+
+Play notes into the sequencer while it runs.
+
+- **Arm** with **AUX + 7** (latching; the key is red while armed). A REC indicator shows on
+  the OLED.
+- **While armed + playing,** notes you play — on the **Notes-view keyboard** or the
+  **Mix low-row keyboard** — are **recorded into the selected track**, **quantized to the
+  nearest step** on the current page. Multiple notes on one step = a chord.
+- **Rec mode (AUX + 8): overdub** (default — adds to a step's existing notes) or
+  **replace** (overwrites the step).
+- Live audition still sounds each note as you play it (§4.5 audition also works when
+  stopped, for auditioning without recording).
+- Recorded **velocity** = the track's current default (the OMX keys aren't velocity-
+  sensitive) — tweak later in Velocity mode.
+- Open: **count-in / metronome**, and whether a **quantize-off** (free-timed) record is
+  wanted — see §10.
+
+---
+
+## 8. Always-16-step view
 
 The K1/K2 page×zoom slice is gone. The grid always shows exactly 16 steps = one page.
 Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 
 ---
 
-## 8. Color proposals
+## 9. Color proposals
 
 | Meaning | Color | Hex |
 |---|---|---|
@@ -236,11 +274,11 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 
 ---
 
-## 9. Resolved decisions
+## 10. Resolved decisions
 
 1. **Single engine** → no machine types; 8 tracks, all the same sequencer (§0).
-2. **View-select keys** → **AUX + 13–16** (Mix/Step/Transpose/Notes); **no pot-bank
-   shortcut** on AUX (bank set in the track menu).
+2. **View-select keys** → **AUX + 13–17** (Mix/Step/Transpose/Notes/Patterns); **no
+   pot-bank shortcut** on AUX (bank set in the track menu).
 3. **Per-page length** → **F3 (F1+F2) + tap a step** in Step view (§5).
 4. **Notes step nav** → F1/F2 = copy/paste step; **11/12 = prev/next step**; 14 = clear;
    F3 = jump-to-step; **live MIDI audition** on key-hold when stopped (§4.5).
@@ -257,8 +295,15 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
    track rate; **hold a track** → mute/solo/**play mode** (fwd/rev/pong/rev-pong/random-
    page) on the low row; double-click a track = enter Step.
 10. **Note mode & Notes view** → **keep both** (quick per-step palette vs full chord entry).
+11. **Patterns** → a 5th view (AUX + 17); **16 whole-sequencer snapshots** on the low row,
+    tap to switch (queued to loop end); F1/F2 copy/paste (§4.5).
+12. **Live recording** → **AUX + 7 arm**, AUX + 8 overdub/replace; play the keyboard while
+    running → notes quantize into the selected track (§7).
 
 ### Still open
+- **Pattern switch timing** — queued-to-loop-end default; add hold-tap = instant? And
+  **pattern chaining / song mode** (later).
+- **Live-rec extras** — count-in / metronome; a **quantize-off** free-record option.
 - **Whole-track copy/paste** — F1/F2 are now mute/solo in Mix, so track copy/paste needs a
   new gesture (a hold-track option? a Mix menu?).
 - **Key 13** in the hold-track low row (11 mute, 12 solo, 14–18 play mode) — unused; assign
@@ -269,17 +314,18 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 
 ---
 
-## 10. Frames in `form_redesign.json`
+## 11. Frames (files in this folder)
 
-| State | View / moment |
+Load any of these into the LED designer. Each file holds its own states.
+
+| File | Contents |
 |---|---|
-| 1 | **Mix** — 8 tracks (per-track colors), selected track's pattern |
-| 2 | **Step — mode selector** — 8 step-edit modes on keys 3–10 (Note active) |
-| 3 | **Step — hold a step** — value palette on keys 1–10 (Note = 10 notes) |
-| 4 | **Step — hold a mode key** — set that mode's default on keys 11–20 |
-| 5 | **Step + F3** — structure layer: playback pages (GREEN) + page length |
-| 6 | **Notes** — full chord entry (F4 start, F1/F2 copy/paste) |
-| 7 | **Transpose** — per-step transpose lane |
-| 8 | **AUX layer** — 4 views + transport + octave, current view flashing |
+| `form_redesign.json` | Overview: Mix · Step (mode-selector / hold-step / hold-mode-default) · Step+F3 · Notes · Transpose · AUX |
+| `form_mix.json` | Mix detail — hold-track controls, F3 track rate |
+| `form_step.json` | Step detail — Math (conditional trig) & Velocity value palettes |
+| `form_notes.json` | Notes detail — editing, F3 jump-to-step |
+| `form_aux.json` | The AUX layer, fully labeled (transport · pages · rec · octave · views) |
+| `form_patterns.json` | Patterns view — 16 pattern slots, switch/copy/paste |
 
-Notes view detail (edit + F3 jump-to-step) is in `form_notes.json`.
+(As-built current firmware is documented separately in `FORM_DESIGN.md` +
+`form_container/omni/euclid.json`.)
