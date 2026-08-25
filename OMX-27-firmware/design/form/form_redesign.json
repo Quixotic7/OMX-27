@@ -39,17 +39,18 @@
     {
       "state": 1,
       "name": "Mix view (select tracks)",
-      "notes": "Keys 3-10 = the 8 tracks: selected=WHITE, muted=RED, OMNI=ORANGE, EUCL=CYAN, empty=off. Tap=select, double-click=enter that track's Step view, hold=machine-type picker, F3(hold F1+F2)+tap=mute. Step row = selected track's pattern with WHITE playhead (key15). Knobs = this track's pot bank.",
+      "notes": "FORM is an 8-track sequencer; every track is the same engine (no machine types). Keys 3-10 = the 8 tracks, each in its own track color (seqColors): selected=WHITE, muted=RED, empty=dim, fired-this-step=INDIGO flash. Here: track1=selected WHITE, track2=YELLOW, track3=GREEN, track4=muted RED, track5=CYAN, track6=BLUE, tracks7-8=empty(dim). Tap=select, double-click=enter that track's Step view, F3(hold F1+F2)+tap=mute, F1/F2+tap=copy/paste whole track. Step row = selected track's pattern with WHITE playhead (key15). Knobs = this track's pot bank.",
       "leds": [
         "#000000", "#000000", "#000000",
-        "#ffffff", "#ff8000", "#00ffff", "#ff0000", "#000000", "#000000", "#000000", "#000000",
+        "#ffffff", "#ffff00", "#00ff00", "#ff0000", "#00ffff", "#0000ff", "#202020", "#202020",
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#ffffff", "#00004d", "#a8a8ff", "#00004d",
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff"
       ],
       "keyNotes": {
-        "3": "Track 0 — selected (WHITE). Double-click = open Step view; F3+tap = mute",
-        "5": "Track 2 — EUCL machine (CYAN)",
-        "6": "Track 3 — muted (RED)",
+        "3": "Track 1 — selected (WHITE). Double-click = open Step view; F3+tap = mute",
+        "4": "Track 2 (its track color)",
+        "6": "Track 4 — muted (RED)",
+        "9": "Track 7 — empty (dim)",
         "15": "Playhead"
       },
       "pots": [

@@ -6,6 +6,19 @@ matrix** with a small set of **views** and **pot banks** (like MI mode). This is
 [`form_redesign.json`](form_redesign.json). Current as-built behaviour lives in
 [`FORM_DESIGN.md`](FORM_DESIGN.md).
 
+## 0. FORM is now a single-engine, 8-track sequencer
+
+The **switchable machine-type** concept is **dropped**. FORM is just an **8-track
+sequencer**; **every track is the same engine** (the polyphonic step sequencer formerly
+called "OMNI"). There is no machine picker, no NULL/EUCL/Grids/Tambola types, and no
+type-switch gesture. This removes a whole layer of state and vocabulary (slot vs machine
+vs type) — a track is a track.
+
+> Implementation note: this retires `FormMachineType`/`kMachineNames`/`changeMachineAtIndex`,
+> the SELECTMACHINE mode, and the EUCL machine — the `FormMachineInterface` indirection can
+> collapse to one concrete sequencer. (The current firmware still has all of it; that's what
+> `FORM_DESIGN.md` and `form_container/omni/euclid.json` document.)
+
 _Decisions locked (Aug 2026): **step-functions dropped from v2**; **4 views**
 (Mix/Step/Transpose/Notes) on **AUX + 13–16**; Step-view per-step edit-mode
 **VEL/LEN/CHANCE** on keys 7–9; **no pot-bank shortcut** on AUX (bank set in the track
@@ -18,6 +31,7 @@ row._
 
 | Area | Today | Proposed |
 |---|---|---|
+| Track engine | 8 slots, switchable machine types (OMNI/EUCL/…) | **one engine per track** (the OMNI step sequencer); **no machine types / no picker** |
 | Knobs | Pot-mode matrix (K4 rate, K5 UI-mode, …) | **Pot bank** (5 knobs → 5 CCs), **per track**, like MI mode |
 | Modes | K5 selects CONFIG/MIX/LENGTH/TRANSPOSE/STEP/NOTEEDIT | **4 views**: **Mix · Step · Transpose · Notes** |
 | View switch | AUX + 13–18 (and AUX sometimes behaves differently) | **AUX layer identical everywhere**, on **AUX + 13–16**; the **current view flashes** |
@@ -71,12 +85,15 @@ Transpose / Notes) — you pick the page on keys 3–6 in **Step** view and the 
 inherit it.
 
 ### 4.1 Mix  _(≈ today's base view)_
-- **Keys 3–10 = the 8 tracks.** Tap = select · **double-click = enter that track's Step
-  view** · hold = machine-type picker.
-- Step row = selected track's pattern (OMNI: LTBLUE has-notes / DKBLUE empty / WHITE
-  playhead). "Arrange / pick a track."
-- **Mute = F3 (hold F1+F2) + tap a track.** (Keeps hold-track for the machine-type
-  picker; uses the F3 modifier for muting so the two don't collide.)
+- **Keys 3–10 = the 8 tracks**, each shown in its own **track color** (from `seqColors`).
+  Tap = select · **double-click = enter that track's Step view**. Selected = WHITE,
+  muted = RED, fired-this-step = INDIGO flash, empty = dim.
+- Step row = selected track's pattern (LTBLUE has-notes / DKBLUE empty / WHITE playhead).
+  "Arrange / pick a track."
+- **Mute = F3 (hold F1+F2) + tap a track.**
+- **Copy/paste a whole track** with F1/F2 + tap a track (copy the entire OMNI track to
+  another slot).
+- Hold-a-track is now **free** (was the machine-type picker, which is gone — see §0).
 
 → `form_redesign.json` **state 1**.
 
