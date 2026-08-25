@@ -34,25 +34,24 @@
     { "key": 25, "role": "white", "note": 83, "name": "B5" },
     { "key": 26, "role": "white", "note": 84, "name": "C6" }
   ],
-  "notes": "Notes view = chord/note entry with in-editor step navigation. Keyboard starts at F4 (key15): playable piano = keys 3-10 (sharps) + 15-26 (naturals), F4-C6. F1(1)/F2(2) = prev/next step, one per click. Keys 11-14 = clear/copy/paste/tie for the current step (DKRED/DKCYAN/DKGREEN/DKYELLOW). Hold F1+F2 (F3) = jump-to-step overlay on the low row (state 2). No persistent cursor; new step's notes flash then settle; OLED shows a 16-box step strip + page number.",
+  "notes": "Notes view = chord/note entry with in-editor step navigation. Keyboard starts at F4 (key15): playable piano = keys 3-10 (sharps) + 15-26 (naturals), F4-C6. F1(1)=copy step, F2(2)=paste step. Keys 11=prev step, 12=next step (one per click), 13=unused, 14=clear. Hold F1+F2 (F3) = jump-to-step overlay on the low row (state 2). Live MIDI audition on key-hold when stopped. No persistent cursor; new step's notes flash then settle; OLED shows a 5-segment CC meter (top pixel row), a 16-box step strip + page number.",
   "states": [
     {
       "state": 1,
       "name": "Notes — editing",
-      "notes": "Resting editor. Piano F4-C6 on keys 3-10 (sharps) + 15-26 (naturals); C-major example so sharps (3-10) are off, roots C5(19)/C6(26) periwinkle, other naturals dim blue. Current step's chord (C5-E5-G5) lit LTYELLOW on 19/21/23. Action keys: 11 clear (DKRED), 12 copy (DKCYAN), 13 paste (DKGREEN), 14 tie (DKYELLOW). F1/F2 (1/2) = prev/next step (DKCYAN).",
+      "notes": "Resting editor. Piano F4-C6 on keys 3-10 (sharps) + 15-26 (naturals); C-major example so sharps (3-10) are off, roots C5(19)/C6(26) periwinkle, other naturals dim blue. Current step's chord (C5-E5-G5) lit LTYELLOW on 19/21/23. F1(1)=copy step (DKCYAN), F2(2)=paste step (DKGREEN). Key11=prev step, Key12=next step (DKBLUE), Key13=unused, Key14=clear (DKRED). Stopped: hold a piano key to audition (sends MIDI).",
       "leds": [
         "#000000",
-        "#004c4d", "#004c4d", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
-        "#800000", "#004c4d", "#264d00", "#4c4d00", "#000090", "#000090", "#000090", "#000090",
+        "#004c4d", "#264d00", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+        "#00004d", "#00004d", "#000000", "#800000", "#000090", "#000090", "#000090", "#000090",
         "#ffff80", "#000090", "#ffff80", "#000090", "#ffff80", "#000090", "#000090", "#a2a2ff"
       ],
       "keyNotes": {
-        "1": "Prev step (F1)",
-        "2": "Next step (F2)",
-        "11": "Clear step",
-        "12": "Copy step",
-        "13": "Paste step",
-        "14": "Tie / hold",
+        "1": "Copy step (F1)",
+        "2": "Paste step (F2)",
+        "11": "Prev step",
+        "12": "Next step",
+        "14": "Clear step",
         "15": "F4 — keyboard start",
         "19": "C5 — chord note / root",
         "21": "E5 — chord note",
@@ -72,16 +71,16 @@
     {
       "state": 2,
       "name": "Notes — F3 jump-to-step (hold F1+F2)",
-      "notes": "Holding F1+F2 (keys 1&2, DKCYAN) turns the low row 11-26 into a 16-step jump selector for the current page. Steps with notes = LTBLUE, empty = DKBLUE, and the current step FLASHES white (key15 here). Tap a step key to jump straight there; release to return to the keyboard. The keyboard (3-10) is hidden while held.",
+      "notes": "Holding F1+F2 (keys 1&2 = copy/paste, held together) turns the low row 11-26 into a 16-step jump selector for the current page. Steps with notes = LTBLUE, empty = DKBLUE, and the current step FLASHES white (key15 here). Tap a step key to jump straight there; release to return to the keyboard. The keyboard (3-10) is hidden while held.",
       "leds": [
         "#000000",
-        "#004c4d", "#004c4d", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+        "#004c4d", "#264d00", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#ffffff", "#00004d", "#a8a8ff", "#00004d",
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff"
       ],
       "keyNotes": {
-        "1": "F1 (held)",
-        "2": "F2 (held)",
+        "1": "F1 = copy (held for F3)",
+        "2": "F2 = paste (held for F3)",
         "11": "Jump to step 1 (has notes = LTBLUE)",
         "15": "Current step — flashing white",
         "12": "Jump to step 2 (empty = DKBLUE)"

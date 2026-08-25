@@ -35,6 +35,10 @@ the track menu); **per-page length** is set with **F3 + tap step**._
 - **The pot bank is chosen in the track's parameter menu** (encoder), **not** on the AUX
   layer — AUX stays free of pot-bank shortcuts for now.
 - No more knob-driven modes. Knobs only ever = pot bank.
+- **CC meter (all views):** the **top 1-pixel row** of the OLED is split into **5
+  segments**, one per knob, each drawing a horizontal line whose length = that knob's
+  current CC value (0–127). The active bank's five live CC values are therefore always on
+  screen — this is the persistent knob feedback (addresses "the knobs are invisible").
 
 ---
 
@@ -64,10 +68,12 @@ Transpose / Notes) — you pick the page on keys 3–6 in **Step** view and the 
 inherit it.
 
 ### 4.1 Mix  _(≈ today's base view)_
-- **Keys 3–10 = the 8 tracks.** Tap = select · double-tap = mute · hold = machine-type
-  picker (unchanged).
+- **Keys 3–10 = the 8 tracks.** Tap = select · **double-click = enter that track's Step
+  view** · hold = machine-type picker.
 - Step row = selected track's pattern (OMNI: LTBLUE has-notes / DKBLUE empty / WHITE
   playhead). "Arrange / pick a track."
+- **Mute** no longer lives on double-click (that now opens the track). Needs a new home
+  — see §9.
 
 → `form_redesign.json` **state 1**.
 
@@ -105,18 +111,24 @@ you **step through and edit without leaving the editor**:
 - **Keyboard starts at F4 (key 15).** The playable piano is now **keys 3–10 (sharps) +
   15–26 (naturals)** = F4→C6 (~1.5 octaves). The sharps 3–10 line up as the black keys
   for the naturals 15–26, so it reads as a real keyboard. (Octave shift = AUX + 11/12.)
-- **Keys 1 / 2 = F1 / F2 = prev / next step**, **one step per click** (no auto-repeat).
+- **Keys 1 / 2 = F1 / F2 = copy step / paste step.**
+- **Keys 11 / 12 = prev / next step**, **one step per click** (no auto-repeat).
+  **Key 13 = (unused for now)** · **Key 14 = clear step**.
 - **F3 (hold F1+F2) = jump-to-step:** while held, the low row (11–26) becomes a 16-step
   selector for the current page — the current step flashes; tap a key to jump there.
-- **Keys 11–14 = per-step actions:** **11 = clear step · 12 = copy step · 13 = paste
-  step · 14 = tie / hold**.
+- **Live audition:** when transport is **stopped**, pressing/holding the piano keys
+  **sends MIDI note-on while held** (note-off on release) so you hear what you're
+  entering. (While playing, key presses edit the step without extra audition.)
 - **Encoder still changes the step** too (unchanged).
-- **Step-change feedback:** no more persistent blinking cursor. On any step change
-  (F1/F2 or encoder) the new step's stored notes **flash briefly, then settle** to the
-  normal keyboard — a quick preview of what's on the step you landed on.
+- **Step-change feedback:** no persistent cursor. On any step change (11/12, F3-jump, or
+  encoder) the new step's stored notes **flash briefly, then settle** — a quick preview
+  of what's on the step you landed on.
+- **[proposed] Per-step length (gate):** hold **F3** and use the **top row** to set the
+  current step's length. (See §9 — needs to reconcile with F3's low-row jump.)
+- **[proposed] Change page from the editor:** hold **F1** and tap a **page key (3–6)** to
+  jump the shared page without leaving Notes. (See §9 — F1 is also tap=copy.)
 - **OLED:** above the keyboard render, a strip of **16 small boxes** (one **filled** =
-  the step being edited) and, to its right, the **page number** (1–4). This is the step
-  position readout now that the LED cursor is gone.
+  the step being edited) and, to its right, the **page number** (1–4).
 
 → `form_redesign.json` **state 6**.
 
@@ -185,11 +197,19 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 2. **View-select keys** → **AUX + 13–17**; **no pot-bank shortcut** on AUX (bank set in
    the track menu).
 3. **Per-page length** → **F3 (F1+F2) + tap a step** in Step view (§5).
+4. **Notes step nav** → F1/F2 = copy/paste step; **11/12 = prev/next step**; 14 = clear;
+   F3 = jump-to-step; **live MIDI audition** on key-hold when stopped (§4.5).
+5. **Mix double-click** → enters the track's Step view (was mute).
+6. **CC meter** → 5-segment line meter on the top OLED row, every view (§2).
 
 ### Still open
-- **Changing page while in Func/Transpose/Notes:** current plan inherits the page picked
-  in Step view. Add page-nav to those views, or is "switch to Step to change page" fine?
-- **Func-view jump-to-step gesture:** pick `J?` then tap target — confirm.
+- **Mute's new home** — double-click now opens the track. Where does mute go? (Long-hold
+  a slot? AUX + tap a slot? A Mix-view modifier?)
+- **Per-step length (gate) gesture** — proposed **F3 + top row** in the editor, but F3
+  already maps the low row to jump-to-step; confirm the top-row-sets-length / low-row-
+  jumps split, and the length range (1–16? gate in note-lengths?).
+- **Change page from an editor** — proposed **hold F1 + page key (3–6)**, but F1 tap =
+  copy; confirm the tap/hold split is acceptable (or pick another gesture).
 - **P-Lock step color** MAGENTA `#ff00ff` — ok?
 
 ---
