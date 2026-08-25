@@ -532,31 +532,43 @@ static void drawKeyBoxRow(uint8_t count, const bool *fill, uint8_t y)
 	}
 }
 
-// Little play-direction icon centred at (cx, cy). 0 fwd, 1 rev, 2 fwd-pong, 3 rev-pong, 4 random.
-static void drawPlayIcon(uint8_t mode, int cx, int cy)
+// Play-direction icon, top-left at (x, y), 17w x 9h. Drawn with primitives (no bitmap data)
+// to exactly match design/form/UI/icons_track_playmodes.txt.
+// 0 fwd, 1 rev, 2 fwd-pong, 3 rev-pong, 4 random.
+static void drawPlayIcon(uint8_t mode, int x, int y)
 {
-	const int h = 4; // half-height
 	switch (mode)
 	{
-	case 0: // forward: right triangle
-		display.fillTriangle(cx - 4, cy - h, cx - 4, cy + h, cx + 4, cy, WHITE);
+	case 0: // forward: right-triangle + dashes + endpoint tick
+		display.fillTriangle(x + 0, y + 0, x + 0, y + 8, x + 8, y + 4, WHITE);
+		display.drawPixel(x + 10, y + 4, WHITE);
+		display.drawPixel(x + 12, y + 4, WHITE);
+		display.drawPixel(x + 14, y + 4, WHITE);
+		display.drawFastVLine(x + 16, y + 3, 3, WHITE);
 		break;
-	case 1: // reverse: left triangle
-		display.fillTriangle(cx + 4, cy - h, cx + 4, cy + h, cx - 4, cy, WHITE);
+	case 1: // reverse: mirror of forward
+		display.fillTriangle(x + 16, y + 0, x + 16, y + 8, x + 8, y + 4, WHITE);
+		display.drawPixel(x + 6, y + 4, WHITE);
+		display.drawPixel(x + 4, y + 4, WHITE);
+		display.drawPixel(x + 2, y + 4, WHITE);
+		display.drawFastVLine(x + 0, y + 3, 3, WHITE);
 		break;
-	case 2: // fwd-pong: two triangles meeting inward  >|<
-		display.fillTriangle(cx - 8, cy - h, cx - 8, cy + h, cx - 2, cy, WHITE);
-		display.fillTriangle(cx + 8, cy - h, cx + 8, cy + h, cx + 2, cy, WHITE);
+	case 2: // fwd-pong: big right-tri, center dot, small left-tri + right end bar
+		display.fillTriangle(x + 0, y + 0, x + 0, y + 8, x + 8, y + 4, WHITE);
+		display.drawPixel(x + 10, y + 4, WHITE);
+		display.drawFastVLine(x + 16, y + 0, 9, WHITE);
+		display.fillTriangle(x + 16, y + 2, x + 16, y + 6, x + 12, y + 4, WHITE);
 		break;
-	case 3: // rev-pong: two triangles pointing outward  <|>
-		display.fillTriangle(cx - 2, cy - h, cx - 2, cy + h, cx - 8, cy, WHITE);
-		display.fillTriangle(cx + 2, cy - h, cx + 2, cy + h, cx + 8, cy, WHITE);
+	case 3: // rev-pong: mirror of fwd-pong
+		display.fillTriangle(x + 16, y + 0, x + 16, y + 8, x + 8, y + 4, WHITE);
+		display.drawPixel(x + 6, y + 4, WHITE);
+		display.drawFastVLine(x + 0, y + 0, 9, WHITE);
+		display.fillTriangle(x + 0, y + 2, x + 0, y + 6, x + 4, y + 4, WHITE);
 		break;
-	case 4: // random: scattered dots
-		display.fillRect(cx - 7, cy - 3, 2, 2, WHITE);
-		display.fillRect(cx - 2, cy + 2, 2, 2, WHITE);
-		display.fillRect(cx + 3, cy - 4, 2, 2, WHITE);
-		display.fillRect(cx + 5, cy + 1, 2, 2, WHITE);
+	case 4: // random: die outline with two pips
+		display.drawRoundRect(x + 4, y + 0, 9, 9, 1, WHITE);
+		display.fillRect(x + 9, y + 2, 2, 2, WHITE);
+		display.fillRect(x + 6, y + 5, 2, 2, WHITE);
 		break;
 	}
 }
@@ -598,8 +610,8 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 		u8g2centerText(ms[i].s, ms[i].x, 28, cellW, 8);
 	}
 
-	// Play-direction icon (right side).
-	drawPlayIcon(playModeIndex, 95, 25);
+	// Play-direction icon (17x9, right side), vertically centred in the cell band.
+	drawPlayIcon(playModeIndex, 82, cellY + (cellH - 9) / 2);
 }
 
 void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool *topFill, uint8_t topCount,
