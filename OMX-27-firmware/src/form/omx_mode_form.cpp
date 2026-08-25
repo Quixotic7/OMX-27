@@ -1165,7 +1165,10 @@ void OmxModeForm::onDisplayUpdate()
 		bool topFill[kNumMachines]; // one box per track (keys 3-10)
 		for (uint8_t t = 0; t < kNumMachines; t++)
 			topFill[t] = f1 ? !machines_[t]->getMute() : machines_[t]->getSolo(); // mute: filled = unmuted
-		omxDisp.dispKeyFunctionSplit(f1 ? "MUTE" : "SOLO", topFill, kNumMachines, "", nullptr, 0);
+		// Bottom row = the 16 step keys. Step mute/solo isn't wired yet, so the boxes are
+		// empty for now — shown so the two-row layout is complete and reusable.
+		const char *label = f1 ? "MUTE" : "SOLO";
+		omxDisp.dispKeyFunctionSplit(label, topFill, kNumMachines, label, nullptr, 16);
 		return;
 	}
 

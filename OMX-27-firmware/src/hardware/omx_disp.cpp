@@ -550,10 +550,10 @@ void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool *topFill, ui
 	}
 
 	// Two-row layout: top label + top boxes, 1px gap, bottom boxes + bottom label.
-	u8g2centerText(topLabel, 0, 9, 128, 8); // baseline ~9
-	drawKeyBoxRow(topCount, topFill, 12);   // boxes y12-15
+	u8g2centerText(topLabel, 0, 10, 128, 8);    // baseline ~10 (text y1-10)
+	drawKeyBoxRow(topCount, topFill, 12);       // boxes y12-15
 	drawKeyBoxRow(bottomCount, bottomFill, 17); // boxes y17-20 (1px gap at y16)
-	u8g2centerText(bottomLabel, 0, 30, 128, 8); // baseline ~30
+	u8g2centerText(bottomLabel, 0, 30, 128, 8); // baseline ~30 (text y21-30)
 }
 
 void OmxDisp::dispGenericModeLabelDoubleLine(const char *label1, const char *label2, uint8_t numPages, int8_t selectedPage)
