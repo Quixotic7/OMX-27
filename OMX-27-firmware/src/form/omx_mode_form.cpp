@@ -1162,12 +1162,10 @@ void OmxModeForm::onDisplayUpdate()
 		(omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F2))
 	{
 		bool f1 = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1);
-		bool topFill[10] = {false};
-		topFill[0] = f1;  // F1 key held
-		topFill[1] = !f1; // F2 key held
+		bool topFill[kNumMachines]; // one box per track (keys 3-10)
 		for (uint8_t t = 0; t < kNumMachines; t++)
-			topFill[2 + t] = f1 ? machines_[t]->getMute() : machines_[t]->getSolo();
-		omxDisp.dispKeyFunctionSplit(f1 ? "MUTE" : "SOLO", topFill, "", nullptr);
+			topFill[t] = f1 ? !machines_[t]->getMute() : machines_[t]->getSolo(); // mute: filled = unmuted
+		omxDisp.dispKeyFunctionSplit(f1 ? "MUTE" : "SOLO", topFill, kNumMachines, "", nullptr, 0);
 		return;
 	}
 

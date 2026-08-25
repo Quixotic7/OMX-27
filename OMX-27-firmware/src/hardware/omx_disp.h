@@ -41,11 +41,12 @@ public:
 	// Displays a label and page numbers
 	void dispGenericModeLabel(const char *label, uint8_t numPages, int8_t selectedPage);
 	void dispGenericModeLabelDoubleLine(const char *label1, const char *label2, uint8_t numPages, int8_t selectedPage);
-	// Held-modifier split view: top label + a row of 10 boxes (top keys) over a row of 16
-	// boxes (bottom keys) + bottom label. Boxes are filled to show state (e.g. muted).
-	// Pass nullptr for a fill array to draw that row's boxes as empty outlines.
-	void dispKeyFunctionSplit(const char *topLabel, const bool topFill[10],
-							  const char *bottomLabel, const bool bottomFill[16]);
+	// Held-modifier split view: top label + a row of topCount boxes (top keys) over a row
+	// of bottomCount boxes (bottom keys) + bottom label. Boxes are filled to show state.
+	// Pass nullptr for a fill array to draw empty outlines; pass count 0 to omit that row
+	// (single-row layout).
+	void dispKeyFunctionSplit(const char *topLabel, const bool *topFill, uint8_t topCount,
+							  const char *bottomLabel, const bool *bottomFill, uint8_t bottomCount);
 	void dispGenericModeLabelSmallText(const char *label, uint8_t numPages, int8_t selectedPage);
 
 	// Displays a header and options below

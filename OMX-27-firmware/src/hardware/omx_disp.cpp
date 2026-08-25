@@ -518,43 +518,42 @@ void OmxDisp::dispGenericModeLabel(const char *label, uint8_t numPages, int8_t s
 	}
 }
 
-void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool topFill[10],
-								   const char *bottomLabel, const bool bottomFill[16])
+static void drawKeyBoxRow(uint8_t count, const bool *fill, uint8_t y)
 {
-	const uint8_t bw = 6; // box width
-	const uint8_t bh = 4; // box height (same for both rows)
-	const uint8_t pitch = 7;
+	const uint8_t bw = 6, bh = 4, pitch = 7;
+	uint8_t startX = (128 - (count * pitch - 1)) / 2;
+	for (uint8_t i = 0; i < count; i++)
+	{
+		int x = startX + i * pitch;
+		if (fill && fill[i])
+			display.fillRect(x, y, bw, bh, WHITE);
+		else
+			display.drawRect(x, y, bw, bh, WHITE);
+	}
+}
 
+void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool *topFill, uint8_t topCount,
+								   const char *bottomLabel, const bool *bottomFill, uint8_t bottomCount)
+{
 	display.fillRect(0, 0, 128, 32, BLACK);
 	u8g2_display.setFontMode(1);
 	u8g2_display.setFont(FONT_CHAR16); // 6x12 — readable
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
 
-	// Top label (y0-10), then 10 top-key boxes hugging the bottom of the top half (y11-14).
-	u8g2centerText(topLabel, 0, 0, 128, 11);
-	uint8_t topStartX = (128 - (10 * pitch - 1)) / 2;
-	for (uint8_t i = 0; i < 10; i++)
+	if (bottomCount == 0 && (bottomLabel == nullptr || bottomLabel[0] == '\0'))
 	{
-		int x = topStartX + i * pitch;
-		if (topFill && topFill[i])
-			display.fillRect(x, 11, bw, bh, WHITE);
-		else
-			display.drawRect(x, 11, bw, bh, WHITE);
+		// Single-row layout: one label + one box row, vertically centred.
+		u8g2centerText(topLabel, 0, 13, 128, 8); // baseline ~13, text ~y5-13
+		drawKeyBoxRow(topCount, topFill, 18);    // boxes y18-21
+		return;
 	}
 
-	// 16 bottom-key boxes hugging the top of the bottom half (y16-19; 1px gap at y15),
-	// then the bottom label (y21-31).
-	uint8_t botStartX = (128 - (16 * pitch - 1)) / 2;
-	for (uint8_t i = 0; i < 16; i++)
-	{
-		int x = botStartX + i * pitch;
-		if (bottomFill && bottomFill[i])
-			display.fillRect(x, 16, bw, bh, WHITE);
-		else
-			display.drawRect(x, 16, bw, bh, WHITE);
-	}
-	u8g2centerText(bottomLabel, 0, 21, 128, 11);
+	// Two-row layout: top label + top boxes, 1px gap, bottom boxes + bottom label.
+	u8g2centerText(topLabel, 0, 9, 128, 8); // baseline ~9
+	drawKeyBoxRow(topCount, topFill, 12);   // boxes y12-15
+	drawKeyBoxRow(bottomCount, bottomFill, 17); // boxes y17-20 (1px gap at y16)
+	u8g2centerText(bottomLabel, 0, 30, 128, 8); // baseline ~30
 }
 
 void OmxDisp::dispGenericModeLabelDoubleLine(const char *label1, const char *label2, uint8_t numPages, int8_t selectedPage)
