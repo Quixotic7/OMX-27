@@ -187,6 +187,7 @@ private:
 	void onDisplayPatterns();
 	void onDisplayMI();
 	void onKeyUpdateMix(OMXKeypadEvent e); // Mix-view track keys (mute/solo/select/open Step)
+	int8_t heldTrackKey_ = -1; // track key held right now in Mix (for K5 hue), -1 = none
 
 	static const uint8_t kNumMachines = 8;
 
@@ -212,6 +213,10 @@ private:
 	void changeFormMode(uint8_t newFormMode);
 
 	FormMachineInterface *machines_[kNumMachines];
+
+	// Per-track colour (hue): hold a track + turn K5 in Mix. Container-level for now
+	// (not yet persisted with the pattern).
+	uint8_t trackHue_[kNumMachines];
 
 	FormMachineInterface *copyBuffer_; // Machine for cut/copy/paste and undo
 	FormMachineInterface *undoBuffer_; // Machine for cut/copy/paste and undo

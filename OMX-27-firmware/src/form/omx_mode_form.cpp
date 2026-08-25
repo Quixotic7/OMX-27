@@ -49,6 +49,7 @@ OmxModeForm::OmxModeForm()
 		machines_[i]->setContext(this);
 		machines_[i]->setNoteOnFptr(&OmxModeForm::seqNoteOnForwarder);
 		machines_[i]->setNoteOffFptr(&OmxModeForm::seqNoteOffForwarder);
+		trackHue_[i] = i * (256 / kNumMachines); // spread 8 hues around the wheel
 	}
 
 	machines_[0]->setTest();
@@ -266,6 +267,7 @@ void OmxModeForm::setFormView(uint8_t view)
 	if (view >= FORMVIEW_COUNT)
 		return;
 	formView_ = view;
+	heldTrackKey_ = -1;
 
 	// Editor views map to an OMNI UI mode, applied to every track so the view stays
 	// consistent when you switch tracks. Patterns / MI are rendered by the container.
@@ -342,9 +344,17 @@ void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 		return;
 	uint8_t track = thisKey - 3;
 
+	// Release: clear the held-track marker (used by K5 hue).
+	if (!e.down())
+	{
+		if (heldTrackKey_ == track)
+			heldTrackKey_ = -1;
+		return;
+	}
+
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1) // Mute
 	{
-		if (!e.held() && e.down())
+		if (!e.held())
 		{
 			selectMachine(track);
 			auto m = getSelectedMachine();
@@ -355,7 +365,7 @@ void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 	}
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2) // Solo
 	{
-		if (!e.held() && e.down())
+		if (!e.held())
 		{
 			selectMachine(track);
 			auto m = getSelectedMachine();
@@ -365,15 +375,12 @@ void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 		return;
 	}
 
-	// No modifier: double-click opens Step view; single tap selects the track.
-	if (!e.down() && e.clicks() == 2)
+	// No modifier, key down: select + mark held (so K5 can set its hue).
+	if (!e.held())
 	{
 		selectMachine(track);
-		setFormView(FORMVIEW_STEP);
-	}
-	else if (!e.held() && e.down())
-	{
-		selectMachine(track);
+		heldTrackKey_ = track;
+		omxDisp.displayMessage("Track " + String(track + 1));
 	}
 }
 
@@ -531,6 +538,15 @@ void OmxModeForm::onPotChanged(int potIndex, int prevValue, int newValue, int an
 {
 	if (auxMacroManager_.onPotChanged(potIndex, prevValue, newValue, analogDelta))
 		return;
+
+	// Mix: hold a track + turn K5 to set that track's colour (hue).
+	if (formView_ == FORMVIEW_MIX && heldTrackKey_ >= 0 && potIndex == 4)
+	{
+		trackHue_[heldTrackKey_] = (uint8_t)constrain(map(newValue, potMinVal, potMaxVal, 0, 255), 0, 255);
+		omxDisp.displayMessage("Trk" + String(heldTrackKey_ + 1) + " Hue " + String(trackHue_[heldTrackKey_]));
+		omxLeds.setDirty();
+		return;
+	}
 
 	auto selMachine = getSelectedMachine();
 
@@ -1070,9 +1086,11 @@ void OmxModeForm::updateLEDs()
 		for (uint8_t i = 0; i < kNumMachines; i++)
 		{
 			bool isMuted = machines_[i]->getMute();
-			// Mix view: per-track colours (seqColors). Other views keep the machine colour.
-			int trackColor = (formView_ == FORMVIEW_MIX) ? seqColors[i] : getMachineColor(i);
-			int color = isMuted ? RED : trackColor;
+			// Mix view: per-track colour from its hue. Other views keep the machine colour.
+			uint32_t trackColor = (formView_ == FORMVIEW_MIX)
+									   ? strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[i] << 8, 255, 255))
+									   : (uint32_t)getMachineColor(i);
+			uint32_t color = isMuted ? (uint32_t)RED : trackColor;
 
 			if(i == selectedMachine_)
 			{
@@ -1082,6 +1100,12 @@ void OmxModeForm::updateLEDs()
 			if(machines_[i]->didTriggerThisStep())
 			{
 				color = INDIGO;
+			}
+
+			// Mix view: soloed tracks flash.
+			if (formView_ == FORMVIEW_MIX && machines_[i]->getSolo() && !blinkState)
+			{
+				color = LEDOFF;
 			}
 
 			strip.setPixelColor(i + 3, color);
@@ -1130,6 +1154,22 @@ void OmxModeForm::onDisplayUpdate()
 	{
 		selMachine->onDisplayUpdate();
 		return;
+	}
+
+	// Mix view: held F1/F2 show the split key-function view (top-keys / bottom-keys),
+	// not the machine's Copy/Cut labels.
+	if (formView_ == FORMVIEW_MIX)
+	{
+		if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
+		{
+			omxDisp.dispKeyFunctionSplit("MUTE", "");
+			return;
+		}
+		if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
+		{
+			omxDisp.dispKeyFunctionSplit("SOLO", "");
+			return;
+		}
 	}
 
 	bool dispLabel = false;

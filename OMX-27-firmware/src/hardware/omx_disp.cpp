@@ -518,6 +518,25 @@ void OmxDisp::dispGenericModeLabel(const char *label, uint8_t numPages, int8_t s
 	}
 }
 
+void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const char *bottomLabel)
+{
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_LABELS);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+
+	// Top label, then 10 boxes for the top keys aligned to the bottom of the top half.
+	u8g2centerText(topLabel, 0, 3, 128, 8);
+	for (uint8_t i = 0; i < 10; i++)
+		display.drawRect(10 + i * 11, 10, 8, 4, WHITE);
+
+	// 16 boxes for the bottom keys aligned to the top of the bottom half, then bottom label.
+	for (uint8_t i = 0; i < 16; i++)
+		display.drawRect(8 + i * 7, 18, 6, 4, WHITE);
+	u8g2centerText(bottomLabel, 0, 25, 128, 8);
+}
+
 void OmxDisp::dispGenericModeLabelDoubleLine(const char *label1, const char *label2, uint8_t numPages, int8_t selectedPage)
 {
 	if (isMessageActive())

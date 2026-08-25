@@ -41,6 +41,9 @@ public:
 	// Displays a label and page numbers
 	void dispGenericModeLabel(const char *label, uint8_t numPages, int8_t selectedPage);
 	void dispGenericModeLabelDoubleLine(const char *label1, const char *label2, uint8_t numPages, int8_t selectedPage);
+	// Held-modifier split view: top label + a row of 10 boxes (top keys) over a row of 16
+	// boxes (bottom keys) + bottom label. Shows what a held F1/F2/F3 does to each key row.
+	void dispKeyFunctionSplit(const char *topLabel, const char *bottomLabel);
 	void dispGenericModeLabelSmallText(const char *label, uint8_t numPages, int8_t selectedPage);
 
 	// Displays a header and options below
