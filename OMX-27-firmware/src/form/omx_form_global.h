@@ -17,7 +17,6 @@ enum ShortCutMode
 enum FormMode
 {
 	FORMMODE_BASE,
-	FORMMODE_SELECTMACHINE,
 	FORMMODE_COUNT
 };
 

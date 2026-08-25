@@ -9,7 +9,6 @@
 #include "../midi/midi.h"
 #include "../utils/music_scales.h"
 #include "../midi/noteoffs.h"
-#include "machines/form_machine_null.h"
 #include "machines/form_machine_omni.h"
 #include "omx_form_global.h"
 
@@ -149,22 +148,10 @@ void OmxModeForm::changeMachineAtIndex(uint8_t machineIndex, uint8_t machineType
 	if (isMachineValid(machineIndex) == false)
 		return;
 
-	switch (machineType)
-	{
-	case FORMMACH_COUNT:
-	case FORMMACH_NULL:
-	{
-		// Serial.println("Setting machine at " + String(machineIndex) + " to FormMachineNull");
-		setMachineTo(machineIndex, new FormMachineNull());
-	}
-	break;
-	case FORMMACH_OMNI:
-	{
-		// Serial.println("Setting machine at " + String(machineIndex) + " to FormMachineOmni");
-		setMachineTo(machineIndex, new FormOmni::FormMachineOmni());
-	}
-	break;
-	}
+	// v2 single-engine: every track is the OMNI engine. machineType is retained in the
+	// signature for save/load compatibility but no longer selects a type.
+	(void)machineType;
+	setMachineTo(machineIndex, new FormOmni::FormMachineOmni());
 }
 
 void OmxModeForm::cutMachineAt(uint8_t machineIndex)
@@ -172,8 +159,9 @@ void OmxModeForm::cutMachineAt(uint8_t machineIndex)
 	if (isMachineValid(machineIndex) == false)
 		return;
 
+	// Cut = copy the track, then reset the slot to an empty OMNI track (no NULL type).
 	copyMachineAt(machineIndex);
-	setMachineTo(machineIndex, new FormMachineNull());
+	setMachineTo(machineIndex, new FormOmni::FormMachineOmni());
 }
 
 void OmxModeForm::copyMachineAt(uint8_t machineIndex)
@@ -795,25 +783,6 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 		}
 	}
 	break;
-	case FORMMODE_SELECTMACHINE:
-	{
-		if (!e.held() && e.down())
-		{
-			if (thisKey >= 11 && (thisKey - 11) < FORMMACH_COUNT)
-			{
-				changeMachineAtIndex(selectedMachine_, thisKey - 11);
-			}
-		}
-		else if (!e.held() && !e.down())
-		{
-			// Exit machine select
-			if (thisKey >= 3 && thisKey - 3 == selectedMachine_)
-			{
-				changeFormMode(FORMMODE_BASE);
-			}
-		}
-	}
-	break;
 	}
 }
 
@@ -851,21 +820,9 @@ void OmxModeForm::onKeyHeldUpdate(OMXKeypadEvent e)
 
 	int thisKey = e.key();
 
-	switch (omxFormGlobal.formMode)
-	{
-	case FORMMODE_BASE:
-	{
-		// v2 single-engine: hold-a-track no longer opens the machine-type picker
-		// (every track is the OMNI engine). Held keys go straight to the machine.
-		selMachine->onKeyHeldUpdate(e);
-	}
-	break;
-	case FORMMODE_SELECTMACHINE:
-	{
-
-	}
-		break;
-	}
+	// v2 single-engine: hold-a-track no longer opens the machine-type picker
+	// (every track is the OMNI engine). Held keys go straight to the machine.
+	selMachine->onKeyHeldUpdate(e);
 }
 
 void OmxModeForm::updateLEDs()
@@ -912,23 +869,7 @@ void OmxModeForm::updateLEDs()
 		}
 	}
 
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE && omxFormGlobal.formMode == FORMMODE_SELECTMACHINE)
-	{
-		for (uint8_t i = 0; i < FORMMACH_COUNT; i++)
-		{
-			bool typeIsSelected = i == machines_[selectedMachine_]->getType();
-
-			int blinkColor = i == 0 ? DKRED : LEDOFF;
-
-			int color = (typeIsSelected && blinkState) ? blinkColor : kMachineColors[i];
-
-			strip.setPixelColor(i + 11, color);
-		}
-	}
-	else if(omxFormGlobal.formMode == FORMMODE_BASE)
-	{
-		selMachine->updateLEDs();
-	}
+	selMachine->updateLEDs();
 }
 
 void OmxModeForm::onDisplayUpdate()
@@ -982,18 +923,8 @@ void OmxModeForm::onDisplayUpdate()
 		break;
 	default:
 	{
-		if(omxFormGlobal.formMode == FORMMODE_SELECTMACHINE)
-		{
-			// tempString = String(selectedMachine_ + 1) + " TYPE";
-			omxDisp.dispGenericModeLabelDoubleLine("Machine Type", getMachineName(selectedMachine_), 0, 0);
-			return;
-			// dispParams = false;
-		}
-		else if(omxFormGlobal.formMode == FORMMODE_BASE)
-		{
-			selMachine->onDisplayUpdate();
-			return;
-		}
+		selMachine->onDisplayUpdate();
+		return;
 	}
 		break;
 	}
