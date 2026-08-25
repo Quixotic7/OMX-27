@@ -105,10 +105,11 @@ you **step through and edit without leaving the editor**:
 - **Keyboard starts at F4 (key 15).** The playable piano is now **keys 3–10 (sharps) +
   15–26 (naturals)** = F4→C6 (~1.5 octaves). The sharps 3–10 line up as the black keys
   for the naturals 15–26, so it reads as a real keyboard. (Octave shift = AUX + 11/12.)
-- **Keys 1 / 2 = F1 / F2 = prev / next step.** Jump between steps right in the editor;
-  hold to repeat. **F3 (F1+F2)** stays free for later (e.g. jump to step 1 / copy step).
-- **Keys 11–14 = rest / clear** the current step (4 keys reserved here; for now they all
-  clear). Frees these for future per-step functions.
+- **Keys 1 / 2 = F1 / F2 = prev / next step**, **one step per click** (no auto-repeat).
+- **F3 (hold F1+F2) = jump-to-step:** while held, the low row (11–26) becomes a 16-step
+  selector for the current page — the current step flashes; tap a key to jump there.
+- **Keys 11–14 = per-step actions:** **11 = clear step · 12 = copy step · 13 = paste
+  step · 14 = tie / hold**.
 - **Encoder still changes the step** too (unchanged).
 - **Step-change feedback:** no more persistent blinking cursor. On any step change
   (F1/F2 or encoder) the new step's stored notes **flash briefly, then settle** to the

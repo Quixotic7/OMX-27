@@ -182,16 +182,16 @@
       "leds": [
         "#000000",
         "#004c4d", "#004c4d", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
-        "#800000", "#800000", "#800000", "#800000", "#000090", "#000090", "#000090", "#000090",
+        "#800000", "#004c4d", "#264d00", "#4c4d00", "#000090", "#000090", "#000090", "#000090",
         "#ffff80", "#000090", "#ffff80", "#000090", "#ffff80", "#000090", "#000090", "#a2a2ff"
       ],
       "keyNotes": {
-        "1": "F1 = previous step (hold to repeat)",
-        "2": "F2 = next step (hold to repeat)",
-        "11": "Rest / clear current step",
-        "12": "Rest / clear (reserved)",
-        "13": "Rest / clear (reserved)",
-        "14": "Rest / clear (reserved)",
+        "1": "F1 = previous step (one per click). Hold F1+F2 = F3 jump-to-step overlay",
+        "2": "F2 = next step (one per click)",
+        "11": "Clear step",
+        "12": "Copy step",
+        "13": "Paste step",
+        "14": "Tie / hold",
         "15": "F4 — keyboard starts here",
         "19": "C5 — chord note (LTYELLOW), also scale root",
         "21": "E5 — chord note",
