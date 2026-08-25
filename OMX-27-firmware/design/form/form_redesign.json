@@ -232,30 +232,31 @@
     {
       "state": 8,
       "name": "AUX layer (held) — same everywhere",
-      "notes": "Holding AUX shows one control layer in every view (see form_aux.json for the full labeled layout). key0=AUX(RED). 1=Play(GREEN), 2=Reset(ORANGE). 3-6 = edit PAGE 1-4 (current WHITE=page2). 7=REC arm (RED when armed), 8=rec mode (overdub/replace). 11/12=octave. 13-17 = views Mix/Step/Transpose/Notes/Patterns (current flashes WHITE=Step key14). No pot-bank shortcut, no MIDI-FX here. While holding a STEP, AUX resets that step to the mode default.",
+      "notes": "Holding AUX shows one control layer in every view (see form_aux.json for the full labeled layout). key0=AUX(RED). 1=Play(GREEN), 2=Reset(ORANGE). 3=REC arm (RED when armed), 4=rec mode (overdub/replace). 6-9 = pages: P1 playing(YELLOW flash), P2 selected(GREEN), P3 in-loop(BLUE), P4 muted(very dim). 11/12=octave. 13-18 = views Mix/Step/Transpose/Notes/Patterns/MI (current flashes WHITE=Step key14). No pot-bank/MIDI-FX here. While holding a STEP, AUX resets that step to the mode default.",
       "leds": [
         "#ff0000",
-        "#00ff00", "#ff8000", "#202020", "#ffffff", "#202020", "#202020", "#ff0000", "#264d00", "#000000", "#000000",
-        "#202020", "#202020", "#202020", "#ffffff", "#202020", "#202020", "#202020", "#000000",
+        "#00ff00", "#ff8000", "#ff0000", "#264d00", "#000000", "#ffff00", "#00ff00", "#0000ff", "#101010", "#000000",
+        "#202020", "#202020", "#202020", "#ffffff", "#202020", "#202020", "#202020", "#202020",
         "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"
       ],
       "keyNotes": {
         "0": "AUX (held)",
         "1": "Play / Pause",
         "2": "Reset",
-        "3": "Page 1",
-        "4": "Page 2 — current edit page (WHITE)",
-        "5": "Page 3",
-        "6": "Page 4",
-        "7": "Record arm (RED = armed)",
-        "8": "Rec mode (overdub / replace)",
+        "3": "Record arm (RED = armed)",
+        "4": "Rec mode (overdub / replace)",
+        "6": "Page 1 — playing (YELLOW, flashing)",
+        "7": "Page 2 — selected/active (GREEN)",
+        "8": "Page 3 — in playback loop (BLUE)",
+        "9": "Page 4 — muted (very dim)",
         "11": "Octave -",
         "12": "Octave +",
         "13": "View: Mix",
         "14": "View: Step — CURRENT, flashing",
         "15": "View: Transpose",
         "16": "View: Notes",
-        "17": "View: Patterns"
+        "17": "View: Patterns",
+        "18": "View: MI (live play)"
       },
       "pots": [
         { "pot": 1, "label": "K1", "note": "Pot bank (unchanged)", "value": 100 },

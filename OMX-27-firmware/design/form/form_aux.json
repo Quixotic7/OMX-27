@@ -34,37 +34,36 @@
     { "key": 25, "role": "white", "note": 83, "name": "B5" },
     { "key": 26, "role": "white", "note": 84, "name": "C6" }
   ],
-  "notes": "The AUX layer, identical everywhere. 0=AUX(held). Transport: 1=Play/Pause(GREEN), 2=Reset(ORANGE). Pages: 3-6 = edit page 1-4 (current WHITE). Record: 7=REC arm(RED when armed), 8=rec mode overdub/replace(GREEN). Octave: 11/12 = -/+. Views: 13-17 = Mix/Step/Transpose/Notes/Patterns (current view flashes WHITE). Free keys: 9,10,18-26. No pot-bank or MIDI-FX here.",
+  "notes": "The AUX layer, identical everywhere. 0=AUX(held). Transport: 1=Play/Pause(GREEN), 2=Reset(ORANGE). Record: 3=REC arm(RED when armed), 4=rec mode overdub/replace(GREEN). Pages: 6-9 = pages 1-4 with color scheme (selected=GREEN, in-loop=BLUE, muted=very dim, playing=YELLOW flash; RED if selected+muted). Octave: 11/12 = -/+. Views: 13-18 = Mix/Step/Transpose/Notes/Patterns/MI (current view flashes WHITE). Free keys: 5,10,19-26. No pot-bank or MIDI-FX here.",
   "states": [
     {
       "state": 1,
       "name": "AUX overlay (current view = Step, REC armed)",
-      "notes": "Everything the AUX layer offers, labeled. Current edit page = 2 (key4 WHITE). REC is armed (key7 RED). Rec mode = overdub (key8 GREEN). Current view = Step (key14 WHITE, flashing). Views: 13 Mix, 14 Step, 15 Transpose, 16 Notes, 17 Patterns.",
+      "notes": "Everything the AUX layer offers, labeled. REC armed (key3 RED). Rec mode overdub (key4 GREEN). Pages 6-9: P1 playing (key6 YELLOW flash), P2 selected/active (key7 GREEN), P3 in-loop (key8 BLUE), P4 muted (key9 very dim). Current view = Step (key14 WHITE, flashing). Views 13-18 = Mix/Step/Transpose/Notes/Patterns/MI.",
       "leds": [
         "#ff0000",
-        "#00ff00", "#ff8000", "#202020", "#ffffff", "#202020", "#202020", "#ff0000", "#264d00", "#000000", "#000000",
-        "#202020", "#202020", "#202020", "#ffffff", "#202020", "#202020", "#202020", "#000000",
+        "#00ff00", "#ff8000", "#ff0000", "#264d00", "#000000", "#ffff00", "#00ff00", "#0000ff", "#101010", "#000000",
+        "#202020", "#202020", "#202020", "#ffffff", "#202020", "#202020", "#202020", "#202020",
         "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"
       ],
       "keyNotes": {
         "0": "AUX (held)",
         "1": "Play / Pause",
         "2": "Reset",
-        "3": "Page 1",
-        "4": "Page 2 — current edit page (WHITE)",
-        "5": "Page 3",
-        "6": "Page 4",
-        "7": "Record arm (RED = armed)",
-        "8": "Rec mode: overdub / replace",
-        "9": "(free)",
-        "10": "(free)",
+        "3": "Record arm (RED = armed)",
+        "4": "Rec mode: overdub / replace",
+        "6": "Page 1 — playing (YELLOW, flashing)",
+        "7": "Page 2 — selected/active (GREEN; RED if muted)",
+        "8": "Page 3 — in playback loop (BLUE)",
+        "9": "Page 4 — muted (very dim)",
         "11": "Octave -",
         "12": "Octave +",
         "13": "View: Mix",
         "14": "View: Step (CURRENT, flashing)",
         "15": "View: Transpose",
         "16": "View: Notes",
-        "17": "View: Patterns"
+        "17": "View: Patterns",
+        "18": "View: MI (live play)"
       },
       "pots": [
         { "pot": 1, "label": "K1", "note": "Pot bank (unchanged while AUX held)", "value": 100 },
