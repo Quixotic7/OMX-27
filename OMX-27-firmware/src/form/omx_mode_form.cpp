@@ -260,6 +260,69 @@ void OmxModeForm::clearPattern(uint8_t index)
 		loadPatternIntoMachines(activePattern_);
 }
 
+// ---- v2 shell: view router ----
+void OmxModeForm::setFormView(uint8_t view)
+{
+	if (view >= FORMVIEW_COUNT)
+		return;
+	formView_ = view;
+
+	// Editor views map to an OMNI UI mode, applied to every track so the view stays
+	// consistent when you switch tracks. Patterns / MI are rendered by the container.
+	uint8_t uiMode = 255;
+	switch (view)
+	{
+	case FORMVIEW_MIX: uiMode = FormOmni::OMNIUIMODE_MIX; break;
+	case FORMVIEW_STEP: uiMode = FormOmni::OMNIUIMODE_CONFIG; break;
+	case FORMVIEW_TRANSPOSE: uiMode = FormOmni::OMNIUIMODE_TRANSPOSE; break;
+	case FORMVIEW_NOTES: uiMode = FormOmni::OMNIUIMODE_NOTEEDIT; break;
+	default: break;
+	}
+	if (uiMode != 255)
+	{
+		for (uint8_t i = 0; i < kNumMachines; i++)
+			static_cast<FormOmni::FormMachineOmni *>(machines_[i])->setUiMode(uiMode);
+	}
+
+	static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI"};
+	omxDisp.displayMessage(kViewNames[view]);
+	omxLeds.setDirty();
+	omxDisp.setDirty();
+}
+
+void OmxModeForm::updatePatternsLEDs()
+{
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		uint32_t col = LEDOFF;
+		if (i < FORM_NUM_PATTERNS)
+			col = (i == activePattern_) ? WHITE : DKCYAN;
+		strip.setPixelColor(11 + i, col);
+	}
+}
+
+void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
+{
+	uint8_t k = e.key();
+	if (!e.held() && e.down() && k >= 11 && k < 27)
+	{
+		uint8_t idx = k - 11;
+		if (idx < FORM_NUM_PATTERNS)
+			switchPattern(idx);
+	}
+}
+
+void OmxModeForm::onDisplayPatterns()
+{
+	tempString = "P" + String(activePattern_ + 1) + "/" + String((int)FORM_NUM_PATTERNS);
+	omxDisp.dispGenericModeLabelDoubleLine("PATTERNS", tempString.c_str(), 0, 0);
+}
+
+void OmxModeForm::onDisplayMI()
+{
+	omxDisp.dispGenericModeLabelDoubleLine("MI VIEW", "(todo)", 0, 0);
+}
+
 void OmxModeForm::updateShortcutMode()
 {
 	if (omxFormGlobal.auxBlock && midiSettings.keyState[0] == false)
@@ -686,6 +749,11 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 				}
 				keyConsumed = true;
 			}
+			else if (thisKey >= 13 && thisKey <= 18) // v2 shell: switch view
+			{
+				setFormView(thisKey - 13);
+				keyConsumed = true;
+			}
 		}
 		else if(e.held())
 		{
@@ -702,6 +770,18 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 		}
 	}
 
+
+	// v2 shell: container-rendered views take their own keys (not the machine).
+	if (formView_ == FORMVIEW_PATTERNS)
+	{
+		if (!keyConsumed)
+			onKeyUpdatePatterns(e);
+		return;
+	}
+	if (formView_ == FORMVIEW_MI)
+	{
+		return; // stub: swallow keys
+	}
 
 	if(selMachine->doesConsumeKeys())
 	{
@@ -888,6 +968,17 @@ void OmxModeForm::updateLEDs()
 		return;
 	}
 
+	// v2 shell: container-rendered views
+	if (formView_ == FORMVIEW_PATTERNS)
+	{
+		updatePatternsLEDs();
+		return;
+	}
+	if (formView_ == FORMVIEW_MI)
+	{
+		return; // stub: LEDs cleared
+	}
+
 	auto selMachine = getSelectedMachine();
 
 	if(selMachine->doesConsumeLEDs())
@@ -944,6 +1035,18 @@ void OmxModeForm::onDisplayUpdate()
 
 	if (omxDisp.canShowDisplay() == false)
 		return;
+
+	// v2 shell: container-rendered views
+	if (formView_ == FORMVIEW_PATTERNS)
+	{
+		onDisplayPatterns();
+		return;
+	}
+	if (formView_ == FORMVIEW_MI)
+	{
+		onDisplayMI();
+		return;
+	}
 
 	auto selMachine = getSelectedMachine();
 

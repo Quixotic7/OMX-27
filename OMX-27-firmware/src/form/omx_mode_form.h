@@ -111,6 +111,20 @@
 // Other features
 // - Make sequencer keys light up as notes are triggered by them
 
+// v2 shell: the six top-level views, switched on the AUX layer (AUX + keys 13-18).
+// The four editor views map to the OMNI machine's UI modes; Patterns + MI are rendered
+// by the container itself.
+enum FormView
+{
+	FORMVIEW_MIX,       // AUX+13
+	FORMVIEW_STEP,      // AUX+14
+	FORMVIEW_TRANSPOSE, // AUX+15
+	FORMVIEW_NOTES,     // AUX+16
+	FORMVIEW_PATTERNS,  // AUX+17 (container-rendered)
+	FORMVIEW_MI,        // AUX+18 (container-rendered; stub for now)
+	FORMVIEW_COUNT
+};
+
 // This mode is designed to be used with samplers or drum machines
 // Each key can be configured to whatever Note, Vel, Midi Chan you want.
 // This class is very similar to the midi keyboard, maybe we merge or inherit.
@@ -160,6 +174,15 @@ public:
 	void clearPattern(uint8_t index);
 
 private:
+	// ---- v2 shell: view router ----
+	uint8_t formView_ = FORMVIEW_MIX;
+	void setFormView(uint8_t view);
+	// Container-rendered views:
+	void updatePatternsLEDs();
+	void onKeyUpdatePatterns(OMXKeypadEvent e);
+	void onDisplayPatterns();
+	void onDisplayMI();
+
 	static const uint8_t kNumMachines = 8;
 
 	SubModePreset presetManager;
