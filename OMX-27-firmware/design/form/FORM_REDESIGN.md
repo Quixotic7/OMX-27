@@ -6,9 +6,11 @@ matrix** with a small set of **views** and **pot banks** (like MI mode). This is
 [`form_redesign.json`](form_redesign.json). Current as-built behaviour lives in
 [`FORM_DESIGN.md`](FORM_DESIGN.md).
 
-_Decisions locked in this revision (Aug 2026): step-functions get their own **Func
-view**; views live on **AUX + 13–17**; **no pot-bank shortcut** on AUX (bank is set in
-the track menu); **per-page length** is set with **F3 + tap step**._
+_Decisions locked (Aug 2026): **step-functions dropped from v2**; **4 views**
+(Mix/Step/Transpose/Notes) on **AUX + 13–16**; Step-view per-step edit-mode
+**VEL/LEN/CHANCE** on keys 7–9; **no pot-bank shortcut** on AUX (bank set in the track
+menu); Notes reworked for in-editor step nav; global 5-segment CC meter on the top OLED
+row._
 
 ---
 
@@ -17,11 +19,12 @@ the track menu); **per-page length** is set with **F3 + tap step**._
 | Area | Today | Proposed |
 |---|---|---|
 | Knobs | Pot-mode matrix (K4 rate, K5 UI-mode, …) | **Pot bank** (5 knobs → 5 CCs), **per track**, like MI mode |
-| Modes | K5 selects CONFIG/MIX/LENGTH/TRANSPOSE/STEP/NOTEEDIT | **5 views**: **Mix · Step · Func · Transpose · Notes** |
-| View switch | AUX + 13–18 (and AUX sometimes behaves differently) | **AUX layer identical everywhere**, on **AUX + 13–17**; the **current view flashes** |
+| Modes | K5 selects CONFIG/MIX/LENGTH/TRANSPOSE/STEP/NOTEEDIT | **4 views**: **Mix · Step · Transpose · Notes** |
+| View switch | AUX + 13–18 (and AUX sometimes behaves differently) | **AUX layer identical everywhere**, on **AUX + 13–16**; the **current view flashes** |
 | Zoom/pages | K1 page × K2 zoom (1/2/4 bar), 16-of-64 slice | **Always 16 steps**; **4 fixed pages/track**, on keys 3–6 in Step view |
+| Per-step edit | step-hold palette (funcs) | Step-view **edit-mode selector VEL/LEN/CHANCE** on keys 7–9; hold a step to edit the active mode |
 | CC locks | UI-only, never sent | **P-Locks**: hold a step + turn a knob → lock a CC, resolved through the track's pot bank |
-| Step funcs | on the step-hold palette | **their own Func view** (hold-step is now P-Lock) |
+| Step funcs | on the step-hold palette | **dropped from v2** (RSET/jump/reverse etc. removed) |
 | Playback range / length | (n/a) | Step view **F3 (F1+F2)**: tap **pages** = which pages loop; tap **steps** = current page **length 1–16** |
 
 ---
@@ -59,11 +62,11 @@ the track menu); **per-page length** is set with **F3 + tap step**._
 
 ---
 
-## 4. The five views
+## 4. The four views
 
 The **top row (keys 3–10)** changes meaning per view; the **step row (11–26)** is always
 the current 16 steps; **knobs are always the pot bank**; the **AUX layer is always the
-same** (§6). The **current edit page is shared** across the editing views (Step / Func /
+same** (§6). The **current edit page is shared** across the editing views (Step /
 Transpose / Notes) — you pick the page on keys 3–6 in **Step** view and the others
 inherit it.
 
@@ -79,42 +82,32 @@ inherit it.
 
 ### 4.2 Step  _(per-track step editing, paged)_
 - **Keys 3–6 = pages 1–4.** Tap to edit that page. Current page = WHITE, others dim.
-- **Keys 7–10 = per-step edit mode:** **VEL · LEN · CHANCE · FUNC** — chooses what
-  *holding a step* edits. The active mode is lit bright, the others dim.
+- **Keys 7–9 = per-step edit mode:** **VEL · LEN · CHANCE** — chooses what *holding a
+  step* edits. The active mode is lit bright, the others dim. (Key 10 reserved.)
 - **Hold a step (11–26)** to edit it in the active mode (velocity / gate length /
-  probability / step-function) with the encoder or ±. The value shows on the OLED.
-  **Turning a pot-bank knob while holding a step still lays a CC P-Lock** (§3, MAGENTA),
-  independent of the mode.
+  probability) with the encoder or ±. The value shows on the OLED. **Turning a pot-bank
+  knob while holding a step still lays a CC P-Lock** (§3, MAGENTA), independent of the
+  mode.
   > Note "LEN" here = a single step's **gate length**; the PAGE's **step count** is set
   > separately in the F3 structure layer (§5).
 - **Hold F3 (F1+F2) = structure layer** (§5): tap pages = playback range, tap steps =
   page length (step count).
 - **Hold F1 + tap a page (3–6) = jump page** (also works from the other editors).
 
-→ `form_redesign.json` **states 2, 4, 5**.
+→ `form_redesign.json` **states 2, 3, 4**.
 
-### 4.3 Func  _(per-step functions — UNDER REVIEW)_
-> **Overlap:** step-functions are now also a **FUNC hold-mode in Step view** (§4.2, keys
-> 7–10). This dedicated view may be dropped in favour of that, or kept as a full-grid
-> function overview. See §9.
+> **Step functions dropped in v2.** RSET / reverse / jump-to-step / pong / random-jump
+> are removed — no Func view and no FUNC hold-mode. (Play-direction variety, if wanted
+> later, would come back as a per-track setting, not per-step.)
 
-- Dedicated view for step functions (was the step-hold palette). **Top keys 1–7 = the
-  function palette**: `-- RSET << >> <> J? ???`
-  (RED / ORANGE / DKYELLOW / GREEN / MAGENTA / ROSE / DIMORANGE).
-- Step row shows each step colored by its assigned function (no-func = DKBLUE). Tap a
-  step to select it (WHITE); the palette key of its current function blinks; tap a
-  palette key to assign. For **jump-to-step**, pick `J?` then tap the target step.
-
-→ `form_redesign.json` **state 3**.
-
-### 4.4 Transpose
+### 4.3 Transpose
 - Unchanged from today's transpose editor: step row = transpose pattern
   (`TZERO/THIGH/TLOW`), top keys = randomize/clear/copy shortcuts. Operates on the
   current page.
 
-→ `form_redesign.json` **state 7**.
+→ `form_redesign.json` **state 6**.
 
-### 4.5 Notes  _(chord/note entry — reworked for in-editor step nav)_
+### 4.4 Notes  _(chord/note entry — reworked for in-editor step nav)_
 Enter with a **double-click** on a step (Mix/Step view) — that stays. The rework lets
 you **step through and edit without leaving the editor**:
 
@@ -140,7 +133,7 @@ you **step through and edit without leaving the editor**:
 - **OLED:** above the keyboard render, a strip of **16 small boxes** (one **filled** =
   the step being edited) and, to its right, the **page number** (1–4).
 
-→ `form_redesign.json` **state 6**.
+→ `form_redesign.json` **state 5** (and `form_notes.json` for the detail).
 
 ---
 
@@ -154,7 +147,7 @@ you **step through and edit without leaving the editor**:
   - **Tap step keys (11–26) = the current page's length** (1–16). Steps beyond the length
     go dark. Each page can be a different length (polymeter).
 
-→ `form_redesign.json` **state 4** (structure layer shows both at once).
+→ `form_redesign.json` **state 3** (structure layer shows both at once).
 
 ---
 
@@ -168,12 +161,12 @@ flashes**:
 | **1** | Play / Pause |
 | **2** | Reset |
 | **11 / 12** | Octave − / + |
-| **13 / 14 / 15 / 16 / 17** | Switch view → **Mix / Step / Func / Transpose / Notes** (current **flashes**) |
+| **13 / 14 / 15 / 16** | Switch view → **Mix / Step / Transpose / Notes** (current **flashes**) |
 
 No pot-bank shortcut here (bank is a menu setting, §2). No view may reinterpret AUX
 differently — fixes "sometimes holding AUX works differently."
 
-→ `form_redesign.json` **state 8**.
+→ `form_redesign.json` **state 7**.
 
 ---
 
@@ -196,33 +189,30 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 | Page: current edit page | WHITE | `#ffffff` |
 | Page: exists, not current | LOWWHITE | `#202020` |
 | Page: active for playback (F3) | GREEN | `#00ff00` |
-| Func palette `-- RSET << >> <> J? ???` | RED ORANGE DKYELLOW GREEN MAGENTA ROSE DIMORANGE | `#ff0000 #ff8000 #4c4d00 #00ff00 #ff00ff #ff0080 #9f8060` |
+| Edit-mode VEL / LEN / CHANCE (active/dim) | ORANGE / DKCYAN / DKYELLOW | `#ff8000` / `#004c4d` / `#4c4d00` |
 | View (AUX): current (flashing) / other | WHITE / LOWWHITE | `#ffffff` / `#202020` |
 
 ---
 
 ## 9. Resolved decisions
 
-1. **Step functions** → their own **Func view** (§4.3).
-2. **View-select keys** → **AUX + 13–17**; **no pot-bank shortcut** on AUX (bank set in
-   the track menu).
+1. **Step functions** → **dropped from v2** (no Func view, no FUNC hold-mode).
+2. **View-select keys** → **AUX + 13–16** (Mix/Step/Transpose/Notes); **no pot-bank
+   shortcut** on AUX (bank set in the track menu).
 3. **Per-page length** → **F3 (F1+F2) + tap a step** in Step view (§5).
 4. **Notes step nav** → F1/F2 = copy/paste step; **11/12 = prev/next step**; 14 = clear;
    F3 = jump-to-step; **live MIDI audition** on key-hold when stopped (§4.5).
 5. **Mix double-click** → enters the track's Step view (was mute).
 6. **CC meter** → 5-segment line meter on the top OLED row, every view (§2).
 7. **Mute** → **F3 (F1+F2) + tap a track** in Mix view.
-8. **Per-step params** → **Step-view hold-step mode selector on keys 7–10**
-   (VEL / LEN / CHANCE / FUNC); hold a step to edit the active mode; knobs still P-Lock (§4.2).
+8. **Per-step params** → **Step-view hold-step mode selector on keys 7–9**
+   (VEL / LEN / CHANCE); hold a step to edit the active mode; knobs still P-Lock (§4.2).
 9. **Change page from an editor** → **hold F1 + tap a page key (3–6)**.
 
 ### Still open
-- **Func view vs FUNC hold-mode** — now that FUNC is a Step-view hold-mode (§4.2), do we
-  **drop the dedicated Func view**? If so the views become **Mix / Step / Transpose /
-  Notes** (AUX + 13–16). And is **Transpose** likewise better as a 5th hold-mode
-  (VEL/LEN/CHANCE/FUNC/**TPOSE**) than its own view?
 - **F1 tap-vs-hold** — F1 tap = copy, hold F1 + page = jump page. Confirm the split feels
   ok (timing threshold).
+- **Key 10 in Step view** — reserved. A 4th edit-mode later (nudge? retrig?) or leave it.
 - **P-Lock step color** MAGENTA `#ff00ff` — ok?
 
 ---
@@ -232,10 +222,11 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 | State | View / moment |
 |---|---|
 | 1 | **Mix** — tracks on 3–10, selected track's pattern |
-| 2 | **Step** — pages on 3–6, one page's steps (with a P-locked step) |
-| 3 | **Func** — per-step function palette + function map |
-| 4 | **Step + F3** — structure layer: playback pages (GREEN) + page length boundary |
-| 5 | **Step — hold step + knob** = P-Lock being dialed in |
-| 6 | **Notes** — scale keyboard / chord entry |
-| 7 | **Transpose** — per-step transpose lane |
-| 8 | **AUX layer** — 5 views + transport + octave, current view flashing |
+| 2 | **Step** — pages on 3–6, edit-mode VEL/LEN/CHANCE on 7–9, one page's steps |
+| 3 | **Step + F3** — structure layer: playback pages (GREEN) + page length boundary |
+| 4 | **Step — hold step + knob** = P-Lock being dialed in |
+| 5 | **Notes** — scale keyboard / chord entry (F4 start, F1/F2 copy/paste) |
+| 6 | **Transpose** — per-step transpose lane |
+| 7 | **AUX layer** — 4 views + transport + octave, current view flashing |
+
+Notes view detail (edit + F3 jump-to-step) is in `form_notes.json`.
