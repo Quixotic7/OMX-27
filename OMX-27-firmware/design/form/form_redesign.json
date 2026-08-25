@@ -178,20 +178,25 @@
     {
       "state": 6,
       "name": "Notes view (chord/note entry)",
-      "notes": "Scale keyboard (example C major) across 1-26. Roots = periwinkle #a2a2ff, in-scale = dim blue #000090, out-of-scale (black keys) = off. Stored chord on the selected step lit LTYELLOW (C-E-G on 12/14/16). Key 11 = REST (DKRED). Cursor pulses HALFWHITE (key15). Editor consumes all keys; page/track/view changes happen on the AUX layer.",
+      "notes": "Reworked: keyboard STARTS at F4 (key15). Playable piano = keys 3-10 (sharps) + 15-26 (naturals) = F4-C6; the sharps 3-10 are the black keys for the naturals 15-26. Example scale C major: roots (C5=19, C6=26) = periwinkle #a2a2ff, in-scale whites = dim blue #000090, out-of-scale sharps = off. Stored chord on the current step lit LTYELLOW (C5-E5-G5 on 19/21/23). Key1(F1)=prev step, Key2(F2)=next step (DKCYAN). Keys 11-14 = rest/clear (DKRED). No persistent cursor: on step change the new step's notes flash then settle. OLED shows 16 step-boxes (filled=current step) + page number.",
       "leds": [
         "#000000",
-        "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
-        "#800000", "#ffff80", "#000090", "#ffff80", "#808080", "#ffff80", "#000090", "#000090",
-        "#a2a2ff", "#000090", "#000090", "#000090", "#000090", "#000090", "#000090", "#a2a2ff"
+        "#004c4d", "#004c4d", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+        "#800000", "#800000", "#800000", "#800000", "#000090", "#000090", "#000090", "#000090",
+        "#ffff80", "#000090", "#ffff80", "#000090", "#ffff80", "#000090", "#000090", "#a2a2ff"
       ],
       "keyNotes": {
-        "11": "REST (clear step)",
-        "12": "Chord note C",
-        "14": "Chord note E",
-        "15": "Cursor (selected step)",
-        "16": "Chord note G",
-        "19": "Scale root C5"
+        "1": "F1 = previous step (hold to repeat)",
+        "2": "F2 = next step (hold to repeat)",
+        "11": "Rest / clear current step",
+        "12": "Rest / clear (reserved)",
+        "13": "Rest / clear (reserved)",
+        "14": "Rest / clear (reserved)",
+        "15": "F4 — keyboard starts here",
+        "19": "C5 — chord note (LTYELLOW), also scale root",
+        "21": "E5 — chord note",
+        "23": "G5 — chord note",
+        "26": "C6 — scale root (periwinkle)"
       },
       "pots": [
         { "pot": 1, "label": "K1", "note": "Pot bank CC21", "value": 100 },
@@ -200,8 +205,8 @@
         { "pot": 4, "label": "K4", "note": "Pot bank CC24", "value": 80 },
         { "pot": 5, "label": "K5", "note": "Pot bank CC7", "value": 120 }
       ],
-      "encoder": { "note": "Turn = move selected step (0-63)", "press": "Toggle select/edit" },
-      "screen": { "note": "Notes", "text": "NOTES\nStep5 C E G" }
+      "encoder": { "note": "Turn = change step (0-63); step flashes briefly on change", "press": "Toggle select/edit" },
+      "screen": { "note": "16 step-boxes (filled=current step) + page number above the keyboard render", "text": "▣▢▢▢▢▢▢▢▢▢▢▢▢▢▢▢ p1\nNOTES C5 E5 G5" }
     },
     {
       "state": 7,

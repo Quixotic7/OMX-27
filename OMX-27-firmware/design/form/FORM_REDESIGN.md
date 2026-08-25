@@ -98,9 +98,24 @@ inherit it.
 
 → `form_redesign.json` **state 7**.
 
-### 4.5 Notes
-- Unchanged from today's note editor: scale keyboard across 1–26, key 11 = REST, stored
-  chord notes lit, selected-step cursor blinks. Operates on the current page.
+### 4.5 Notes  _(chord/note entry — reworked for in-editor step nav)_
+Enter with a **double-click** on a step (Mix/Step view) — that stays. The rework lets
+you **step through and edit without leaving the editor**:
+
+- **Keyboard starts at F4 (key 15).** The playable piano is now **keys 3–10 (sharps) +
+  15–26 (naturals)** = F4→C6 (~1.5 octaves). The sharps 3–10 line up as the black keys
+  for the naturals 15–26, so it reads as a real keyboard. (Octave shift = AUX + 11/12.)
+- **Keys 1 / 2 = F1 / F2 = prev / next step.** Jump between steps right in the editor;
+  hold to repeat. **F3 (F1+F2)** stays free for later (e.g. jump to step 1 / copy step).
+- **Keys 11–14 = rest / clear** the current step (4 keys reserved here; for now they all
+  clear). Frees these for future per-step functions.
+- **Encoder still changes the step** too (unchanged).
+- **Step-change feedback:** no more persistent blinking cursor. On any step change
+  (F1/F2 or encoder) the new step's stored notes **flash briefly, then settle** to the
+  normal keyboard — a quick preview of what's on the step you landed on.
+- **OLED:** above the keyboard render, a strip of **16 small boxes** (one **filled** =
+  the step being edited) and, to its right, the **page number** (1–4). This is the step
+  position readout now that the LED cursor is gone.
 
 → `form_redesign.json` **state 6**.
 
