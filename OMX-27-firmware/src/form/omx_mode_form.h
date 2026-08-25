@@ -8,6 +8,7 @@
 #include "../modes/submodes/submode_preset.h"
 #include "../midifx/midifx_interface.h"
 #include "machines/form_machine_interface.h"
+#include "form_patterns.h"
 
 // AUX View - Rendered by form
 // Familiar shortcuts as MI Modes
@@ -150,6 +151,14 @@ public:
 	int saveToDisk(int startingAddress, Storage *storage);
 	int loadFromDisk(int startingAddress, Storage *storage);
 
+	// ---- Patterns (v2 data layer) ----
+	uint8_t getActivePattern() const { return activePattern_; }
+	uint8_t getPatternCount() const { return FORM_NUM_PATTERNS; }
+	// Snapshot the current pattern, then make `index` active and load it into the machines.
+	void switchPattern(uint8_t index);
+	void copyPatternTo(uint8_t from, uint8_t to);
+	void clearPattern(uint8_t index);
+
 private:
 	static const uint8_t kNumMachines = 8;
 
@@ -178,6 +187,16 @@ private:
 
 	FormMachineInterface *copyBuffer_; // Machine for cut/copy/paste and undo
 	FormMachineInterface *undoBuffer_; // Machine for cut/copy/paste and undo
+
+	// v2 pattern data layer: the bank of whole-sequencer snapshots. The active pattern is
+	// live in the machines; the others sit here. See form_patterns.h + FORM_IMPLEMENTATION.md.
+	FormPattern patterns_[FORM_NUM_PATTERNS];
+	uint8_t activePattern_ = 0;
+
+	// Copy the 8 machines' live seq data into patterns_[activePattern_].
+	void snapshotActivePattern();
+	// Load patterns_[index] into the 8 machines.
+	void loadPatternIntoMachines(uint8_t index);
 
 	bool isMachineValid(uint8_t machineIndex);
 

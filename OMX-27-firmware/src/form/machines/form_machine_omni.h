@@ -65,6 +65,14 @@ namespace FormOmni
         int saveToDisk(int startingAddress, Storage *storage) override;
 	    int loadFromDisk(int startingAddress, Storage *storage) override;
 
+        // v2 pattern data layer: snapshot / restore this track's sequencer data.
+        const OmniSeq &getSeq() const { return seq_; }
+        void setSeq(const OmniSeq &s)
+        {
+            seq_ = s;
+            seqDynamic_.Reset(); // loaded pattern starts from a clean playback state
+        }
+
     private:
         OmniSeq seq_;
         OmniSeqDynamic seqDynamic_;

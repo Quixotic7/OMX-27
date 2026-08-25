@@ -208,6 +208,58 @@ void OmxModeForm::setMachineTo(uint8_t machineIndex, FormMachineInterface *ptr)
 	machines_[machineIndex]->setNoteOffFptr(&OmxModeForm::seqNoteOffForwarder);
 }
 
+// ---- Patterns (v2 data layer) ----
+// Every track is an OMNI machine (single-engine), so we can snapshot / restore each
+// track's OmniSeq to/from the pattern bank.
+void OmxModeForm::snapshotActivePattern()
+{
+	for (uint8_t i = 0; i < kNumMachines; i++)
+	{
+		auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[i]);
+		patterns_[activePattern_].tracks[i] = omni->getSeq();
+	}
+}
+
+void OmxModeForm::loadPatternIntoMachines(uint8_t index)
+{
+	for (uint8_t i = 0; i < kNumMachines; i++)
+	{
+		auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[i]);
+		omni->setSeq(patterns_[index].tracks[i]);
+	}
+}
+
+void OmxModeForm::switchPattern(uint8_t index)
+{
+	if (index >= FORM_NUM_PATTERNS || index == activePattern_)
+		return;
+
+	snapshotActivePattern();      // keep edits to the pattern we're leaving
+	activePattern_ = index;
+	loadPatternIntoMachines(index);
+}
+
+void OmxModeForm::copyPatternTo(uint8_t from, uint8_t to)
+{
+	if (from >= FORM_NUM_PATTERNS || to >= FORM_NUM_PATTERNS || from == to)
+		return;
+
+	snapshotActivePattern(); // make sure the source (if it's active) is current
+	patterns_[to] = patterns_[from];
+	if (to == activePattern_)
+		loadPatternIntoMachines(activePattern_); // reflect the paste in the live tracks
+}
+
+void OmxModeForm::clearPattern(uint8_t index)
+{
+	if (index >= FORM_NUM_PATTERNS)
+		return;
+
+	patterns_[index] = FormPattern(); // default (empty) tracks
+	if (index == activePattern_)
+		loadPatternIntoMachines(activePattern_);
+}
+
 void OmxModeForm::updateShortcutMode()
 {
 	if (omxFormGlobal.auxBlock && midiSettings.keyState[0] == false)
