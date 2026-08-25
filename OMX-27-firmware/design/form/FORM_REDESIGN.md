@@ -85,17 +85,22 @@ Transpose / Notes) — you pick the page on keys 3–6 in **Step** view and the 
 inherit it.
 
 ### 4.1 Mix  _(≈ today's base view)_
-- **Keys 3–10 = the 8 tracks**, each shown in its own **track color** (from `seqColors`).
-  Tap = select · **double-click = enter that track's Step view**. Selected = WHITE,
-  muted = RED, fired-this-step = INDIGO flash, empty = dim.
-- Step row = selected track's pattern (LTBLUE has-notes / DKBLUE empty / WHITE playhead).
-  "Arrange / pick a track."
-- **Mute = F3 (hold F1+F2) + tap a track.**
-- **Copy/paste a whole track** with F1/F2 + tap a track (copy the entire OMNI track to
-  another slot).
-- Hold-a-track is now **free** (was the machine-type picker, which is gone — see §0).
+Mix is for **mixing / performance**, not step editing.
+- **Keys 3–10 = the 8 tracks** (per-track `seqColors`; selected WHITE, muted RED, empty
+  dim, fired-this-step INDIGO). **Tap** = select · **double-click** = enter Step view ·
+  **hold** = per-track controls on the low row (below).
+- **Low row (11–26) = live keyboard:** tapping a key **plays its note** (audition / jam) —
+  it does *not* open the note editor here. It also shows the selected track's pattern.
+- **F1 = Mute, F2 = Solo** (modifiers): hold **F1 + tap a track** = mute; hold **F2 + tap a
+  track** = solo. Hold **F1 + tap a step** = toggle that single step's mute.
+- **F3 (hold F1+F2) = track rate:** top row 3–10 = rate options for the selected track;
+  the low row mirrors the per-track controls.
+- **Hold a track → per-track controls on the low row:** **11 = Mute · 12 = Solo · 14–18 =
+  play mode** — 14 forward · 15 reverse · 16 forward-pong · 17 reverse-pong · **18 random-
+  page** ("random-page" plays each *enabled* page of the pattern in random order). (13 free.)
+- **Whole-track copy/paste** now needs a new gesture (F1/F2 became mute/solo) — see §9.
 
-→ `form_redesign.json` **state 1**.
+→ `form_redesign.json` **state 1** + `form_mix.json` (hold-track & rate detail).
 
 ### 4.2 Step  _(per-track step editing — 8 hold-modes)_
 Locked to one track. The **top row (keys 3–10) selects one of 8 step-edit modes**; the
@@ -108,11 +113,12 @@ active mode is lit bright, the others dim:
 | 5 | **Step Length** | gate length |
 | 6 | **Repeat** | retrigger / ratchet count |
 | 7 | **Chance** | trigger probability |
-| 8 | **Math** | (conditional / value math — TBD, see §9) |
+| 8 | **Math** | **conditional trig** (A:B ratio + Fill/!Fill) |
 | 9 | **Function** | step function (RSET / jump / reverse / …) |
 | 10 | **MIDI FX** | per-step MIDI-FX routing |
 
 **Editing in the active mode:**
+- **Quick-click a step (11–26) = clear that step** (Elektron-style).
 - **Hold a step (11–26)** → the **top row keys 1–10 become the value palette** for the
   current mode; tap one to set that step's value. **Press AUX while holding = reset that
   step to the mode's default.** (Turning a pot-bank knob while holding still lays a CC
@@ -120,24 +126,26 @@ active mode is lit bright, the others dim:
 - **Hold a mode key (3–10)** → **keys 11–20 become the value palette for the mode's
   DEFAULT** value (what steps use until given an explicit value); tap one to set it.
 
-**The value palette is 10 keys, contents per mode.** For **Note** mode the 10 keys are 10
-notes from the current note settings: **chromatic** = 10 chromatic notes from **C** in the
-current octave; **scale on** = the notes of the current scale only. (Velocity / Chance /
-etc. map their 10 keys across the value range; Function's 10 keys are the function list.)
+**The value palette is 10 keys, contents per mode:**
+- **Note** — 10 notes: **chromatic** = 10 notes from **C** in the current octave;
+  **scale on** = the current scale's notes only.
+- **Velocity / Step Length / Repeat / Chance** — the 10 keys span the value range.
+- **Math (conditional trig)** — **key 1 = Fill · key 2 = !Fill**; **keys 3–6 = ratio A**
+  (1–4) · **keys 7–10 = ratio B** (1–4). E.g. key 3 + key 10 = **1:4** (fires 1 of every 4
+  loops). 
+- **Function** — the 10 keys are the function list. **MIDI FX** — the MIDI-FX slots.
 
-**Structure & pages** (unchanged):
-- **Hold F3 (F1+F2) = structure layer** (§5): tap **pages** = playback range, tap **steps**
-  = page length. _(The top row now hosts the 8 modes, so page selection lives here / on the
-  AUX layer — see §9.)_
+**Pages** are selected on the **AUX layer** (keys 3–6) now that the top row hosts modes;
+**F3 (F1+F2) = structure layer** still sets playback range + page length (§5).
 
-→ `form_redesign.json` **states 2, 3, 4**.
+→ `form_redesign.json` **states 2, 3, 4** + `form_step.json` (Math + Velocity palettes).
 
 ### 4.3 Transpose
 - Unchanged from today's transpose editor: step row = transpose pattern
   (`TZERO/THIGH/TLOW`), top keys = randomize/clear/copy shortcuts. Operates on the
   current page.
 
-→ `form_redesign.json` **state 6**.
+→ `form_redesign.json` **state 7**.
 
 ### 4.4 Notes  _(chord/note entry — reworked for in-editor step nav)_
 Enter with a **double-click** on a step (Mix/Step view) — that stays. The rework lets
@@ -158,28 +166,27 @@ you **step through and edit without leaving the editor**:
 - **Step-change feedback:** no persistent cursor. On any step change (11/12, F3-jump, or
   encoder) the new step's stored notes **flash briefly, then settle** — a quick preview
   of what's on the step you landed on.
-- **[proposed] Per-step length (gate):** hold **F3** and use the **top row** to set the
-  current step's length. (See §9 — needs to reconcile with F3's low-row jump.)
-- **[proposed] Change page from the editor:** hold **F1** and tap a **page key (3–6)** to
-  jump the shared page without leaving Notes. (See §9 — F1 is also tap=copy.)
+- **Change page** while here: via the **AUX layer** (keys 3–6), like everywhere else (§6).
 - **OLED:** above the keyboard render, a strip of **16 small boxes** (one **filled** =
   the step being edited) and, to its right, the **page number** (1–4).
 
-→ `form_redesign.json` **state 5** (and `form_notes.json` for the detail).
+→ `form_redesign.json` **state 6** (and `form_notes.json` for the detail).
 
 ---
 
 ## 5. Pages, playback range & length (Step view)
 
 - **4 pages per track, 16 steps each** (64 total), always one page on screen — no zoom.
+- **Select the edit page** on the **AUX layer** (AUX + keys 3–6 = page 1–4) — §6.
 - **Structure layer = hold F3 (F1+F2, keys 1 & 2):**
   - **Tap page keys (3–6) = which pages loop.** Tap one page ⇒ only it loops; tap two ⇒
     the **inclusive range** between them loops (tap page 1 & 4 ⇒ pages 1-2-3-4). Active
-    pages light GREEN.
+    pages light GREEN. _(Per-track **play mode** — forward / reverse / pong / **random-
+    page** — is set in Mix, §4.1; random-page shuffles these enabled pages.)_
   - **Tap step keys (11–26) = the current page's length** (1–16). Steps beyond the length
     go dark. Each page can be a different length (polymeter).
 
-→ `form_redesign.json` **state 3** (structure layer shows both at once).
+→ `form_redesign.json` **state 5** (structure layer shows both at once).
 
 ---
 
@@ -192,13 +199,15 @@ flashes**:
 |---|---|
 | **1** | Play / Pause |
 | **2** | Reset |
+| **3 / 4 / 5 / 6** | Select edit **page 1–4** |
 | **11 / 12** | Octave − / + |
 | **13 / 14 / 15 / 16** | Switch view → **Mix / Step / Transpose / Notes** (current **flashes**) |
 
-No pot-bank shortcut here (bank is a menu setting, §2). No view may reinterpret AUX
-differently — fixes "sometimes holding AUX works differently."
+No pot-bank shortcut here (bank is a menu setting, §2). **MIDI-FX is no longer on AUX** —
+it's a Step-view mode now (§4.2). No view may reinterpret AUX differently — fixes
+"sometimes holding AUX works differently."
 
-→ `form_redesign.json` **state 7**.
+→ `form_redesign.json` **state 8**.
 
 ---
 
@@ -235,25 +244,28 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 3. **Per-page length** → **F3 (F1+F2) + tap a step** in Step view (§5).
 4. **Notes step nav** → F1/F2 = copy/paste step; **11/12 = prev/next step**; 14 = clear;
    F3 = jump-to-step; **live MIDI audition** on key-hold when stopped (§4.5).
-5. **Mix double-click** → enters the track's Step view (was mute); **mute = F3 + tap**.
-6. **CC meter** → 5-segment line meter on the top OLED row, every view (§2).
-7. **Step view = 8 hold-modes** on keys 3–10 (Note / Velocity / Step Length / Repeat /
+5. **CC meter** → 5-segment line meter on the top OLED row, every view (§2).
+6. **Step view = 8 hold-modes** on keys 3–10 (Note / Velocity / Step Length / Repeat /
    Chance / Math / Function / MIDI FX). Hold step → value palette on keys 1–10; hold mode
-   key → default on keys 11–20; AUX-while-holding-step = reset to default (§4.2).
-   **Function is back** as a mode (no separate view).
+   key → default on keys 11–20; AUX-while-holding-step = reset to default; **quick-click a
+   step = clear it** (§4.2). **Function is back** as a mode.
+7. **Math** = **conditional trig**: key 1 = Fill, key 2 = !Fill, keys 3–6 = ratio A (1–4),
+   keys 7–10 = ratio B (1–4) → e.g. 3+10 = 1:4.
+8. **Pages** → selected on the **AUX layer** (AUX + 3–6). **MIDI-FX removed from AUX**
+   (it's a Step mode now).
+9. **Mix = performance view** (§4.1): tap-play the low row; F1 = mute, F2 = solo, F3 =
+   track rate; **hold a track** → mute/solo/**play mode** (fwd/rev/pong/rev-pong/random-
+   page) on the low row; double-click a track = enter Step.
+10. **Note mode & Notes view** → **keep both** (quick per-step palette vs full chord entry).
 
 ### Still open
-- **Where do pages go?** The top row (3–10) is now the 8 modes, so pages can't live on
-  3–6 anymore. Proposal: page selection happens in the **F3 structure layer** (tap a page
-  to make it the edit page) and/or **AUX**. Confirm.
-- **"Math" mode** — what is it exactly? (Conditional trigs A:B? per-step transpose/accum
-  math? something else?)
-- **Note mode vs Notes view** — Note mode gives a quick 10-note-per-step palette; the
-  Notes view is full chord entry. Keep both (quick vs deep), or does the Note mode make
-  the Notes view redundant for single-note tracks?
+- **Whole-track copy/paste** — F1/F2 are now mute/solo in Mix, so track copy/paste needs a
+  new gesture (a hold-track option? a Mix menu?).
+- **Key 13** in the hold-track low row (11 mute, 12 solo, 14–18 play mode) — unused; assign
+  or leave.
 - **10-value granularity** — velocity/chance/length across only 10 keys is coarse; add
   encoder fine-tune while a step is held?
-- **F1 tap-vs-hold**, **P-Lock color MAGENTA** — as before.
+- **F1 tap-vs-hold** (Notes copy vs …), **P-Lock color MAGENTA** — as before.
 
 ---
 

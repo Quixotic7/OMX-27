@@ -38,8 +38,8 @@
   "states": [
     {
       "state": 1,
-      "name": "Mix view (select tracks)",
-      "notes": "8-track sequencer, every track the same engine (no machine types). Keys 3-10 = the 8 tracks, each in its own track color (seqColors): selected=WHITE, muted=RED, empty=dim, fired-this-step=INDIGO. Here track1=selected(WHITE), track2=YELLOW, track3=GREEN, track4=muted(RED), track5=CYAN, track6=BLUE, tracks7-8=empty(dim). Tap=select, double-click=enter Step view, F3(hold F1+F2)+tap=mute, F1/F2+tap=copy/paste whole track. Step row = selected track's pattern, WHITE playhead. Knobs = track pot bank.",
+      "name": "Mix view (mixing / performance)",
+      "notes": "Mix = mixing/performance, not step editing. Keys 3-10 = the 8 tracks in their track colors (seqColors): selected=WHITE, muted=RED, empty=dim, fired=INDIGO. Track: tap=select, double-click=enter Step, HOLD=per-track controls on the low row (see form_mix.json). F1=Mute, F2=Solo modifiers (F1/F2 + tap a track); F3(F1+F2)=track rate. LOW ROW (11-26): tapping a key PLAYS its note (jam/audition), and shows the selected track's pattern; hold F1 + a step = toggle that step's mute. Knobs = track pot bank.",
       "leds": [
         "#000000", "#000000", "#000000",
         "#ffffff", "#ffff00", "#00ff00", "#ff0000", "#00ffff", "#0000ff", "#202020", "#202020",
@@ -47,9 +47,10 @@
         "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff"
       ],
       "keyNotes": {
-        "3": "Track 1 — selected (WHITE). Double-click = open Step; F3+tap = mute",
+        "3": "Track 1 — selected (WHITE). Double-click=open Step; hold=controls; F1+tap=mute; F2+tap=solo",
         "6": "Track 4 — muted (RED)",
         "9": "Track 7 — empty (dim)",
+        "11": "Low row = live keyboard (tap plays); shows pattern; F1+tap=step mute",
         "15": "Playhead"
       },
       "pots": [
@@ -231,10 +232,10 @@
     {
       "state": 8,
       "name": "AUX layer (held) — same everywhere",
-      "notes": "Holding AUX shows one control layer in every view; the CURRENT VIEW flashes (Step=key14, WHITE). key0=AUX(RED). 1=Play/Pause(GREEN), 2=Reset(ORANGE). 11/12=octave -/+. 13-16 = views Mix/Step/Transpose/Notes. No pot-bank shortcut (bank set in track menu). (While holding a STEP, AUX instead resets that step to the mode default — see state 3.)",
+      "notes": "Holding AUX shows one control layer in every view. key0=AUX(RED). 1=Play/Pause(GREEN), 2=Reset(ORANGE). 3-6 = select edit PAGE 1-4 (current page WHITE=page2, others dim). 11/12=octave -/+. 13-16 = views Mix/Step/Transpose/Notes (current view flashes WHITE=Step key14). No pot-bank shortcut and NO MIDI-FX here (MIDI-FX is a Step mode now). While holding a STEP, AUX instead resets that step to the mode default.",
       "leds": [
         "#ff0000",
-        "#00ff00", "#ff8000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+        "#00ff00", "#ff8000", "#202020", "#ffffff", "#202020", "#202020", "#000000", "#000000", "#000000", "#000000",
         "#202020", "#202020", "#202020", "#ffffff", "#202020", "#202020", "#000000", "#000000",
         "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"
       ],
@@ -242,6 +243,10 @@
         "0": "AUX (held)",
         "1": "Play / Pause",
         "2": "Reset",
+        "3": "Page 1",
+        "4": "Page 2 — current edit page (WHITE)",
+        "5": "Page 3",
+        "6": "Page 4",
         "11": "Octave -",
         "12": "Octave +",
         "13": "View: Mix",
