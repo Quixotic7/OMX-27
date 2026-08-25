@@ -375,13 +375,100 @@ void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 		return;
 	}
 
-	// No modifier, key down: select + mark held (so K5 can set its hue).
+	// No modifier, key down: select + mark held (so K5 can set its hue, low row = controls).
 	if (!e.held())
 	{
 		selectMachine(track);
 		heldTrackKey_ = track;
 		omxDisp.displayMessage("Track " + String(track + 1));
 	}
+}
+
+// Play-mode index 0-4 (fwd / rev / fwd-pong / rev-pong / random) from a track's fields.
+static uint8_t mixPlayModeIndex(FormOmni::Track *t)
+{
+	if (t->playMode == FormOmni::TRACKMODE_RAND)
+		return 4;
+	if (t->playMode == FormOmni::TRACKMODE_PONG)
+		return (t->playDirection == FormOmni::TRACKDIRECTION_REVERSE) ? 3 : 2;
+	return (t->playDirection == FormOmni::TRACKDIRECTION_REVERSE) ? 1 : 0;
+}
+
+// Low-row per-track controls shown while a track is held in Mix:
+// 11 Mute · 12 Solo · 14-18 play mode (fwd/rev/fwd-pong/rev-pong/random) · 25 copy · 26 paste.
+void OmxModeForm::onKeyUpdateMixHold(OMXKeypadEvent e)
+{
+	if (e.held() || !e.down())
+		return;
+	uint8_t k = e.key();
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
+	auto trk = omni->trackPtr();
+
+	switch (k)
+	{
+	case 11:
+		omni->setMute(!omni->getMute());
+		omxDisp.displayMessage(omni->getMute() ? "MUTE" : "UNMUTE");
+		break;
+	case 12:
+		omni->setSolo(!omni->getSolo());
+		omxDisp.displayMessage(omni->getSolo() ? "SOLO" : "UNSOLO");
+		break;
+	case 14:
+		trk->playDirection = FormOmni::TRACKDIRECTION_FORWARD;
+		trk->playMode = FormOmni::TRACKMODE_NONE;
+		omxDisp.displayMessage("FWD");
+		break;
+	case 15:
+		trk->playDirection = FormOmni::TRACKDIRECTION_REVERSE;
+		trk->playMode = FormOmni::TRACKMODE_NONE;
+		omxDisp.displayMessage("REV");
+		break;
+	case 16:
+		trk->playDirection = FormOmni::TRACKDIRECTION_FORWARD;
+		trk->playMode = FormOmni::TRACKMODE_PONG;
+		omxDisp.displayMessage("FWD PONG");
+		break;
+	case 17:
+		trk->playDirection = FormOmni::TRACKDIRECTION_REVERSE;
+		trk->playMode = FormOmni::TRACKMODE_PONG;
+		omxDisp.displayMessage("REV PONG");
+		break;
+	case 18:
+		trk->playMode = FormOmni::TRACKMODE_RAND;
+		omxDisp.displayMessage("RANDOM");
+		break;
+	case 25:
+		copyMachineAt(heldTrackKey_);
+		omxDisp.displayMessage("COPY TRK");
+		break;
+	case 26:
+		pasteMachineTo(heldTrackKey_);
+		omxDisp.displayMessage("PASTE TRK");
+		break;
+	}
+	omxLeds.setDirty();
+}
+
+void OmxModeForm::updateMixHoldLEDs()
+{
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
+	auto trk = omni->trackPtr();
+
+	for (uint8_t i = 11; i < 27; i++)
+		strip.setPixelColor(i, LEDOFF);
+
+	strip.setPixelColor(11, omni->getMute() ? RED : DKRED);
+	strip.setPixelColor(12, omni->getSolo() ? YELLOW : DKYELLOW);
+
+	const uint32_t pmBright[5] = {GREEN, ORANGE, CYAN, BLUE, MAGENTA};
+	const uint32_t pmDim[5] = {DKGREEN, DKORANGE, DKCYAN, DKBLUE, DKMAGENTA};
+	uint8_t pm = mixPlayModeIndex(trk);
+	for (uint8_t m = 0; m < 5; m++)
+		strip.setPixelColor(14 + m, (m == pm) ? pmBright[m] : pmDim[m]);
+
+	strip.setPixelColor(25, DKCYAN);
+	strip.setPixelColor(26, DKGREEN);
 }
 
 void OmxModeForm::updateShortcutMode()
@@ -865,11 +952,22 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	{
 		return; // stub: swallow keys
 	}
-	// Mix view: intercept the track keys (3-10); low-row keys fall through to the machine.
-	if (formView_ == FORMVIEW_MIX && !keyConsumed && thisKey >= 3 && thisKey < 11)
+	// Mix view routing.
+	if (formView_ == FORMVIEW_MIX && !keyConsumed)
 	{
-		onKeyUpdateMix(e);
-		return;
+		// Track keys 3-10 (except under F3, which the machine handles as rate).
+		if (thisKey >= 3 && thisKey < 11 && omxFormGlobal.shortcutMode != FORMSHORTCUT_F3)
+		{
+			onKeyUpdateMix(e);
+			return;
+		}
+		// Low-row per-track controls while a track is held.
+		if (heldTrackKey_ >= 0 && thisKey >= 11 && thisKey < 27)
+		{
+			onKeyUpdateMixHold(e);
+			return;
+		}
+		// Otherwise (low-row, no track held; F3 + track) falls through to the machine.
 	}
 
 	if(selMachine->doesConsumeKeys())
@@ -1113,6 +1211,12 @@ void OmxModeForm::updateLEDs()
 	}
 
 	selMachine->updateLEDs();
+
+	// Mix: while a track is held, the low row shows its per-track controls (over the machine).
+	if (formView_ == FORMVIEW_MIX && heldTrackKey_ >= 0)
+	{
+		updateMixHoldLEDs();
+	}
 }
 
 void OmxModeForm::onDisplayUpdate()

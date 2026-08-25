@@ -69,6 +69,9 @@ namespace FormOmni
         // shows the v2 view name).
         void setUiMode(uint8_t mode) { changeUIMode(mode, true); }
 
+        // v2: expose the track (play mode / direction / length etc.) to the container.
+        Track *trackPtr() { return getTrack(); }
+
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }
         void setSeq(const OmniSeq &s)
