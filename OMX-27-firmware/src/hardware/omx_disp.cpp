@@ -636,7 +636,7 @@ static void drawPageIcon(int x, int y, bool filled, uint16_t color)
 void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
 							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
 							   uint8_t activePage, const uint8_t *stepState, int8_t playhead,
-							   uint8_t modOverlay, const char *overlayLabel)
+							   uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen)
 {
 	if (isMessageActive())
 	{
@@ -724,13 +724,26 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	for (uint8_t i = 0; i < 16; i++)
 	{
 		int x = startX + i * pitch;
-		if (stepState[i] == 1)
-			display.fillRect(x, y, bw2, bh, WHITE);
+		if (i < pageLen)
+		{
+			// Within the page length: full-height box.
+			if (stepState[i] == 1)
+				display.fillRect(x, y, bw2, bh, WHITE);
+			else
+			{
+				display.drawRect(x, y, bw2, bh, WHITE);
+				if (stepState[i] == 2)
+					display.fillRect(x + 2, y + 2, 2, 2, WHITE); // ghost dot
+			}
+		}
 		else
 		{
-			display.drawRect(x, y, bw2, bh, WHITE);
-			if (stepState[i] == 2)
-				display.fillRect(x + 2, y + 2, 2, 2, WHITE); // ghost dot
+			// Beyond the page length: a short 3px box at the bottom.
+			int sy = y + bh - 3;
+			if (stepState[i] == 1)
+				display.fillRect(x, sy, bw2, 3, WHITE);
+			else
+				display.drawRect(x, sy, bw2, 3, WHITE);
 		}
 		if ((int8_t)i == playhead)
 			display.fillRect(x, y + bh + 1, bw2, 1, WHITE); // playhead tick

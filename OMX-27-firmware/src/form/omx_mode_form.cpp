@@ -1088,7 +1088,7 @@ void OmxModeForm::onDisplaySeqTrackPage()
 	omxDisp.dispSeqTrackPage(title, trackMuted, selectedMachine_, rateStr,
 							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
 							 omni->getEnabledPages(), omni->activePage(), stepState, playhead,
-							 modOverlay, overlayLabel);
+							 modOverlay, overlayLabel, omni->getPageLen(omni->activePage()));
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
