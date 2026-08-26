@@ -369,8 +369,7 @@ void OmxModeForm::stepApplyToHeld(uint8_t paletteIndex)
 		if (heldStepMask_ & (1 << s))
 			omni->setStepPalette(s, stepEditMode_, paletteIndex);
 	stepEdited_ = true;
-	if (heldStepKey_ >= 0)
-		omxDisp.displayMessage(omni->stepValueString(heldStepKey_, stepEditMode_));
+	omxDisp.setDirty(); // the hold-step UI shows the new value — no popup message
 	omxLeds.setDirty();
 }
 
@@ -577,8 +576,7 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 					if (heldStepMask_ & (1 << s))
 						omni->setStepJumpTarget(s, key16);
 				stepEdited_ = true;
-				if (heldStepKey_ >= 0)
-					omxDisp.displayMessage(omni->stepValueString(heldStepKey_, stepEditMode_));
+				omxDisp.setDirty(); // hold UI shows the jump target
 				omxLeds.setDirty();
 				return;
 			}
@@ -1682,7 +1680,7 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 								omni->resetStepValue(s, stepEditMode_);
 						}
 					stepEdited_ = true;
-					omxDisp.displayMessage(note ? "CLEAR NOTES" : "RESET");
+					omxDisp.setDirty(); // hold UI shows the reset value — no popup
 					omxLeds.setDirty();
 				}
 				return;

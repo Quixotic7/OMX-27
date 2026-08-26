@@ -935,7 +935,7 @@ void OmxDisp::dispStepOverview(const char *modeName, const bool *filled, uint8_t
 	u8g2centerText(modeName, 0, 13, 128, 8);
 
 	// Step cells: filled = has content, outline = empty. Playhead gets a tick beneath it.
-	const uint8_t bw = 6, bh = 6, pitch = 8, y = 22;
+	const uint8_t bw = 6, bh = 6, pitch = 8, y = 23; // matches the note-hold + track-page render
 	uint8_t startX = (128 - (count * pitch - (pitch - bw))) / 2;
 	for (uint8_t i = 0; i < count; i++)
 	{
