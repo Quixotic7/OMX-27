@@ -479,40 +479,45 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		}
 		return;
 	}
-	// F2 top row (3-7) = track play mode.
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 7)
+	// Release of an F2-held track key clears the hold (even if F2 was let go first).
+	if (!e.down() && thisKey >= 3 && thisKey <= 10 && heldTrackKey_ == (int8_t)(thisKey - 3))
 	{
-		setTrackPlayModeIdx(omni->trackPtr(), thisKey - 3);
-		omxDisp.displayMessage(kPlayModeNames[thisKey - 3]);
+		heldTrackKey_ = -1;
+		omxDisp.setDirty();
 		omxLeds.setDirty();
 		return;
 	}
-	// F1 = copy step · F2 = paste/cut step (§3.5 buffer) · F3 = structure layer (set length).
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
+	// F2 + top row (3-10) = select the track; holding one exposes its controls on the low row.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && thisKey >= 3 && thisKey <= 10)
 	{
-		omni->stepCopy(thisKey - 11);
-		omxDisp.displayMessage("COPY");
-		stepPasteArmed_ = true; // right after a copy, F2 pastes
+		if (e.down() && !e.held())
+		{
+			uint8_t track = thisKey - 3;
+			selectMachine(track);
+			heldTrackKey_ = track;
+			omxDisp.displayMessage("Track " + String(track + 1));
+			omxLeds.setDirty();
+		}
 		return;
 	}
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
+	// F2 + low row while holding a track = mute/solo/play mode/colour (same as Mix hold-track).
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ >= 0 && thisKey >= 11 && thisKey < 27)
+	{
+		onKeyUpdateMixHold(e);
+		return;
+	}
+	// F1 + step key = copy (a step with content) / paste (an empty step). F3 = structure layer.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 	{
 		uint8_t k = thisKey - 11;
-		if (stepPasteArmed_)
+		if (omni->stepIsOn(k))
 		{
-			omni->stepPaste(k);
-			omxDisp.displayMessage("PASTE");
-			stepPasteArmed_ = false;
-		}
-		else if (omni->stepIsOn(k))
-		{
-			omni->stepCut(k); // cut content into the buffer; next F2 pastes
-			omxDisp.displayMessage("CUT");
-			stepPasteArmed_ = true;
+			omni->stepCopy(k);
+			omxDisp.displayMessage("COPY");
 		}
 		else
 		{
-			omni->stepPaste(k); // paste the buffer into an empty step
+			omni->stepPaste(k);
 			omxDisp.displayMessage("PASTE");
 		}
 		return;
@@ -656,19 +661,28 @@ void OmxModeForm::updateStepLEDs()
 			strip.setPixelColor(11 + i, omni->stepIsOn(i) ? hue : (uint32_t)LEDOFF);
 		return;
 	}
-	// F2: top row 3-7 = play modes (active bright); step row = content (cut/paste targets).
+	// F2: top row 3-10 = the 8 tracks (track colour; selected white, muted red). Holding one
+	// shows its controls on the low row (mute/solo/play mode/colour), else the low row is content.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldStepMask_ == 0)
 	{
-		static const uint32_t pmBright[5] = {GREEN, ORANGE, CYAN, BLUE, MAGENTA};
-		static const uint32_t pmDim[5] = {DKGREEN, DKORANGE, DKCYAN, DKBLUE, DKMAGENTA};
-		uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
-		uint8_t pm = mixPlayModeIndex(omni->trackPtr());
-		for (uint8_t k = 3; k <= 10; k++)
-			strip.setPixelColor(k, LEDOFF);
-		for (uint8_t m = 0; m < 5; m++)
-			strip.setPixelColor(3 + m, (m == pm) ? pmBright[m] : pmDim[m]);
-		for (uint8_t i = 0; i < 16; i++)
-			strip.setPixelColor(11 + i, omni->stepIsOn(i) ? hue : (uint32_t)LEDOFF);
+		for (uint8_t t = 0; t < kNumMachines; t++)
+		{
+			uint32_t tc = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[t] << 8, 255, 255));
+			uint32_t c = machines_[t]->getMute() ? (uint32_t)RED : tc;
+			if (t == selectedMachine_)
+				c = (uint32_t)WHITE;
+			strip.setPixelColor(3 + t, c);
+		}
+		if (heldTrackKey_ >= 0)
+		{
+			updateMixHoldLEDs();
+		}
+		else
+		{
+			uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
+			for (uint8_t i = 0; i < 16; i++)
+				strip.setPixelColor(11 + i, omni->stepIsOn(i) ? hue : (uint32_t)LEDOFF);
+		}
 		return;
 	}
 	// F3 structure layer: the step row shows the track length — steps beyond it go dark,
@@ -969,11 +983,11 @@ void OmxModeForm::onDisplayStep()
 		omxDisp.dispKeyFunctionSplit("PAGE", topFill, 4, "COPY", bottomFill, 16);
 		return;
 	}
-	// F2: top row sets the play mode, the step row cut/pastes steps.
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
+	// F2: holding a track shows its status (number, mute/solo, play mode) like Mix.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ >= 0)
 	{
-		uint8_t pm = mixPlayModeIndex(omni->trackPtr());
-		omxDisp.dispStepPlayModes(pm, kPlayModeNames[pm], "Cut / Paste");
+		auto omniT = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
+		omxDisp.dispTrackHold(heldTrackKey_ + 1, omniT->getMute(), omniT->getSolo(), mixPlayModeIndex(omniT->trackPtr()));
 		return;
 	}
 	// F3 structure layer: rate on top, the active page's length bar on the bottom.
@@ -1107,48 +1121,25 @@ void OmxModeForm::onKeyUpdateMixHold(OMXKeypadEvent e)
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
 	auto trk = omni->trackPtr();
 
-	switch (k)
+	if (k == 11)
 	{
-	case 11:
 		omni->setMute(!omni->getMute());
 		omxDisp.displayMessage(omni->getMute() ? "MUTE" : "UNMUTE");
-		break;
-	case 12:
+	}
+	else if (k == 12)
+	{
 		omni->setSolo(!omni->getSolo());
 		omxDisp.displayMessage(omni->getSolo() ? "SOLO" : "UNSOLO");
-		break;
-	case 14:
-		trk->playDirection = FormOmni::TRACKDIRECTION_FORWARD;
-		trk->playMode = FormOmni::TRACKMODE_NONE;
-		omxDisp.displayMessage("FWD");
-		break;
-	case 15:
-		trk->playDirection = FormOmni::TRACKDIRECTION_REVERSE;
-		trk->playMode = FormOmni::TRACKMODE_NONE;
-		omxDisp.displayMessage("REV");
-		break;
-	case 16:
-		trk->playDirection = FormOmni::TRACKDIRECTION_FORWARD;
-		trk->playMode = FormOmni::TRACKMODE_PONG;
-		omxDisp.displayMessage("FWD PONG");
-		break;
-	case 17:
-		trk->playDirection = FormOmni::TRACKDIRECTION_REVERSE;
-		trk->playMode = FormOmni::TRACKMODE_PONG;
-		omxDisp.displayMessage("REV PONG");
-		break;
-	case 18:
-		trk->playMode = FormOmni::TRACKMODE_RAND;
-		omxDisp.displayMessage("RANDOM");
-		break;
-	case 25:
-		copyMachineAt(heldTrackKey_);
-		omxDisp.displayMessage("COPY TRK");
-		break;
-	case 26:
-		pasteMachineTo(heldTrackKey_);
-		omxDisp.displayMessage("PASTE TRK");
-		break;
+	}
+	else if (k >= 13 && k <= 17) // play modes, adjacent to mute/solo (no gap)
+	{
+		setTrackPlayModeIdx(trk, k - 13);
+		omxDisp.displayMessage(kPlayModeNames[k - 13]);
+	}
+	else if (k >= 19 && k <= 26) // last 8 keys = track colour presets (8 evenly-spaced hues)
+	{
+		trackHue_[heldTrackKey_] = (uint8_t)((k - 19) * 32);
+		omxDisp.displayMessage("Trk" + String(heldTrackKey_ + 1) + " Color");
 	}
 	omxLeds.setDirty();
 }
@@ -1189,17 +1180,22 @@ void OmxModeForm::updateMixHoldLEDs()
 	for (uint8_t i = 11; i < 27; i++)
 		strip.setPixelColor(i, LEDOFF);
 
+	// Mute / Solo (warm) — contrasting with the play modes (cyan) beside them.
 	strip.setPixelColor(11, omni->getMute() ? RED : DKRED);
 	strip.setPixelColor(12, omni->getSolo() ? YELLOW : DKYELLOW);
 
-	const uint32_t pmBright[5] = {GREEN, ORANGE, CYAN, BLUE, MAGENTA};
-	const uint32_t pmDim[5] = {DKGREEN, DKORANGE, DKCYAN, DKBLUE, DKMAGENTA};
+	// Play modes 13-17: one cool colour, selected bright (the icons distinguish which is which).
 	uint8_t pm = mixPlayModeIndex(trk);
 	for (uint8_t m = 0; m < 5; m++)
-		strip.setPixelColor(14 + m, (m == pm) ? pmBright[m] : pmDim[m]);
+		strip.setPixelColor(13 + m, (m == pm) ? (uint32_t)CYAN : (uint32_t)DKCYAN);
 
-	strip.setPixelColor(25, DKCYAN);
-	strip.setPixelColor(26, DKGREEN);
+	// 19-26: 8 track-colour presets, each in its own hue (current one brightest).
+	for (uint8_t i = 0; i < 8; i++)
+	{
+		bool cur = (trackHue_[heldTrackKey_] == i * 32);
+		uint32_t c = strip.gamma32(strip.ColorHSV((uint16_t)(i * 32) << 8, 255, cur ? 255 : 60));
+		strip.setPixelColor(19 + i, c);
+	}
 }
 
 void OmxModeForm::updateShortcutMode()
