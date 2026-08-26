@@ -155,11 +155,27 @@ namespace FormOmni
         }
     };
 
+    // Which per-step parameters can be P-Locked (each has a bit in Step::locks).
+    enum StepLockBit
+    {
+        SLOCK_VEL = 0,
+        SLOCK_NUDGE,
+        SLOCK_LEN,
+        SLOCK_MFX,
+        SLOCK_PROB,
+        SLOCK_COND,
+        SLOCK_FUNC,
+        SLOCK_ACCUM,
+        SLOCK_REPEAT,
+        SLOCK_COUNT
+    };
+
     struct Step
     {
         uint8_t mute : 1;      // bool for mute
         uint8_t repeat : 3;    // ratchet count index: 0 = 1x (off), 1 = 2x, 2 = 3x (triplet), 3 = 4x
         uint8_t trig : 1;      // "ghost" trigger: step is on with no notes (e.g. a locked value/CC)
+        uint16_t locks;        // P-Lock flags: bit set = that param is explicitly locked (StepLockBit)
         int8_t notes[6];       // 0 - 127, -1 for off
         int8_t potVals[5];     // 0 -> 127, -1 for off
         uint8_t vel : 7;       // 0 - 127
@@ -186,6 +202,7 @@ namespace FormOmni
             mute = 0;
             repeat = 0;
             trig = 0;
+            locks = 0;
             for (uint8_t i = 0; i < 6; i++)
                 notes[i] = -1;
             for (uint8_t i = 0; i < 5; i++)
@@ -219,6 +236,9 @@ namespace FormOmni
         void CopyFrom(Step *other)
         {
             mute = other->mute;
+            repeat = other->repeat;
+            trig = other->trig;
+            locks = other->locks;
             for (uint8_t i = 0; i < 6; i++)
                 notes[i] = other->notes[i];
             for (uint8_t i = 0; i < 5; i++)
@@ -234,6 +254,10 @@ namespace FormOmni
 
             // tPatPos = other->tPatPos;
         }
+
+        bool isLocked(uint8_t bit) { return (locks & (1 << bit)) != 0; }
+        void setLock(uint8_t bit) { locks |= (1 << bit); }
+        void clearLock(uint8_t bit) { locks &= ~(1 << bit); }
     };
 
     struct TrackDynamic

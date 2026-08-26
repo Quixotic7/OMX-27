@@ -106,6 +106,7 @@ namespace FormOmni
             Step *s = &getTrack()->steps[key16toStep(key16)];
             s->func = STEPFUNC_COUNT + key16toStep(targetKey16);
             s->trig = 1;
+            s->setLock(SLOCK_FUNC);
         }
         void stepCopy(uint8_t key16) { copyStep(key16); }
         void stepCut(uint8_t key16) { cutStep(key16); }
@@ -160,6 +161,14 @@ namespace FormOmni
         // Math introspection for LEDs: returns kind (0 other, 1 Fill, 2 !Fill, 3 ratio) and,
         // for a ratio, the A/B components (1-8) via the out params.
         uint8_t stepMathInfo(uint8_t key16, uint8_t &a, uint8_t &b);
+
+        // v2 Step menu (P-Lockable params). pid: 0 Vel,1 Nudge,2 Len,3 MFX,4 Prob,5 Cond,6 Func,7 Accum.
+        static const uint8_t kStepMenuParamCount = 8;
+        const char *stepParamLabel(uint8_t pid);
+        String stepParamValueString2(uint8_t key16, uint8_t pid);
+        void editStepParam(uint8_t key16, uint8_t pid, int delta); // edits value, sets its lock
+        bool stepParamLocked(uint8_t key16, uint8_t pid);
+        void clearStepParamLock(uint8_t key16, uint8_t pid); // clears the lock and resets to default
 
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }

@@ -366,8 +366,9 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	uint8_t thisKey = e.key();
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
-	// While step(s) are held, the top row is the value palette for the current mode.
-	if (heldStepMask_ != 0 && thisKey >= 1 && thisKey <= 10)
+	// While step(s) are held on the overview page, the top row is the value palette. On a
+	// param page the menu (encoder) does the editing, so the palette is suppressed.
+	if (heldStepMask_ != 0 && stepMenuPage_ == 0 && thisKey >= 1 && thisKey <= 10)
 	{
 		// Note mode: keys 1-10 = chord entry. Held keys build the chord; a fresh press (from
 		// no note keys held) replaces. Notes audition while held.
@@ -494,8 +495,8 @@ void OmxModeForm::updateStepLEDs()
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	bool blink = omxLeds.getBlinkState();
 
-	// While step(s) are held, the top row is the value palette and the held steps flash.
-	if (heldStepMask_ != 0)
+	// While step(s) are held on the overview page, the top row is the value palette.
+	if (heldStepMask_ != 0 && stepMenuPage_ == 0)
 	{
 		for (uint8_t i = 11; i < 27; i++)
 			strip.setPixelColor(i, (heldStepMask_ & (1 << (i - 11))) ? (blink ? WHITE : LOWWHITE) : LEDOFF);
@@ -582,15 +583,124 @@ void OmxModeForm::updateStepLEDs()
 			col = omni->getStepMute(i) ? DKRED : hue;
 		if (omxFormGlobal.isPlaying && i == playhead && blink)
 			col = WHITE; // playhead flashes over the step
+		if (heldStepMask_ & (1 << i))
+			col = blink ? WHITE : LOWWHITE; // held steps flash (e.g. while editing on a param page)
 		strip.setPixelColor(11 + i, col);
 	}
+}
+
+// Step-view encoder: navigate the menu cursor, or (while holding a step on a param page) edit
+// the selected param on all held steps. Returns true if consumed.
+bool OmxModeForm::onEncoderStep(Encoder::Update enc)
+{
+	if (formView_ != FORMVIEW_STEP)
+		return false;
+	int dir = enc.dir();
+	if (dir == 0)
+		return true;
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+
+	// Holding a step on a param page: encoder edits the selected param (auto edit-mode).
+	if (heldStepMask_ != 0 && stepMenuPage_ != 0)
+	{
+		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
+		int delta = enc.accel(1);
+		if (delta == 0)
+			delta = dir;
+		for (uint8_t s = 0; s < 16; s++)
+			if (heldStepMask_ & (1 << s))
+				omni->editStepParam(s, pid, delta);
+		stepEdited_ = true;
+		if (heldStepKey_ >= 0)
+			omxDisp.displayMessage(omni->stepParamValueString2(heldStepKey_, pid));
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
+
+	// Otherwise: navigate the linear cursor [overview=0, params 1..8].
+	int idx = (stepMenuPage_ == 0) ? 0 : (1 + (stepMenuPage_ - 1) * 4 + stepMenuSel_);
+	idx = constrain(idx + dir, 0, 8);
+	if (idx == 0)
+	{
+		stepMenuPage_ = 0;
+		stepMenuSel_ = 0;
+	}
+	else
+	{
+		stepMenuPage_ = (idx - 1) / 4 + 1;
+		stepMenuSel_ = (idx - 1) % 4;
+	}
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+	return true;
+}
+
+// Step-view encoder press: while holding a step on a param page, clear that param's P-Lock;
+// otherwise consumed (the Step view owns its own navigation). Returns true if consumed.
+bool OmxModeForm::onEncoderButtonStep()
+{
+	if (formView_ != FORMVIEW_STEP)
+		return false;
+	if (heldStepMask_ != 0 && stepMenuPage_ != 0)
+	{
+		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
+		auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		for (uint8_t s = 0; s < 16; s++)
+			if (heldStepMask_ & (1 << s))
+				omni->clearStepParamLock(s, pid);
+		stepEdited_ = true;
+		omxDisp.displayMessage("CLR LOCK");
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+	}
+	return true;
+}
+
+// Render a Step param page: the held step's values (with per-param lock indicators) or the
+// built-in defaults when no step is held.
+void OmxModeForm::onDisplayStepMenu()
+{
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	bool holding = (heldStepMask_ != 0 && heldStepKey_ >= 0);
+	uint8_t base = (stepMenuPage_ - 1) * 4;
+	static const char *kDefaults[8] = {"127", "0", "0.75", "TRK", "100", "--", "--", "0"};
+
+	const char *labels[4];
+	String vals[4];
+	const char *values[4];
+	bool locked[4];
+	for (uint8_t i = 0; i < 4; i++)
+	{
+		uint8_t pid = base + i;
+		labels[i] = omni->stepParamLabel(pid);
+		if (holding)
+		{
+			vals[i] = omni->stepParamValueString2(heldStepKey_, pid);
+			locked[i] = omni->stepParamLocked(heldStepKey_, pid);
+		}
+		else
+		{
+			vals[i] = kDefaults[pid];
+			locked[i] = false;
+		}
+		values[i] = vals[i].c_str();
+	}
+	omxDisp.dispStepParams(stepMenuPage_ == 1 ? "STEP" : "TRIG", labels, values, locked, stepMenuSel_);
 }
 
 void OmxModeForm::onDisplayStep()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
-	// Holding step(s):
+	// Param page (menu): show the held step's params (locks indicated) or the defaults.
+	if (stepMenuPage_ != 0)
+	{
+		onDisplayStepMenu();
+		return;
+	}
+
+	// Overview page, holding step(s): the value-palette popup.
 	if (heldStepMask_ != 0)
 	{
 		// Note mode: compact piano keyboard for the held step's chord, with step markers below.
@@ -617,9 +727,15 @@ void OmxModeForm::onDisplayStep()
 		return;
 	}
 
-	// Idle: delegate to the machine's param menu so the mode label stays transient (a message)
-	// and the encoder can browse/edit values — matching Mix.
-	omni->onDisplayUpdate();
+	// Overview page, idle: the 16-step markers titled with the track name.
+	bool filled[16];
+	for (uint8_t i = 0; i < 16; i++)
+		filled[i] = omni->stepIsOn(i);
+	int16_t pageStart = (int16_t)omni->activePage() * 16;
+	int8_t playhead = omxFormGlobal.isPlaying ? (int8_t)((int16_t)omni->playingStepIndex() - pageStart) : -1;
+	char title[16];
+	snprintf(title, sizeof(title), "TRACK %u", (unsigned)(selectedMachine_ + 1));
+	omxDisp.dispStepOverview(title, filled, 16, playhead);
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
@@ -1033,6 +1149,9 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 	if (auxMacroManager_.onEncoderChanged(enc))
 		return;
 
+	if (onEncoderStep(enc))
+		return;
+
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderChanged(enc);
 
@@ -1116,6 +1235,9 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 void OmxModeForm::onEncoderButtonDown()
 {
 	if (auxMacroManager_.onEncoderButtonDown())
+		return;
+
+	if (onEncoderButtonStep())
 		return;
 
 	auto selMachine = getSelectedMachine();

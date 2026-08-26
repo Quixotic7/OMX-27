@@ -614,6 +614,58 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 	drawPlayIcon(playModeIndex, 82, cellY + (cellH - 9) / 2);
 }
 
+void OmxDisp::dispStepParams(const char *pageLabel, const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+
+	const int cw = 32;
+	for (uint8_t i = 0; i < 4; i++)
+	{
+		int x = i * cw;
+
+		// Label (header) — inverted when that param is locked on the step.
+		u8g2_display.setFont(FONT_LABELS);
+		if (locked[i])
+		{
+			display.fillRect(x + 2, 1, cw - 4, 10, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		u8g2centerText(labels[i], x, 9, cw, 8);
+
+		// Value (chunky).
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+		u8g2_display.setFont(FONT_TENFAT);
+		u8g2centerText(values[i], x, 28, cw, 8);
+
+		// Selection box.
+		if (i == sel)
+			display.drawRect(x + 1, 0, cw - 2, 31, WHITE);
+	}
+
+	// Page label, small, top-left corner.
+	if (pageLabel && pageLabel[0])
+	{
+		u8g2_display.setFont(FONT_LABELS);
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+		u8g2_display.setCursor(1, 6);
+		u8g2_display.print(pageLabel);
+	}
+}
+
 void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, int8_t focus)
 {
 	if (isMessageActive())

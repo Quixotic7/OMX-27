@@ -543,6 +543,22 @@ namespace FormOmni
 
     // ---- v2 Step value palettes ----
 
+    // Which P-Lock bit a Step-view edit mode owns (-1 = none, e.g. Note).
+    static int8_t stepModeToLock(uint8_t mode)
+    {
+        switch (mode)
+        {
+        case 1: return SLOCK_VEL;
+        case 2: return SLOCK_LEN;
+        case 3: return SLOCK_REPEAT;
+        case 4: return SLOCK_PROB;
+        case 5: return SLOCK_COND;
+        case 6: return SLOCK_FUNC;
+        case 7: return SLOCK_MFX;
+        default: return -1;
+        }
+    }
+
     uint8_t FormMachineOmni::stepPaletteCount(uint8_t mode)
     {
         switch (mode)
@@ -563,6 +579,8 @@ namespace FormOmni
         if (key16 >= 16) return;
         Step *s = &getTrack()->steps[key16toStep(key16)];
         s->trig = 1; // locking a value turns the step on (ghost step if it has no notes)
+        int8_t lock = stepModeToLock(mode);
+        if (lock >= 0) s->setLock(lock); // setting a value P-Locks that param
         switch (mode)
         {
         case 1: s->vel = constrain(((int)(p + 1) * 127) / 10, 1, 127); break;
@@ -599,6 +617,80 @@ namespace FormOmni
         case 6: return (s->func < STEPFUNC_COUNT) ? s->func : -1;
         case 7: for (uint8_t i = 0; i < 6; i++) if (kMfxPalette[i] == s->mfxIndex) return i; return -1;
         default: return -1; // math via stepMathInfo
+        }
+    }
+
+    // ---- v2 Step menu params (P-Lockable) ----
+    static const uint8_t kStepParamLockBits[8] = {
+        SLOCK_VEL, SLOCK_NUDGE, SLOCK_LEN, SLOCK_MFX, SLOCK_PROB, SLOCK_COND, SLOCK_FUNC, SLOCK_ACCUM};
+    static const char *kStepParamLabels[8] = {"VEL", "NUDG", "LEN", "MFX", "PROB", "COND", "FUNC", "ACUM"};
+
+    const char *FormMachineOmni::stepParamLabel(uint8_t pid)
+    {
+        return pid < 8 ? kStepParamLabels[pid] : "";
+    }
+
+    String FormMachineOmni::stepParamValueString2(uint8_t key16, uint8_t pid)
+    {
+        if (key16 >= 16) return "";
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        switch (pid)
+        {
+        case 0: return String(s->vel);
+        case 1: return String(s->nudge);
+        case 2: return getStepLenString(s->len);
+        case 3: return s->mfxIndex == 0 ? String("OFF") : (s->mfxIndex == 1 ? String("TRK") : ("FX" + String(s->mfxIndex - 1)));
+        case 4: return String(s->prob);
+        case 5: return s->condition == 2 ? String("!FILL") : (s->condition == 1 ? String("FILL") : String(getCondChar(s->condition)));
+        case 6:
+            if (s->func >= STEPFUNC_COUNT) return "J" + String(s->func - STEPFUNC_COUNT + 1);
+            if (s->func == STEPFUNC_RANDJUMP) return String("J?");
+            return String(kStepFuncs[s->func]);
+        case 7: return String(s->accumTPat);
+        default: return "";
+        }
+    }
+
+    void FormMachineOmni::editStepParam(uint8_t key16, uint8_t pid, int delta)
+    {
+        if (key16 >= 16 || pid >= 8) return;
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        switch (pid)
+        {
+        case 0: s->vel = constrain(s->vel + delta, 0, 127); break;
+        case 1: s->nudge = constrain(s->nudge + delta, -60, 60); break;
+        case 2: s->len = constrain(s->len + delta, 0, 22); break;
+        case 3: s->mfxIndex = constrain(s->mfxIndex + delta, 0, NUM_MIDIFX_GROUPS + 2 - 1); break;
+        case 4: s->prob = constrain(s->prob + delta, 0, 100); break;
+        case 5: s->condition = constrain(s->condition + delta, 0, 9 + 35 - 1); break;
+        case 6: s->func = constrain(s->func + delta, 0, STEPFUNC_COUNT + 64 - 1); break;
+        case 7: s->accumTPat = constrain(s->accumTPat + delta, 0, 4); break;
+        }
+        s->trig = 1;
+        s->setLock(kStepParamLockBits[pid]);
+    }
+
+    bool FormMachineOmni::stepParamLocked(uint8_t key16, uint8_t pid)
+    {
+        if (key16 >= 16 || pid >= 8) return false;
+        return getTrack()->steps[key16toStep(key16)].isLocked(kStepParamLockBits[pid]);
+    }
+
+    void FormMachineOmni::clearStepParamLock(uint8_t key16, uint8_t pid)
+    {
+        if (key16 >= 16 || pid >= 8) return;
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        s->clearLock(kStepParamLockBits[pid]);
+        switch (pid) // reset to the built-in default
+        {
+        case 0: s->vel = 127; break;
+        case 1: s->nudge = 0; break;
+        case 2: s->len = 3; break;
+        case 3: s->mfxIndex = 1; break;
+        case 4: s->prob = 100; break;
+        case 5: s->condition = 0; break;
+        case 6: s->func = 0; break;
+        case 7: s->accumTPat = 0; break;
         }
     }
 
@@ -642,6 +734,8 @@ namespace FormOmni
     {
         if (key16 >= 16) return;
         Step *s = &getTrack()->steps[key16toStep(key16)];
+        int8_t lock = stepModeToLock(mode);
+        if (lock >= 0) s->clearLock(lock); // resetting to default clears the P-Lock
         switch (mode)
         {
         case 1: s->vel = 127; break;
@@ -2778,7 +2872,7 @@ namespace FormOmni
     // Bump whenever the OmniSeq layout changes so old saves are skipped rather than
     // blitted into a mismatched struct. (The global EEPROM_VERSION also gates loads,
     // but this makes an OmniSeq change safe on its own.)
-    static const uint8_t kOmniSaveVersion = 2; // v2: added Step::repeat (ratchet)
+    static const uint8_t kOmniSaveVersion = 3; // v3: added Step::trig + Step::locks (P-Locks)
 
     int FormMachineOmni::saveToDisk(int startingAddress, Storage *storage)
 	{
