@@ -642,9 +642,9 @@ void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, in
 		}
 	}
 
-	// --- compact keyboard in the top ~22px (leaves the bottom for the step markers) ---
-	const uint8_t wkInc = 6, wkWidth = 7, wkStartX = 16, wkStartY = 0, wkHeight = 22;
-	const uint8_t bkInc = 6, bkWidth = 7, bkStartX = 13, bkStartY = 0, bkHeight = 14;
+	// --- compact keyboard in the top ~20px (leaves the bottom for the step markers) ---
+	const uint8_t wkInc = 6, wkWidth = 7, wkStartX = 16, wkStartY = 0, wkHeight = 20;
+	const uint8_t bkInc = 6, bkWidth = 7, bkStartX = 13, bkStartY = 0, bkHeight = 12;
 
 	for (uint8_t i = 0; i < 16; i++)
 		if (!whiteNotes[i])
@@ -692,9 +692,9 @@ void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, in
 	if (!whiteNotes[15])
 		display.drawLine(112, wkHeight - 8, 112, wkHeight - 1, WHITE); // right wall
 
-	// --- 16 step-marker cells beneath the keyboard ---
-	const uint8_t bw = 6, bh = 4, pitch = 7, my = 27;
-	uint8_t startX = (128 - (16 * pitch - 1)) / 2;
+	// --- 16 step-marker cells beneath the keyboard (same style as the other step-hold views) ---
+	const uint8_t bw = 6, bh = 6, pitch = 8, my = 23;
+	uint8_t startX = (128 - (16 * pitch - (pitch - bw))) / 2;
 	for (uint8_t i = 0; i < 16; i++)
 	{
 		int x = startX + i * pitch;
@@ -703,7 +703,7 @@ void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, in
 		else
 			display.drawRect(x, my, bw, bh, WHITE);
 		if ((int8_t)i == focus)
-			display.fillRect(x, my - 2, bw, 1, WHITE); // focus tick above
+			display.fillRect(x, my + bh + 1, bw, 1, WHITE); // focus tick below (matches other modes)
 	}
 }
 
