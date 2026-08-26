@@ -582,12 +582,17 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 				omxLeds.setDirty();
 				return;
 			}
+			bool firstHeld = (heldStepMask_ == 0);
 			heldStepMask_ |= (1 << key16);
 			heldStepKey_ = key16;
+			if (firstHeld)
+			{
+				stepHoldStartMs_ = millis(); // hold-step UI waits a moment so quick-clicks don't flash it
+				stepHoldUIShown_ = false;
+			}
 			// Preview the step's notes while stopped (Note mode previews via its note keys).
 			if (!omxFormGlobal.isPlaying && stepEditMode_ != STEPMODE_NOTE)
 				omni->auditionStep(key16, true);
-			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
 		else if (!e.down() && (heldStepMask_ & (1 << key16)))
@@ -612,6 +617,7 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 			if (heldStepMask_ == 0)
 			{
 				stepEdited_ = false;
+				stepHoldUIShown_ = false;
 				// Releasing the last step ends chord entry: note-off any auditioning notes.
 				for (uint8_t d = 0; d < 10; d++)
 					if (heldNoteKeys_ & (1 << d))
@@ -1011,8 +1017,9 @@ void OmxModeForm::onDisplayStep()
 		return;
 	}
 
-	// Overview page, holding step(s): the value-palette popup.
-	if (heldStepMask_ != 0)
+	// Overview page, holding step(s): the value-palette popup — but only after a short delay (or
+	// once edited), so a quick-click doesn't flash it.
+	if (heldStepMask_ != 0 && (stepHoldUIShown_ || stepEdited_))
 	{
 		// Note mode: compact piano keyboard for the held step's chord, with step markers below.
 		if (stepEditMode_ == STEPMODE_NOTE && heldStepKey_ >= 0)
@@ -1438,6 +1445,13 @@ void OmxModeForm::onClockTick()
 void OmxModeForm::loopUpdate(Micros elapsedTime)
 {
 	// Serial.println("LoopUpdate");
+
+	// Engage the hold-step UI once the hold passes a short delay (prevents quick-click flashes).
+	if (heldStepMask_ != 0 && !stepHoldUIShown_ && (millis() - stepHoldStartMs_) >= 150)
+	{
+		stepHoldUIShown_ = true;
+		omxDisp.setDirty();
+	}
 
 	for(auto machine : machines_)
 	{

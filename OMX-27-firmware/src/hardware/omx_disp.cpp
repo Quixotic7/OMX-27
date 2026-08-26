@@ -688,7 +688,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
-	drawPlayIcon(playMode, 52, 10); // 17x9 icon, fixed x
+	drawPlayIcon(playMode, 54, 10); // 17x9 icon, fixed x
 	u8g2_display.setFont(FONT_LABELS);
 	u8g2_display.setCursor(74, 18);
 	u8g2_display.print(rateStr);
@@ -719,7 +719,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		return;
 	}
 
-	const uint8_t bw2 = 6, bh = 6, pitch = 8, y = 25;
+	const uint8_t bw2 = 6, bh = 6, pitch = 8, y = 23; // matches the hold-step step render
 	uint8_t startX = (128 - (16 * pitch - (pitch - bw2))) / 2;
 	for (uint8_t i = 0; i < 16; i++)
 	{
@@ -733,7 +733,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 				display.fillRect(x + 2, y + 2, 2, 2, WHITE); // ghost dot
 		}
 		if ((int8_t)i == playhead)
-			display.fillRect(x, y + bh, bw2, 1, WHITE); // playhead tick (row 31)
+			display.fillRect(x, y + bh + 1, bw2, 1, WHITE); // playhead tick
 	}
 }
 
