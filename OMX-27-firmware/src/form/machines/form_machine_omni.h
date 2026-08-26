@@ -284,6 +284,8 @@ namespace FormOmni
 
         uint8_t playingStep_;
 
+        int8_t pongDir_ = 1; // runtime pong direction (+1/-1); keeps track->playDirection as the set intent
+
         bool prevCondWasTrue_ = false;
         bool fillActive_ = false;
         bool firstLoop_ = false;

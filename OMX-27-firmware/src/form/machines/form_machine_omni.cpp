@@ -415,6 +415,7 @@ namespace FormOmni
     {
         // nextStepTime_ = seqConfig.lastClockMicros + ;
         playingStep_ = getRestartPos();
+        pongDir_ = getTrack()->playDirection == TRACKDIRECTION_FORWARD ? 1 : -1; // pong starts in the set direction
 
         grooveCounter_ = 0;
         playRateCounter_ = 0;
@@ -1044,15 +1045,17 @@ namespace FormOmni
         // Steps move forward and reverse on last step
         case TRACKMODE_PONG:
         {
+            // Bounce a runtime direction so the track's set playDirection (the FWD/REV-pong
+            // intent) is not overwritten by playback.
             auto track = getTrack();
 
             if(currentStepIndex == 0)
             {
-                track->playDirection = TRACKDIRECTION_FORWARD;
+                pongDir_ = 1;
             }
             else if(currentStepIndex == track->len)
             {
-                track->playDirection = TRACKDIRECTION_REVERSE;
+                pongDir_ = -1;
             }
         }
         return -1;
@@ -1851,7 +1854,9 @@ namespace FormOmni
                 functionStep = processStepFunction(currentStep->func);
             }
 
-            int8_t directionIncrement = track->playDirection == TRACKDIRECTION_FORWARD ? 1 : -1;
+            int8_t directionIncrement = (track->playMode == TRACKMODE_PONG)
+                                            ? pongDir_
+                                            : (track->playDirection == TRACKDIRECTION_FORWARD ? 1 : -1);
 
             uint8_t nextStepIndex;
 

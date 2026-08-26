@@ -614,7 +614,7 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 	drawPlayIcon(playModeIndex, 82, cellY + (cellH - 9) / 2);
 }
 
-void OmxDisp::dispStepPlayModes(uint8_t selected, const char *bottomLabel)
+void OmxDisp::dispStepPlayModes(uint8_t selected, const char *name, const char *bottomLabel)
 {
 	if (isMessageActive())
 	{
@@ -623,21 +623,21 @@ void OmxDisp::dispStepPlayModes(uint8_t selected, const char *bottomLabel)
 	}
 	display.fillRect(0, 0, 128, 32, BLACK);
 
-	// 5 play-direction icons across the top; the selected one is boxed.
-	const int spacing = 24;
-	for (uint8_t i = 0; i < 5; i++)
-	{
-		int x = 5 + i * spacing;
-		if (i == selected)
-			display.drawRect(x - 3, 0, 22, 13, WHITE);
-		drawPlayIcon(i, x, 2);
-	}
-
-	// Bottom label.
 	u8g2_display.setFontMode(1);
 	u8g2_display.setFont(FONT_TENFAT);
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
+
+	// Current play mode: icon + name, centred as a group on the top.
+	uint16_t nameW = u8g2_display.getUTF8Width(name);
+	int groupW = 17 + 6 + (int)nameW; // icon + gap + name
+	int x0 = (128 - groupW) / 2;
+	if (x0 < 0) x0 = 0;
+	drawPlayIcon(selected, x0, 1);
+	u8g2_display.setCursor(x0 + 17 + 6, 11);
+	u8g2_display.print(name);
+
+	// Bottom label.
 	u8g2centerText(bottomLabel, 0, 30, 128, 8);
 }
 

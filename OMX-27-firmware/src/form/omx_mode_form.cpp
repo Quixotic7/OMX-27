@@ -574,11 +574,19 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		else if (!e.down() && (heldStepMask_ & (1 << key16)))
 		{
 			omni->auditionStep(key16, false); // stop any preview for this step
-			// Quick tap (not a hold) on the only held step clears it (all modes). Holding never clears.
+			// Quick tap (not a hold) toggles the step: a step with content clears; an empty
+			// step is created (stamped with the last notes — middle C by default).
 			if (heldStepMask_ == (uint16_t)(1 << key16) && !stepEdited_ && e.quickClicked())
 			{
-				omni->stepCut(key16);
-				omxDisp.displayMessage("CLEAR");
+				if (omni->stepIsOn(key16))
+				{
+					omni->stepCut(key16);
+					omxDisp.displayMessage("CLEAR");
+				}
+				else
+				{
+					omni->stepSetNotes(key16, lastNotes_); // create
+				}
 			}
 			heldStepMask_ &= ~(1 << key16);
 			if (heldStepKey_ == (int8_t)key16)
@@ -607,13 +615,25 @@ void OmxModeForm::updateStepLEDs()
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	bool blink = omxLeds.getBlinkState();
 
+	// F1 / F2 keys lit in the track colour (brighter when that modifier is pressed). The
+	// hold-a-step palette overrides keys 1-2, so this is skipped there.
+	if (heldStepMask_ == 0)
+	{
+		uint32_t hueFull = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
+		uint32_t hueDim = (hueFull >> 3) & 0x1f1f1f;
+		bool f1 = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F3);
+		bool f2 = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F3);
+		strip.setPixelColor(1, f1 ? hueFull : hueDim);
+		strip.setPixelColor(2, f2 ? hueFull : hueDim);
+	}
+
 	// F1: top row 3-6 = pages; step row = content (copy targets).
 	// Colours: selected = GREEN (RED if muted) · enabled = BLUE · muted = very dim ·
 	// currently-playing page = flashing YELLOW.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && heldStepMask_ == 0)
 	{
 		uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
-		for (uint8_t k = 1; k <= 10; k++)
+		for (uint8_t k = 3; k <= 10; k++)
 			strip.setPixelColor(k, LEDOFF);
 		uint8_t en = omni->getEnabledPages();
 		uint8_t sel = omni->activePage();
@@ -643,7 +663,7 @@ void OmxModeForm::updateStepLEDs()
 		static const uint32_t pmDim[5] = {DKGREEN, DKORANGE, DKCYAN, DKBLUE, DKMAGENTA};
 		uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
 		uint8_t pm = mixPlayModeIndex(omni->trackPtr());
-		for (uint8_t k = 1; k <= 10; k++)
+		for (uint8_t k = 3; k <= 10; k++)
 			strip.setPixelColor(k, LEDOFF);
 		for (uint8_t m = 0; m < 5; m++)
 			strip.setPixelColor(3 + m, (m == pm) ? pmBright[m] : pmDim[m]);
@@ -655,7 +675,7 @@ void OmxModeForm::updateStepLEDs()
 	// the last step lit bright. Tap a step to set the length.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3 && heldStepMask_ == 0)
 	{
-		for (uint8_t k = 1; k <= 10; k++)
+		for (uint8_t k = 3; k <= 10; k++)
 			strip.setPixelColor(k, LEDOFF);
 		// Top row 3-10 = rate options; the current rate is bright.
 		int8_t rsel = omni->rateShortcutSel();
@@ -949,10 +969,11 @@ void OmxModeForm::onDisplayStep()
 		omxDisp.dispKeyFunctionSplit("PAGE", topFill, 4, "COPY", bottomFill, 16);
 		return;
 	}
-	// F2: top row sets the play mode (icons), the step row cut/pastes steps.
+	// F2: top row sets the play mode, the step row cut/pastes steps.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
 	{
-		omxDisp.dispStepPlayModes(mixPlayModeIndex(omni->trackPtr()), "Cut / Paste");
+		uint8_t pm = mixPlayModeIndex(omni->trackPtr());
+		omxDisp.dispStepPlayModes(pm, kPlayModeNames[pm], "Cut / Paste");
 		return;
 	}
 	// F3 structure layer: rate on top, the active page's length bar on the bottom.
