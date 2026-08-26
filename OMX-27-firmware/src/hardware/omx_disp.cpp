@@ -656,14 +656,14 @@ void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool *topFill, ui
 	if (bottomCount == 0 && (bottomLabel == nullptr || bottomLabel[0] == '\0'))
 	{
 		// Single-row layout: one label + one box row, vertically centred.
-		u8g2centerText(topLabel, 0, 11, 128, 8); // baseline ~9 (text y0-9)
+		u8g2centerText(topLabel, 0, 10, 128, 8); // baseline ~8 (text y-1..8)
 		drawKeyBoxRow(topCount, topFill, 18);    // boxes y18-21
 		return;
 	}
 
 	// Two-row layout: TENFAT labels are ~12px tall, so the two labels and two box rows fill
 	// the 32px screen edge-to-edge with no spare gap.
-	u8g2centerText(topLabel, 0, 13, 128, 8);    // baseline ~11 (text y0-11)
+	u8g2centerText(topLabel, 0, 12, 128, 8);    // baseline ~10 (text y-1..10)
 	drawKeyBoxRow(topCount, topFill, 12);       // boxes y12-15
 	drawKeyBoxRow(bottomCount, bottomFill, 16); // boxes y16-19
 	u8g2centerText(bottomLabel, 0, 33, 128, 8); // baseline ~31 (text y20-31)
