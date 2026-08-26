@@ -615,6 +615,48 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 }
 
 // A small folded-corner "page" icon (6x8) at top-left (x,y), filled or outline, in `color`.
+// Shared 16-step row renderer — the single source of truth for how sequencer steps look, used
+// by every step view. y = box top. stepState[i]: 0 empty (outline) · 1 has notes (solid) · 2
+// ghost (inset-top box + two inner dots). Steps >= pageLen render as short 3px boxes (pass 16
+// for none). marker = the step to tick beneath (-1 = none), used for playhead / focused step.
+static void drawStepRow(uint8_t y, const uint8_t *stepState, uint8_t pageLen, int8_t marker)
+{
+	const uint8_t bw = 6, bh = 6, pitch = 8;
+	uint8_t startX = (128 - (16 * pitch - (pitch - bw))) / 2;
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		int x = startX + i * pitch;
+		if (i < pageLen)
+		{
+			if (stepState[i] == 1)
+				display.fillRect(x, y, bw, bh, WHITE); // has notes = solid
+			else if (stepState[i] == 2)
+			{
+				// Ghost: box with an inset top edge and two inner dots.
+				display.fillRect(x + 1, y, 4, 1, WHITE);
+				display.drawFastVLine(x, y + 1, 4, WHITE);
+				display.drawFastVLine(x + 5, y + 1, 4, WHITE);
+				display.fillRect(x, y + 5, bw, 1, WHITE);
+				display.drawPixel(x + 2, y + 2, WHITE);
+				display.drawPixel(x + 4, y + 2, WHITE);
+			}
+			else
+				display.drawRect(x, y, bw, bh, WHITE); // empty = outline
+		}
+		else
+		{
+			// Beyond the page length: a short 3px box at the bottom.
+			int sy = y + bh - 3;
+			if (stepState[i] == 1)
+				display.fillRect(x, sy, bw, 3, WHITE);
+			else
+				display.drawRect(x, sy, bw, 3, WHITE);
+		}
+		if ((int8_t)i == marker)
+			display.fillRect(x, y + bh + 1, bw, 1, WHITE);
+	}
+}
+
 static void drawPageIcon(int x, int y, bool filled, uint16_t color)
 {
 	if (filled)
@@ -719,41 +761,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		return;
 	}
 
-	const uint8_t bw2 = 6, bh = 6, pitch = 8, y = 23; // matches the hold-step step render
-	uint8_t startX = (128 - (16 * pitch - (pitch - bw2))) / 2;
-	for (uint8_t i = 0; i < 16; i++)
-	{
-		int x = startX + i * pitch;
-		if (i < pageLen)
-		{
-			// Within the page length: full-height box.
-			if (stepState[i] == 1)
-				display.fillRect(x, y, bw2, bh, WHITE); // has notes = solid
-			else if (stepState[i] == 2)
-			{
-				// Ghost: box with an inset top edge and two inner dots.
-				display.fillRect(x + 1, y, 4, 1, WHITE);       // inset top
-				display.drawFastVLine(x, y + 1, 4, WHITE);     // left side
-				display.drawFastVLine(x + 5, y + 1, 4, WHITE); // right side
-				display.fillRect(x, y + 5, bw2, 1, WHITE);     // bottom
-				display.drawPixel(x + 2, y + 2, WHITE);
-				display.drawPixel(x + 4, y + 2, WHITE);
-			}
-			else
-				display.drawRect(x, y, bw2, bh, WHITE); // empty = outline
-		}
-		else
-		{
-			// Beyond the page length: a short 3px box at the bottom.
-			int sy = y + bh - 3;
-			if (stepState[i] == 1)
-				display.fillRect(x, sy, bw2, 3, WHITE);
-			else
-				display.drawRect(x, sy, bw2, 3, WHITE);
-		}
-		if ((int8_t)i == playhead)
-			display.fillRect(x, y + bh + 1, bw2, 1, WHITE); // playhead tick
-	}
+	drawStepRow(23, stepState, pageLen, playhead);
 }
 
 void OmxDisp::dispStepPlayModes(uint8_t selected, const char *name, const char *bottomLabel)
@@ -835,7 +843,7 @@ void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const
 	}
 }
 
-void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, int8_t focus)
+void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus)
 {
 	if (isMessageActive())
 	{
@@ -913,22 +921,11 @@ void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, in
 	if (!whiteNotes[15])
 		display.drawLine(112, wkHeight - 8, 112, wkHeight - 1, WHITE); // right wall
 
-	// --- 16 step-marker cells beneath the keyboard (same style as the other step-hold views) ---
-	const uint8_t bw = 6, bh = 6, pitch = 8, my = 23;
-	uint8_t startX = (128 - (16 * pitch - (pitch - bw))) / 2;
-	for (uint8_t i = 0; i < 16; i++)
-	{
-		int x = startX + i * pitch;
-		if (filled && filled[i])
-			display.fillRect(x, my, bw, bh, WHITE);
-		else
-			display.drawRect(x, my, bw, bh, WHITE);
-		if ((int8_t)i == focus)
-			display.fillRect(x, my + bh + 1, bw, 1, WHITE); // focus tick below (matches other modes)
-	}
+	// --- 16 step-marker cells beneath the keyboard (shared renderer) ---
+	drawStepRow(23, stepState, pageLen, focus);
 }
 
-void OmxDisp::dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead, bool invertTitle)
+void OmxDisp::dispStepOverview(const char *modeName, const uint8_t *stepState, uint8_t pageLen, int8_t playhead, bool invertTitle)
 {
 	if (isMessageActive())
 	{
@@ -953,19 +950,8 @@ void OmxDisp::dispStepOverview(const char *modeName, const bool *filled, uint8_t
 	}
 	u8g2centerText(modeName, 0, 13, 128, 8);
 
-	// Step cells: filled = has content, outline = empty. Playhead gets a tick beneath it.
-	const uint8_t bw = 6, bh = 6, pitch = 8, y = 23; // matches the note-hold + track-page render
-	uint8_t startX = (128 - (count * pitch - (pitch - bw))) / 2;
-	for (uint8_t i = 0; i < count; i++)
-	{
-		int x = startX + i * pitch;
-		if (filled && filled[i])
-			display.fillRect(x, y, bw, bh, WHITE);
-		else
-			display.drawRect(x, y, bw, bh, WHITE);
-		if ((int8_t)i == playhead)
-			display.fillRect(x, y + bh + 1, bw, 1, WHITE);
-	}
+	// Step cells (shared renderer).
+	drawStepRow(23, stepState, pageLen, playhead);
 }
 
 void OmxDisp::dispTrackLength(const char *rateStr, uint8_t activeCount)

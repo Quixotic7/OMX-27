@@ -1019,6 +1019,13 @@ void OmxModeForm::onDisplayStep()
 	// once edited), so a quick-click doesn't flash it.
 	if (heldStepMask_ != 0 && (stepHoldUIShown_ || stepEdited_))
 	{
+		// Step states (0 empty · 1 notes · 2 ghost) + the active page's length: same data the
+		// track page uses, so the step row renders identically everywhere.
+		uint8_t stepState[16];
+		for (uint8_t i = 0; i < 16; i++)
+			stepState[i] = omni->stepHasNotes(i) ? 1 : (omni->stepIsOn(i) ? 2 : 0);
+		uint8_t pageLen = omni->getPageLen(omni->activePage());
+
 		// Note mode: compact piano keyboard for the held step's chord, with step markers below.
 		if (stepEditMode_ == STEPMODE_NOTE && heldStepKey_ >= 0)
 		{
@@ -1027,19 +1034,13 @@ void OmxModeForm::onDisplayStep()
 			int8_t noteKeys[6];
 			for (uint8_t i = 0; i < 6; i++)
 				noteKeys[i] = (nts[i] >= 0 && nts[i] <= 127) ? omxUtil.noteNumberToKeyNumber(nts[i]) : -1;
-			bool filled[16];
-			for (uint8_t i = 0; i < 16; i++)
-				filled[i] = omni->stepIsOn(i);
-			omxDisp.dispStepNoteKeyboard(noteKeys, filled, heldStepKey_);
+			omxDisp.dispStepNoteKeyboard(noteKeys, stepState, pageLen, heldStepKey_);
 			return;
 		}
 
 		// Other modes: value readout + step-position overview.
-		bool filled[16];
-		for (uint8_t i = 0; i < 16; i++)
-			filled[i] = omni->stepIsOn(i);
 		String v = (heldStepKey_ >= 0) ? omni->stepValueString(heldStepKey_, stepEditMode_) : String("");
-		omxDisp.dispStepOverview(v.c_str(), filled, 16, heldStepKey_);
+		omxDisp.dispStepOverview(v.c_str(), stepState, pageLen, heldStepKey_);
 		return;
 	}
 

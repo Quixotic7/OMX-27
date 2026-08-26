@@ -58,7 +58,7 @@ public:
 	void dispStepPlayModes(uint8_t selected, const char *name, const char *bottomLabel);
 	// Step view Note hold: a compact piano keyboard (chord = notesAsKeys[6]) on top, with the
 	// 16 step-marker cells beneath (filled = has content; `focus` step gets a tick). No text.
-	void dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, int8_t focus);
+	void dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus);
 	// Seq page-1 track overview: 8 track-state squares (selected underlined, muted = outline)
 	// top-left, left-justified track name, rate + 4 page icons + BPM on the right, and 16 step
 	// boxes on the bottom (stepState: 0 empty / 1 has-notes / 2 ghost). playhead -1 = none.
@@ -70,7 +70,7 @@ public:
 						  uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen);
 	// Step view overview: mode name on top, a row of `count` step cells on the bottom (filled
 	// = has content). The playhead step (0-based, -1 = none) gets a tick underneath.
-	void dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead, bool invertTitle = false);
+	void dispStepOverview(const char *modeName, const uint8_t *stepState, uint8_t pageLen, int8_t playhead, bool invertTitle = false);
 	// Mix F3 (LEN | RATE): rate label on top, track length as a 16-cell bar on the bottom.
 	// activeCount cells (0-16) are full boxes (steps within the length); the rest are dashes.
 	// Every 4th active cell gets a left notch to make groups of 4 easier to count.
