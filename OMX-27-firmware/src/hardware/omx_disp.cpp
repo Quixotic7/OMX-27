@@ -678,7 +678,7 @@ static void drawPageIcon(int x, int y, bool filled, uint16_t color)
 void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
 							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
 							   uint8_t activePage, const uint8_t *stepState, int8_t playhead,
-							   uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen)
+							   uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport)
 {
 	if (isMessageActive())
 	{
@@ -701,6 +701,14 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		if (t == selTrack)
 			display.fillRect(x, 6, 4, 1, WHITE); // selected underline
 	}
+
+	// --- Transport widget (top-middle): play ▶ / stop ■ / record ●, active one filled.
+	if (transport == 1) display.fillTriangle(54, 1, 54, 5, 57, 3, WHITE);
+	else				display.drawTriangle(54, 1, 54, 5, 57, 3, WHITE);
+	if (transport == 0) display.fillRect(60, 1, 5, 5, WHITE);
+	else				display.drawRect(60, 1, 5, 5, WHITE);
+	if (transport == 2) display.fillCircle(69, 3, 2, WHITE);
+	else				display.drawCircle(69, 3, 2, WHITE);
 
 	// --- BPM, top-right.
 	u8g2_display.setFont(FONT_LABELS);

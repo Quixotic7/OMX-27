@@ -1086,10 +1086,11 @@ void OmxModeForm::onDisplaySeqTrackPage()
 		overlayLabel = (heldTrackKey_ >= 0) ? "MUTE / PLAY MODE" : "CUT / PASTE";
 	}
 
+	uint8_t transport = omxFormGlobal.isPlaying ? 1 : 0; // record state not wired yet
 	omxDisp.dispSeqTrackPage(title, trackMuted, selectedMachine_, rateStr,
 							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
 							 omni->getEnabledPages(), omni->activePage(), stepState, playhead,
-							 modOverlay, overlayLabel, omni->getPageLen(omni->activePage()));
+							 modOverlay, overlayLabel, omni->getPageLen(omni->activePage()), transport);
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
@@ -2198,6 +2199,12 @@ void OmxModeForm::onDisplayUpdate()
 		break;
 	default:
 	{
+		// Mix's first page shows the same track/page overview as the Seq view.
+		if (formView_ == FORMVIEW_MIX)
+		{
+			onDisplaySeqTrackPage();
+			return;
+		}
 		selMachine->onDisplayUpdate();
 		return;
 	}
