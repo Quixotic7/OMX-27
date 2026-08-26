@@ -118,6 +118,13 @@ namespace FormOmni
         int16_t stepPaletteSelected(uint8_t key16, uint8_t mode);   // lit palette index, -1 = none
         String stepValueString(uint8_t key16, uint8_t mode);        // current value, for the OLED
         void resetStepValue(uint8_t key16, uint8_t mode);           // AUX = reset to default
+        // Note mode: strip a step's notes but keep it on as a ghost trigger.
+        void stepNotesToGhost(uint8_t key16)
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            for (uint8_t i = 0; i < 6; i++) s->notes[i] = -1;
+            s->trig = 1;
+        }
         // Math introspection for LEDs: returns kind (0 other, 1 Fill, 2 !Fill, 3 ratio) and,
         // for a ratio, the A/B components (1-8) via the out params.
         uint8_t stepMathInfo(uint8_t key16, uint8_t &a, uint8_t &b);

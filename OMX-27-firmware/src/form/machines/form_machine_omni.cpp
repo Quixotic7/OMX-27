@@ -624,12 +624,15 @@ namespace FormOmni
         Step *s = &getTrack()->steps[key16toStep(key16)];
         switch (mode)
         {
-        case 1: return "V" + String(s->vel);
+        case 1: return "VEL " + String(s->vel);
         case 2: return getStepLenString(s->len);
         case 3: return "x" + String(s->repeat + 1);
         case 4: return String(s->prob) + "%";
         case 5: return s->condition == 2 ? String("!FILL") : (s->condition == 1 ? String("FILL") : String(getCondChar(s->condition)));
-        case 6: return (s->func < STEPFUNC_COUNT) ? String(kStepFuncs[s->func]) : ("JMP" + String(s->func - STEPFUNC_COUNT + 1));
+        case 6:
+            if (s->func >= STEPFUNC_COUNT) return "JMP > " + String(s->func - STEPFUNC_COUNT + 1);   // jump to step (1-based)
+            if (s->func == STEPFUNC_RANDJUMP) return String("JMP > ?");                               // random jump
+            return String(kStepFuncs[s->func]);
         case 7: return s->mfxIndex == 0 ? String("OFF") : (s->mfxIndex == 1 ? String("TRK") : ("FX" + String(s->mfxIndex - 1)));
         default: return "";
         }

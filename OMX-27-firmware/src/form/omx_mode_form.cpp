@@ -421,8 +421,8 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		}
 		else if (!e.down() && (heldStepMask_ & (1 << key16)))
 		{
-			// Bare single-click on the only held step = clear it.
-			if (heldStepMask_ == (uint16_t)(1 << key16) && !stepEdited_ && e.clicks() == 1)
+			// Quick tap (not a hold) on the only held step = clear it. Holding never clears.
+			if (heldStepMask_ == (uint16_t)(1 << key16) && !stepEdited_ && e.quickClicked())
 			{
 				omni->stepCut(key16);
 				omxDisp.displayMessage("CLEAR");
@@ -1121,11 +1121,17 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 				if (e.down() && !e.held())
 				{
 					auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+					bool note = (stepEditMode_ == STEPMODE_NOTE);
 					for (uint8_t s = 0; s < 16; s++)
 						if (heldStepMask_ & (1 << s))
-							omni->resetStepValue(s, stepEditMode_);
+						{
+							if (note)
+								omni->stepNotesToGhost(s); // clear notes, keep as ghost
+							else
+								omni->resetStepValue(s, stepEditMode_);
+						}
 					stepEdited_ = true;
-					omxDisp.displayMessage("RESET");
+					omxDisp.displayMessage(note ? "CLEAR NOTES" : "RESET");
 					omxLeds.setDirty();
 				}
 				return;
