@@ -79,6 +79,14 @@ namespace FormOmni
         // active page's step). on=true = note-on, on=false = note-off.
         void auditionStep(uint8_t key16, bool on);
 
+        // v2 Mix (F1 + low row): toggle / read a step's mute. key16 = 0-15 (active page).
+        void toggleStepMute(uint8_t key16)
+        {
+            uint8_t s = key16toStep(key16);
+            getTrack()->steps[s].mute = !getTrack()->steps[s].mute;
+        }
+        bool getStepMute(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].mute; }
+
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }
         void setSeq(const OmniSeq &s)

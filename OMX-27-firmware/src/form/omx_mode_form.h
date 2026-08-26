@@ -188,7 +188,8 @@ private:
 	void onDisplayMI();
 	void onKeyUpdateMix(OMXKeypadEvent e);     // Mix-view track keys (mute/solo/select)
 	void onKeyUpdateMixHold(OMXKeypadEvent e); // low-row per-track controls while holding a track
-	void onKeyUpdateMixStep(OMXKeypadEvent e); // low-row taps audition the selected track's steps
+	void onKeyUpdateMixStep(OMXKeypadEvent e);     // low-row taps audition the selected track's steps
+	void onKeyUpdateMixStepMute(OMXKeypadEvent e); // F1 + low-row toggles the selected track's step mutes
 	void updateMixHoldLEDs();                  // paint those controls on the low row
 	int8_t heldTrackKey_ = -1; // track key held right now in Mix (for K5 hue), -1 = none
 

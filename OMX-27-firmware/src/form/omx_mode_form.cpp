@@ -462,6 +462,21 @@ void OmxModeForm::onKeyUpdateMixStep(OMXKeypadEvent e)
 	omxLeds.setDirty();
 }
 
+// F1 + low-row taps toggle the selected track's step mutes. F2 (step solo) has no per-step
+// data model yet, so it is a safe no-op for now (and, importantly, no longer cuts the step).
+void OmxModeForm::onKeyUpdateMixStepMute(OMXKeypadEvent e)
+{
+	if (e.held() || !e.down())
+		return;
+	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_F1)
+		return; // F2/solo: no-op until per-step solo exists
+	uint8_t key16 = e.key() - 11;
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	omni->toggleStepMute(key16);
+	omxDisp.displayMessage(omni->getStepMute(key16) ? "STEP MUTE" : "STEP ON");
+	omxLeds.setDirty();
+}
+
 void OmxModeForm::updateMixHoldLEDs()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
@@ -985,6 +1000,13 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			onKeyUpdateMixStep(e);
 			return;
 		}
+		// F1/F2 + low row = step mute/solo on the selected track (not the machine's copy/cut).
+		if (thisKey >= 11 && thisKey < 27 &&
+			(omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F2))
+		{
+			onKeyUpdateMixStepMute(e);
+			return;
+		}
 		// Otherwise (F3 + track) falls through to the machine.
 	}
 
@@ -1311,10 +1333,14 @@ void OmxModeForm::onDisplayUpdate()
 		bool topFill[kNumMachines]; // one box per track (keys 3-10)
 		for (uint8_t t = 0; t < kNumMachines; t++)
 			topFill[t] = f1 ? !machines_[t]->getMute() : machines_[t]->getSolo(); // mute: filled = unmuted
-		// Bottom row = the 16 step keys. Step mute/solo isn't wired yet, so the boxes are
-		// empty for now — shown so the two-row layout is complete and reusable.
+		// Bottom row = the 16 step keys of the selected track. F1: filled = step will play
+		// (not muted). F2 (step solo) has no data model yet, so the boxes stay empty.
+		auto omni = static_cast<FormOmni::FormMachineOmni *>(selMachine);
+		bool bottomFill[16];
+		for (uint8_t i = 0; i < 16; i++)
+			bottomFill[i] = f1 ? !omni->getStepMute(i) : false;
 		const char *label = f1 ? "MUTE" : "SOLO";
-		omxDisp.dispKeyFunctionSplit(label, topFill, kNumMachines, label, nullptr, 16);
+		omxDisp.dispKeyFunctionSplit(label, topFill, kNumMachines, label, bottomFill, 16);
 		return;
 	}
 
