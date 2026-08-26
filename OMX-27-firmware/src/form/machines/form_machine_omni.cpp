@@ -98,6 +98,10 @@ namespace FormOmni
 
     const int kStepFuncColors[7] = {RED, ORANGE, DKYELLOW, GREEN, MAGENTA, ROSE, DIMORANGE};
 
+    // v2 Step value palettes: len index for 0.5·0.75·1·2·4·6·8·16·32·64, and mfxIndex for Off + FX 1-5.
+    static const uint8_t kLenPalette[10] = {2, 3, 4, 5, 7, 9, 11, 19, 20, 22};
+    static const uint8_t kMfxPalette[6] = {0, 2, 3, 4, 5, 6};
+
     // Global param management so pages are same across machines
     ParamManager trackParams_;
     ParamManager stepParams_;
@@ -535,6 +539,115 @@ namespace FormOmni
         uint8_t stepIndex = key16toStep(keyIndex);
 
         getTrack()->steps[stepIndex].CopyFrom(&bufferedStep_);
+    }
+
+    // ---- v2 Step value palettes ----
+
+    uint8_t FormMachineOmni::stepPaletteCount(uint8_t mode)
+    {
+        switch (mode)
+        {
+        case 1: return 10;             // velocity
+        case 2: return 10;             // length
+        case 3: return 4;              // repeat
+        case 4: return 10;             // chance
+        case 5: return 10;             // math (1 Fill, 2 !Fill, 3-6 ratio A, 7-10 ratio B)
+        case 6: return STEPFUNC_COUNT; // function
+        case 7: return 6;              // midi fx (Off + FX 1-5)
+        default: return 0;             // note = handled elsewhere
+        }
+    }
+
+    void FormMachineOmni::setStepPalette(uint8_t key16, uint8_t mode, uint8_t p)
+    {
+        if (key16 >= 16) return;
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        switch (mode)
+        {
+        case 1: s->vel = constrain(((int)(p + 1) * 127) / 10, 1, 127); break;
+        case 2: if (p < 10) s->len = kLenPalette[p]; break;
+        case 3: if (p < 4) s->repeat = p; break;
+        case 4: s->prob = constrain((int)(p + 1) * 10, 1, 100); break;
+        case 5:
+        {
+            if (p == 0) { s->condition = 1; break; } // Fill
+            if (p == 1) { s->condition = 2; break; } // !Fill
+            uint8_t a = 1, b = 1;
+            if (s->condition >= 9) { a = kTrigConditionsAB[s->condition - 9][0]; b = kTrigConditionsAB[s->condition - 9][1]; }
+            if (p >= 2 && p <= 5) { a = (p - 2) + 1; if (b < a) b = a; }
+            else if (p >= 6 && p <= 9) { b = (p - 6) + 1; if (a > b) a = b; }
+            for (uint8_t i = 0; i < 35; i++)
+                if (kTrigConditionsAB[i][0] == a && kTrigConditionsAB[i][1] == b) { s->condition = 9 + i; break; }
+            break;
+        }
+        case 6: if (p < STEPFUNC_COUNT) s->func = p; break;
+        case 7: if (p < 6) s->mfxIndex = kMfxPalette[p]; break;
+        }
+    }
+
+    int16_t FormMachineOmni::stepPaletteSelected(uint8_t key16, uint8_t mode)
+    {
+        if (key16 >= 16) return -1;
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        switch (mode)
+        {
+        case 1: return constrain(((int)s->vel * 10) / 127 - 1, 0, 9);
+        case 2: for (uint8_t i = 0; i < 10; i++) if (kLenPalette[i] == s->len) return i; return -1;
+        case 3: return s->repeat;
+        case 4: return constrain(((int)s->prob / 10) - 1, 0, 9);
+        case 6: return (s->func < STEPFUNC_COUNT) ? s->func : -1;
+        case 7: for (uint8_t i = 0; i < 6; i++) if (kMfxPalette[i] == s->mfxIndex) return i; return -1;
+        default: return -1; // math via stepMathInfo
+        }
+    }
+
+    uint8_t FormMachineOmni::stepMathInfo(uint8_t key16, uint8_t &a, uint8_t &b)
+    {
+        a = b = 0;
+        if (key16 >= 16) return 0;
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        if (s->condition == 1) return 1; // Fill
+        if (s->condition == 2) return 2; // !Fill
+        if (s->condition >= 9)
+        {
+            a = kTrigConditionsAB[s->condition - 9][0];
+            b = kTrigConditionsAB[s->condition - 9][1];
+            return 3;
+        }
+        return 0;
+    }
+
+    String FormMachineOmni::stepValueString(uint8_t key16, uint8_t mode)
+    {
+        if (key16 >= 16) return "";
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        switch (mode)
+        {
+        case 1: return "V" + String(s->vel);
+        case 2: return getStepLenString(s->len);
+        case 3: return "x" + String(s->repeat + 1);
+        case 4: return String(s->prob) + "%";
+        case 5: return getCondChar(s->condition);
+        case 6: return (s->func < STEPFUNC_COUNT) ? String(kStepFuncs[s->func]) : ("J" + String(s->func - STEPFUNC_COUNT + 1));
+        case 7: return s->mfxIndex == 0 ? String("OFF") : (s->mfxIndex == 1 ? String("TRK") : ("FX" + String(s->mfxIndex - 1)));
+        default: return "";
+        }
+    }
+
+    void FormMachineOmni::resetStepValue(uint8_t key16, uint8_t mode)
+    {
+        if (key16 >= 16) return;
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        switch (mode)
+        {
+        case 1: s->vel = 127; break;
+        case 2: s->len = 3; break;
+        case 3: s->repeat = 0; break;
+        case 4: s->prob = 100; break;
+        case 5: s->condition = 0; break;
+        case 6: s->func = 0; break;
+        case 7: s->mfxIndex = 1; break;
+        }
     }
 
     MidiNoteGroup FormMachineOmni::step2NoteGroup(uint8_t noteIndex, Step *step)

@@ -97,6 +97,17 @@ namespace FormOmni
         void stepCut(uint8_t key16) { cutStep(key16); }
         void stepPaste(uint8_t key16) { pasteStep(key16); }
 
+        // v2 Step value palettes. `mode` matches StepMode in omx_mode_form.h
+        // (1 Vel, 2 Length, 3 Repeat, 4 Chance, 5 Math, 6 Func, 7 MFX; 0 Note = elsewhere).
+        uint8_t stepPaletteCount(uint8_t mode);                     // palette keys used (0 = n/a)
+        void setStepPalette(uint8_t key16, uint8_t mode, uint8_t paletteIndex);
+        int16_t stepPaletteSelected(uint8_t key16, uint8_t mode);   // lit palette index, -1 = none
+        String stepValueString(uint8_t key16, uint8_t mode);        // current value, for the OLED
+        void resetStepValue(uint8_t key16, uint8_t mode);           // AUX = reset to default
+        // Math introspection for LEDs: returns kind (0 other, 1 Fill, 2 !Fill, 3 ratio) and,
+        // for a ratio, the A/B components (1-8) via the out params.
+        uint8_t stepMathInfo(uint8_t key16, uint8_t &a, uint8_t &b);
+
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }
         void setSeq(const OmniSeq &s)
