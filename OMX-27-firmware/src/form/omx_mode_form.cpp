@@ -1074,14 +1074,23 @@ void OmxModeForm::onDisplaySeqTrackPage()
 	for (uint8_t t = 0; t < 8; t++)
 		trackMuted[t] = anySolo ? !machines_[t]->getSolo() : machines_[t]->getMute();
 
+	bool mixMute = (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F1);
 	char title[16];
-	snprintf(title, sizeof(title), "TRK %u", (unsigned)(selectedMachine_ + 1));
+	if (mixMute)
+		snprintf(title, sizeof(title), "MUTE");
+	else
+		snprintf(title, sizeof(title), "TRK %u", (unsigned)(selectedMachine_ + 1));
 	char rateStr[10];
 	snprintf(rateStr, sizeof(rateStr), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
 
 	uint8_t modOverlay = 0;
 	const char *overlayLabel = nullptr;
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
+	if (mixMute)
+	{
+		// Mix F1: keep the step row visible (its glyphs show mute state); only the name changes.
+		modOverlay = 0;
+	}
+	else if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
 	{
 		modOverlay = 1;
 		overlayLabel = "COPY";
@@ -2156,29 +2165,21 @@ void OmxModeForm::onDisplayUpdate()
 		return;
 	}
 
-	// Mix view: held F1/F2 show the split key-function view (top-keys / bottom-keys),
-	// not the machine's Copy/Cut labels. Track boxes (top keys 3-10) fill when muted/soloed.
-	if (formView_ == FORMVIEW_MIX &&
-		(omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F2))
+	// Mix view: held F1 shows the page-1 track overview (track squares + step glyphs already
+	// carry mute state); the name reads "MUTE" instead of "TRK n".
+	if (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
 	{
-		bool f1 = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1);
-		bool topFill[kNumMachines]; // one box per track (keys 3-10)
+		onDisplaySeqTrackPage();
+		return;
+	}
+
+	// Mix view: held F2 shows the split key-function view: top = track solos, bottom = FILL.
+	if (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
+	{
+		bool topFill[kNumMachines];
 		for (uint8_t t = 0; t < kNumMachines; t++)
-			topFill[t] = f1 ? !machines_[t]->getMute() : machines_[t]->getSolo(); // mute: filled = unmuted
-		if (f1)
-		{
-			// F1: top = track mutes, bottom = the selected track's step mutes (filled = plays).
-			auto omni = static_cast<FormOmni::FormMachineOmni *>(selMachine);
-			bool bottomFill[16];
-			for (uint8_t i = 0; i < 16; i++)
-				bottomFill[i] = !omni->getStepMute(i);
-			omxDisp.dispKeyFunctionSplit("MUTE", topFill, kNumMachines, "MUTE", bottomFill, 16);
-		}
-		else
-		{
-			// F2: top = track solos, bottom = FILL (a global momentary state, no per-key boxes).
-			omxDisp.dispKeyFunctionSplit("SOLO", topFill, kNumMachines, "Fill", nullptr, 0);
-		}
+			topFill[t] = machines_[t]->getSolo();
+		omxDisp.dispKeyFunctionSplit("SOLO", topFill, kNumMachines, "Fill", nullptr, 0);
 		return;
 	}
 
