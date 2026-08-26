@@ -64,11 +64,13 @@ public:
 	// boxes on the bottom (stepState: 0 empty / 1 has-notes / 2 ghost). playhead -1 = none.
 	// modOverlay: 0 none · 1 F1 (box the page section) · 2 F2 (box the track name). overlayLabel
 	// is the inverted bottom-box text shown while a modifier is held (nullptr when modOverlay = 0).
-	// transport: 0 stopped · 1 playing · 2 recording (the active icon is filled).
+	// transport: 0 stopped · 1 playing · 2 recording (the active icon is filled). viewLabel is an
+	// optional underlined mode tag in the top area (e.g. "MIX"; nullptr = none).
 	void dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
 						  const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
 						  uint8_t activePage, const uint8_t *stepState, int8_t playhead,
-						  uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport);
+						  uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport,
+						  const char *viewLabel);
 	// Step view overview: mode name on top, a row of `count` step cells on the bottom (filled
 	// = has content). The playhead step (0-based, -1 = none) gets a tick underneath.
 	void dispStepOverview(const char *modeName, const uint8_t *stepState, uint8_t pageLen, int8_t playhead, bool invertTitle = false);

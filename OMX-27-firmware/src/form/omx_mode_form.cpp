@@ -1085,12 +1085,19 @@ void OmxModeForm::onDisplaySeqTrackPage()
 		modOverlay = 2;
 		overlayLabel = (heldTrackKey_ >= 0) ? "MUTE / PLAY MODE" : "CUT / PASTE";
 	}
+	else if (formView_ == FORMVIEW_MIX && heldTrackKey_ >= 0)
+	{
+		// Mix hold-track: same box + label as Seq's F2 + Track.
+		modOverlay = 2;
+		overlayLabel = "MUTE / PLAY MODE";
+	}
 
+	const char *viewLabel = (formView_ == FORMVIEW_MIX) ? "MIX" : nullptr;
 	uint8_t transport = omxFormGlobal.isPlaying ? 1 : 0; // record state not wired yet
 	omxDisp.dispSeqTrackPage(title, trackMuted, selectedMachine_, rateStr,
 							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
 							 omni->getEnabledPages(), omni->activePage(), stepState, playhead,
-							 modOverlay, overlayLabel, omni->getPageLen(omni->activePage()), transport);
+							 modOverlay, overlayLabel, omni->getPageLen(omni->activePage()), transport, viewLabel);
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
@@ -1134,11 +1141,12 @@ void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 	}
 
 	// No modifier, key down: select + mark held (so K5 can set its hue, low row = controls).
+	// No popup — the track page's boxed name + "MUTE / PLAY MODE" label shows the held state.
 	if (!e.held())
 	{
 		selectMachine(track);
 		heldTrackKey_ = track;
-		omxDisp.displayMessage("Track " + String(track + 1));
+		omxDisp.setDirty();
 	}
 }
 
@@ -2116,15 +2124,6 @@ void OmxModeForm::onDisplayUpdate()
 	if (formView_ == FORMVIEW_MI)
 	{
 		onDisplayMI();
-		return;
-	}
-
-	// Mix: while a track is held (no F-modifier), show its status (number, mute/solo, play mode).
-	if (formView_ == FORMVIEW_MIX && heldTrackKey_ >= 0 && omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE)
-	{
-		auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
-		uint8_t pm = mixPlayModeIndex(omni->trackPtr());
-		omxDisp.dispTrackHold(heldTrackKey_ + 1, omni->getMute(), omni->getSolo(), pm);
 		return;
 	}
 

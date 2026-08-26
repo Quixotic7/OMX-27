@@ -678,7 +678,8 @@ static void drawPageIcon(int x, int y, bool filled, uint16_t color)
 void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
 							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
 							   uint8_t activePage, const uint8_t *stepState, int8_t playhead,
-							   uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport)
+							   uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport,
+							   const char *viewLabel)
 {
 	if (isMessageActive())
 	{
@@ -709,6 +710,18 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	else				display.drawRect(60, 1, 5, 5, WHITE);
 	if (transport == 2) display.fillCircle(69, 3, 2, WHITE);
 	else				display.drawCircle(69, 3, 2, WHITE);
+
+	// --- View tag (e.g. "MIX"): underlined label in the top area, right of the transport widget.
+	if (viewLabel)
+	{
+		u8g2_display.setFont(FONT_LABELS);
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+		u8g2_display.setCursor(78, 6);
+		u8g2_display.print(viewLabel);
+		uint16_t vw = u8g2_display.getUTF8Width(viewLabel);
+		display.fillRect(78, 7, vw, 1, WHITE);
+	}
 
 	// --- BPM, top-right.
 	u8g2_display.setFont(FONT_LABELS);
