@@ -619,8 +619,9 @@ static void drawPageIcon(int x, int y, bool filled)
 {
 	if (filled)
 	{
-		display.fillRect(x, y, 4, 8, WHITE);     // left part, full height
-		display.fillRect(x + 4, y + 2, 2, 6, WHITE); // right part below the fold
+		display.fillRect(x, y, 4, 1, WHITE);     // top: 4 wide
+		display.fillRect(x, y + 1, 5, 1, WHITE); // diagonal fold: 5 wide
+		display.fillRect(x, y + 2, 6, 6, WHITE); // body: 6 wide
 	}
 	else
 	{
@@ -668,13 +669,13 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 
 	// --- Name row: "TRK n" (chunky) + play-mode icon + rate, all on one line.
 	u8g2_display.setFont(FONT_TENFAT);
-	u8g2_display.setCursor(1, 17);
+	u8g2_display.setCursor(1, 19);
 	u8g2_display.print(trackName);
 	int cx = 1 + (int)u8g2_display.getUTF8Width(trackName) + 6;
-	drawPlayIcon(playMode, cx, 8); // 17x9 icon after the name
+	drawPlayIcon(playMode, cx, 10); // 17x9 icon after the name
 	cx += 17 + 6;
 	u8g2_display.setFont(FONT_LABELS);
-	u8g2_display.setCursor(cx, 16);
+	u8g2_display.setCursor(cx, 18);
 	u8g2_display.print(rateStr);
 
 	// --- 4 page icons (right): filled = enabled, outline = muted, active underlined.
@@ -687,7 +688,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	}
 
 	// --- 16 step boxes (bottom): 0 empty (outline) · 1 notes (filled) · 2 ghost (outline + dot).
-	const uint8_t bw2 = 6, bh = 6, pitch = 8, y = 24;
+	const uint8_t bw2 = 6, bh = 6, pitch = 8, y = 25;
 	uint8_t startX = (128 - (16 * pitch - (pitch - bw2))) / 2;
 	for (uint8_t i = 0; i < 16; i++)
 	{
@@ -701,7 +702,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 				display.fillRect(x + 2, y + 2, 2, 2, WHITE); // ghost dot
 		}
 		if ((int8_t)i == playhead)
-			display.fillRect(x, y + bh + 1, bw2, 1, WHITE);
+			display.fillRect(x, y + bh, bw2, 1, WHITE); // playhead tick (row 31)
 	}
 }
 
