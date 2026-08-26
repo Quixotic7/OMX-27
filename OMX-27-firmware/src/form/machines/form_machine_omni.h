@@ -74,6 +74,7 @@ namespace FormOmni
 
         // v2 Mix F3: which 16-step page is active (for the length bar window).
         uint8_t activePage() const { return activePage_; }
+        void setActivePage(uint8_t page) { activePage_ = page > 3 ? 3 : page; }
 
         // v2 Mix: audition (preview) a step's programmed notes. key16 = 0-15 (mapped to the
         // active page's step). on=true = note-on, on=false = note-off.

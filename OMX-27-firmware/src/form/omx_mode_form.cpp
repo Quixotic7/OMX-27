@@ -344,6 +344,23 @@ static const char *kStepModeNames[STEPMODE_COUNT] = {
 static const uint32_t kStepModeColors[STEPMODE_COUNT] = {
 	WHITE, YELLOW, CYAN, ORANGE, GREEN, MAGENTA, BLUE, RED};
 
+static uint8_t mixPlayModeIndex(FormOmni::Track *t); // fwd decl (defined with the Mix helpers)
+
+static const char *kPlayModeNames[5] = {"FWD", "REV", "FWD PONG", "REV PONG", "RANDOM"};
+
+// Set a track's play mode from a 0-4 index (fwd/rev/fwd-pong/rev-pong/random).
+static void setTrackPlayModeIdx(FormOmni::Track *t, uint8_t idx)
+{
+	switch (idx)
+	{
+	case 0: t->playDirection = FormOmni::TRACKDIRECTION_FORWARD; t->playMode = FormOmni::TRACKMODE_NONE; break;
+	case 1: t->playDirection = FormOmni::TRACKDIRECTION_REVERSE; t->playMode = FormOmni::TRACKMODE_NONE; break;
+	case 2: t->playDirection = FormOmni::TRACKDIRECTION_FORWARD; t->playMode = FormOmni::TRACKMODE_PONG; break;
+	case 3: t->playDirection = FormOmni::TRACKDIRECTION_REVERSE; t->playMode = FormOmni::TRACKMODE_PONG; break;
+	case 4: t->playMode = FormOmni::TRACKMODE_RAND; break;
+	}
+}
+
 // Apply a palette value (or refresh the value message) to every held step.
 void OmxModeForm::stepApplyToHeld(uint8_t paletteIndex)
 {
@@ -416,6 +433,22 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		return;
 	}
 
+	// F1 top row (3-6) = select page.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 6)
+	{
+		omni->setActivePage(thisKey - 3);
+		omxDisp.displayMessage("PAGE " + String(thisKey - 3 + 1));
+		omxLeds.setDirty();
+		return;
+	}
+	// F2 top row (3-7) = track play mode.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 7)
+	{
+		setTrackPlayModeIdx(omni->trackPtr(), thisKey - 3);
+		omxDisp.displayMessage(kPlayModeNames[thisKey - 3]);
+		omxLeds.setDirty();
+		return;
+	}
 	// F1 = copy step · F2 = paste/cut step (§3.5 buffer) · F3 = structure layer (set length).
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 	{
@@ -544,6 +577,33 @@ void OmxModeForm::updateStepLEDs()
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	bool blink = omxLeds.getBlinkState();
 
+	// F1: top row 3-6 = pages (active bright); step row = content (copy targets).
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && heldStepMask_ == 0)
+	{
+		uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
+		for (uint8_t k = 1; k <= 10; k++)
+			strip.setPixelColor(k, LEDOFF);
+		for (uint8_t p = 0; p < 4; p++)
+			strip.setPixelColor(3 + p, (p == omni->activePage()) ? (uint32_t)WHITE : (uint32_t)LOWWHITE);
+		for (uint8_t i = 0; i < 16; i++)
+			strip.setPixelColor(11 + i, omni->stepIsOn(i) ? hue : (uint32_t)LEDOFF);
+		return;
+	}
+	// F2: top row 3-7 = play modes (active bright); step row = content (cut/paste targets).
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldStepMask_ == 0)
+	{
+		static const uint32_t pmBright[5] = {GREEN, ORANGE, CYAN, BLUE, MAGENTA};
+		static const uint32_t pmDim[5] = {DKGREEN, DKORANGE, DKCYAN, DKBLUE, DKMAGENTA};
+		uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
+		uint8_t pm = mixPlayModeIndex(omni->trackPtr());
+		for (uint8_t k = 1; k <= 10; k++)
+			strip.setPixelColor(k, LEDOFF);
+		for (uint8_t m = 0; m < 5; m++)
+			strip.setPixelColor(3 + m, (m == pm) ? pmBright[m] : pmDim[m]);
+		for (uint8_t i = 0; i < 16; i++)
+			strip.setPixelColor(11 + i, omni->stepIsOn(i) ? hue : (uint32_t)LEDOFF);
+		return;
+	}
 	// F3 structure layer: the step row shows the track length — steps beyond it go dark,
 	// the last step lit bright. Tap a step to set the length.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3 && heldStepMask_ == 0)
@@ -828,6 +888,31 @@ void OmxModeForm::onDisplayStep()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
+	// F1: top row selects the page, the step row copies steps. Split view + "COPY".
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
+	{
+		bool topFill[4];
+		for (uint8_t i = 0; i < 4; i++)
+			topFill[i] = (i == omni->activePage());
+		bool bottomFill[16];
+		for (uint8_t i = 0; i < 16; i++)
+			bottomFill[i] = omni->stepIsOn(i);
+		omxDisp.dispKeyFunctionSplit("PAGE", topFill, 4, "COPY", bottomFill, 16);
+		return;
+	}
+	// F2: top row sets the play mode, the step row cut/pastes steps. Split view + "Cut / Paste".
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
+	{
+		uint8_t pm = mixPlayModeIndex(omni->trackPtr());
+		bool topFill[5];
+		for (uint8_t i = 0; i < 5; i++)
+			topFill[i] = (i == pm);
+		bool bottomFill[16];
+		for (uint8_t i = 0; i < 16; i++)
+			bottomFill[i] = omni->stepIsOn(i);
+		omxDisp.dispKeyFunctionSplit("MODE", topFill, 5, "Cut / Paste", bottomFill, 16);
+		return;
+	}
 	// F3 structure layer: rate on top, the track-length bar on the bottom (same as Mix F3).
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
 	{
