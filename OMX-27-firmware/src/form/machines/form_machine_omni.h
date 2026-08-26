@@ -174,6 +174,10 @@ namespace FormOmni
         String stepParamValueString2(uint8_t key16, uint8_t pid); // full value (for the popup)
         String stepParamBox(uint8_t key16, uint8_t pid);          // compact value (for the cell)
         bool stepParamWide(uint8_t pid);                          // true = show the popup while editing
+        String formatParamBox(uint8_t pid, int value);           // compact formatter for a raw value
+        // Track defaults (unlocked steps track these):
+        String paramDefaultBox(uint8_t pid);
+        void editParamDefault(uint8_t pid, int delta); // edit + push to unlocked steps
         void editStepParam(uint8_t key16, uint8_t pid, int delta); // edits value, sets its lock
         bool stepParamLocked(uint8_t key16, uint8_t pid);
         void clearStepParamLock(uint8_t key16, uint8_t pid); // clears the lock and resets to default

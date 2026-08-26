@@ -644,6 +644,19 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		return true;
 	}
 
+	// Custom param page, default-edit armed (no step held): encoder edits the track default.
+	if (stepMenuPage_ != 0 && stepMenuPage_ != 3 && stepDefaultEdit_ && heldStepMask_ == 0)
+	{
+		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
+		int delta = enc.accel(1);
+		if (delta == 0)
+			delta = dir;
+		omni->editParamDefault(pid, delta);
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
+
 	// Navigate the custom cursor [overview=0, params 1..8], then hand off to the machine menu.
 	int idx = (stepMenuPage_ == 0) ? 0 : (1 + (stepMenuPage_ - 1) * 4 + stepMenuSel_);
 	idx += dir;
@@ -699,6 +712,14 @@ bool OmxModeForm::onEncoderButtonStep()
 		// No message — the header un-inverting communicates the cleared lock.
 		omxDisp.setDirty();
 		omxLeds.setDirty();
+		return true;
+	}
+	// Custom param page, no step held: arm/disarm editing the track default.
+	if (stepMenuPage_ != 0 && heldStepMask_ == 0)
+	{
+		stepDefaultEdit_ = !stepDefaultEdit_;
+		omxDisp.setDirty();
+		return true;
 	}
 	return true;
 }
@@ -710,7 +731,6 @@ void OmxModeForm::onDisplayStepMenu()
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	bool holding = (heldStepMask_ != 0 && heldStepKey_ >= 0);
 	uint8_t base = (stepMenuPage_ - 1) * 4;
-	static const char *kDefaults[8] = {"127", "0", ".75", "T", "100", "--", "--", "0"};
 
 	const char *labels[4];
 	String vals[4];
@@ -727,12 +747,13 @@ void OmxModeForm::onDisplayStepMenu()
 		}
 		else
 		{
-			vals[i] = kDefaults[pid];
+			vals[i] = omni->paramDefaultBox(pid); // track defaults
 			locked[i] = false;
 		}
 		values[i] = vals[i].c_str();
 	}
-	omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, holding);
+	// Value box inverts while editing: holding a step, or the default-edit is armed.
+	omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, holding || stepDefaultEdit_);
 }
 
 void OmxModeForm::onDisplayStep()

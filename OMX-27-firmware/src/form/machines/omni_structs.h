@@ -287,6 +287,10 @@ namespace FormOmni
         uint8_t playMode : 3;      // Shuffles and randomizes
         uint8_t midiFx : 3;        // MidiFX index, 0 for off, 1-5 for MidiFX Groups 1-5
 
+        // Per-track defaults for the P-Lockable step params (pid 0-7: Vel/Nudge/Len/MFX/Prob/
+        // Cond/Func/Accum). Unlocked steps track these; editing a default pushes it to them.
+        int8_t paramDefaults[8];
+
         Track()
         {
             len = 15;
@@ -297,6 +301,19 @@ namespace FormOmni
             playDirection = TRACKDIRECTION_FORWARD;
             playMode = TRACKMODE_NONE;
             midiFx = 0;
+            initParamDefaults();
+        }
+
+        void initParamDefaults()
+        {
+            paramDefaults[0] = 127; // vel
+            paramDefaults[1] = 0;   // nudge
+            paramDefaults[2] = 3;   // len (0.75)
+            paramDefaults[3] = 1;   // mfx (track)
+            paramDefaults[4] = 100; // prob
+            paramDefaults[5] = 0;   // cond
+            paramDefaults[6] = 0;   // func
+            paramDefaults[7] = 0;   // accum
         }
 
         uint8_t getLength()

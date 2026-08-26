@@ -18,15 +18,15 @@ namespace FormOmni
         OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
         OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
         OMNIPAGE_STEPNOTES,
-        OMNIPAGE_STEPPOTS, 
+        OMNIPAGE_STEPPOTS,
+        OMNIPAGE_TPAT, // Transpose pattern — sits right after CC
         OMNIPAGE_TRACK, // Length, MidiFX
-        OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode, 
+        OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode,
         OMNIPAGE_SEQMIX, // Mute, Solo, Gate
-        OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat, 
+        OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat,
         OMNIPAGE_SEQMIDI, // Midi Chan, MonoPhonic, SendMidi, SendCV
         OMNIPAGE_TIMINGS, // BPM, Rate, Swing, Swing Division
         OMNIPAGE_SCALE,
-        OMNIPAGE_TPAT, // SendMidi, SendCV
         OMNIPAGE_NAV,  // Page, Zoom, UI Mode
         OMNIPAGE_COUNT
     };
@@ -128,6 +128,7 @@ namespace FormOmni
         trackParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
         trackParams_.addPage(7); // OMNIPAGE_STEPNOTES,
         trackParams_.addPage(7); // OMNIPAGE_STEPPOTS,
+        trackParams_.addPage(17); // OMNIPAGE_TPAT, transpose pattern (moved after CC)
         trackParams_.addPage(4); // OMNIPAGE_TRACK, // Length, MidiFX
         trackParams_.addPage(4); // OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode,
         trackParams_.addPage(4); // OMNIPAGE_SEQMIX, // Mute, Solo, Gate
@@ -135,7 +136,6 @@ namespace FormOmni
         trackParams_.addPage(4); // OMNIPAGE_SEQMIDI, // Midi Chan, MonoPhonic, SendMidi, SendCV
         trackParams_.addPage(4); // OMNIPAGE_TIMINGS, // BPM, Rate, Swing, Swing Division
         trackParams_.addPage(4); // OMNIPAGE_SCALE,
-        trackParams_.addPage(17); // OMNIPAGE_TPAT, // SendMidi, SendCV
 
         stepParams_.addPage(4); // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
         stepParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
@@ -666,35 +666,90 @@ namespace FormOmni
     }
 
     // Compact value for the param cell (<= ~4 chars). Floats < 1 drop the leading zero (".75").
+    String FormMachineOmni::formatParamBox(uint8_t pid, int v)
+    {
+        switch (pid)
+        {
+        case 0: return String(v);
+        case 1: return String(v);
+        case 2:
+        {
+            float m = getStepLenMult(v);
+            if (m < 1.0f) { String s = String(m, 2); return s.substring(1); } // "0.75" -> ".75"
+            if (m == (float)(int)m) return String((int)m);                    // whole: "1","16"
+            return String(m, 1);                                             // "1.2"
+        }
+        case 3: return v == 0 ? String("--") : (v == 1 ? String("T") : String(v - 1)); // -- / T / 1..5
+        case 4: return String(v);
+        case 5:
+        {
+            static const char *kCondBox[9] = {"--", "F", "!F", "P", "!P", "N", "!N", "1", "!1"};
+            if (v < 9) return String(kCondBox[v]);
+            return String(getCondChar(v)); // ratios "A:B"
+        }
+        case 6:
+            if (v >= STEPFUNC_COUNT) return "J" + String(v - STEPFUNC_COUNT + 1);
+            if (v == STEPFUNC_RESTART) return String("RT"); // "RSET" -> "RT"
+            return String(kStepFuncs[v]);
+        case 7: return String(v);
+        default: return "";
+        }
+    }
+
+    static int stepParamRawValue(FormOmni::Step *s, uint8_t pid)
+    {
+        switch (pid)
+        {
+        case 0: return s->vel;
+        case 1: return s->nudge;
+        case 2: return s->len;
+        case 3: return s->mfxIndex;
+        case 4: return s->prob;
+        case 5: return s->condition;
+        case 6: return s->func;
+        case 7: return s->accumTPat;
+        default: return 0;
+        }
+    }
+
     String FormMachineOmni::stepParamBox(uint8_t key16, uint8_t pid)
     {
         if (key16 >= 16) return "";
         Step *s = &getTrack()->steps[key16toStep(key16)];
-        switch (pid)
+        return formatParamBox(pid, stepParamRawValue(s, pid));
+    }
+
+    String FormMachineOmni::paramDefaultBox(uint8_t pid)
+    {
+        if (pid >= 8) return "";
+        return formatParamBox(pid, getTrack()->paramDefaults[pid]);
+    }
+
+    // Edit a track default and push it to every step that hasn't locked that param.
+    void FormMachineOmni::editParamDefault(uint8_t pid, int delta)
+    {
+        if (pid >= 8) return;
+        Track *t = getTrack();
+        static const int lo[8] = {0, -60, 0, 0, 0, 0, 0, 0};
+        static const int hi[8] = {127, 60, 22, NUM_MIDIFX_GROUPS + 2 - 1, 100, 9 + 35 - 1, STEPFUNC_COUNT + 64 - 1, 4};
+        int v = constrain((int)t->paramDefaults[pid] + delta, lo[pid], hi[pid]);
+        t->paramDefaults[pid] = (int8_t)v;
+        uint8_t bit = kStepParamLockBits[pid];
+        for (uint8_t i = 0; i < 64; i++)
         {
-        case 0: return String(s->vel);
-        case 1: return String(s->nudge);
-        case 2:
-        {
-            float m = getStepLenMult(s->len);
-            if (m < 1.0f) { String v = String(m, 2); return v.substring(1); } // "0.75" -> ".75"
-            if (m == (float)(int)m) return String((int)m);                     // whole: "1","16"
-            return String(m, 1);                                              // "1.2"
-        }
-        case 3: return s->mfxIndex == 0 ? String("--") : (s->mfxIndex == 1 ? String("T") : String(s->mfxIndex - 1)); // -- / T / 1..5
-        case 4: return String(s->prob);
-        case 5:
-        {
-            static const char *kCondBox[9] = {"--", "F", "!F", "P", "!P", "N", "!N", "1", "!1"};
-            if (s->condition < 9) return String(kCondBox[s->condition]);
-            return String(getCondChar(s->condition)); // ratios "A:B"
-        }
-        case 6:
-            if (s->func >= STEPFUNC_COUNT) return "J" + String(s->func - STEPFUNC_COUNT + 1);
-            if (s->func == STEPFUNC_RESTART) return String("RT"); // "RSET" -> "RT"
-            return String(kStepFuncs[s->func]);
-        case 7: return String(s->accumTPat);
-        default: return "";
+            Step *s = &t->steps[i];
+            if (s->isLocked(bit)) continue;
+            switch (pid)
+            {
+            case 0: s->vel = v; break;
+            case 1: s->nudge = v; break;
+            case 2: s->len = v; break;
+            case 3: s->mfxIndex = v; break;
+            case 4: s->prob = v; break;
+            case 5: s->condition = v; break;
+            case 6: s->func = v; break;
+            case 7: s->accumTPat = v; break;
+            }
         }
     }
 
@@ -733,16 +788,17 @@ namespace FormOmni
         if (key16 >= 16 || pid >= 8) return;
         Step *s = &getTrack()->steps[key16toStep(key16)];
         s->clearLock(kStepParamLockBits[pid]);
-        switch (pid) // reset to the built-in default
+        int v = getTrack()->paramDefaults[pid]; // revert to the track default
+        switch (pid)
         {
-        case 0: s->vel = 127; break;
-        case 1: s->nudge = 0; break;
-        case 2: s->len = 3; break;
-        case 3: s->mfxIndex = 1; break;
-        case 4: s->prob = 100; break;
-        case 5: s->condition = 0; break;
-        case 6: s->func = 0; break;
-        case 7: s->accumTPat = 0; break;
+        case 0: s->vel = v; break;
+        case 1: s->nudge = v; break;
+        case 2: s->len = v; break;
+        case 3: s->mfxIndex = v; break;
+        case 4: s->prob = v; break;
+        case 5: s->condition = v; break;
+        case 6: s->func = v; break;
+        case 7: s->accumTPat = v; break;
         }
     }
 
@@ -1382,11 +1438,11 @@ namespace FormOmni
 
                 int8_t newPage = trackParams_.getSelPage();
 
-                if (prevPage == OMNIPAGE_STEPPOTS && newPage == OMNIPAGE_TRACK)
+                if (prevPage == OMNIPAGE_TPAT && newPage == OMNIPAGE_TRACK)
                 {
                     omxDisp.displayMessage("Track Params");
                 }
-                else if (prevPage == OMNIPAGE_TRACK && newPage == OMNIPAGE_STEPPOTS)
+                else if (prevPage == OMNIPAGE_TRACK && newPage == OMNIPAGE_TPAT)
                 {
                     omxDisp.displayMessage("Step Params");
                 }
@@ -2924,7 +2980,7 @@ namespace FormOmni
     // Bump whenever the OmniSeq layout changes so old saves are skipped rather than
     // blitted into a mismatched struct. (The global EEPROM_VERSION also gates loads,
     // but this makes an OmniSeq change safe on its own.)
-    static const uint8_t kOmniSaveVersion = 3; // v3: added Step::trig + Step::locks (P-Locks)
+    static const uint8_t kOmniSaveVersion = 4; // v4: added Track::paramDefaults
 
     int FormMachineOmni::saveToDisk(int startingAddress, Storage *storage)
 	{
