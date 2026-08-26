@@ -614,22 +614,22 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 	drawPlayIcon(playModeIndex, 82, cellY + (cellH - 9) / 2);
 }
 
-// A small folded-corner "page" icon (6x8) at top-left (x,y), filled or outline.
-static void drawPageIcon(int x, int y, bool filled)
+// A small folded-corner "page" icon (6x8) at top-left (x,y), filled or outline, in `color`.
+static void drawPageIcon(int x, int y, bool filled, uint16_t color)
 {
 	if (filled)
 	{
-		display.fillRect(x, y, 4, 1, WHITE);     // top: 4 wide
-		display.fillRect(x, y + 1, 5, 1, WHITE); // diagonal fold: 5 wide
-		display.fillRect(x, y + 2, 6, 6, WHITE); // body: 6 wide
+		display.fillRect(x, y, 4, 1, color);     // top: 4 wide
+		display.fillRect(x, y + 1, 5, 1, color); // diagonal fold: 5 wide
+		display.fillRect(x, y + 2, 6, 6, color); // body: 6 wide
 	}
 	else
 	{
-		display.drawLine(x, y, x + 3, y, WHITE);         // top edge (to fold)
-		display.drawLine(x + 3, y, x + 5, y + 2, WHITE); // folded diagonal
-		display.drawLine(x + 5, y + 2, x + 5, y + 7, WHITE); // right
-		display.drawLine(x, y + 7, x + 5, y + 7, WHITE); // bottom
-		display.drawLine(x, y, x, y + 7, WHITE);         // left
+		display.drawLine(x, y, x + 3, y, color);         // top edge (to fold)
+		display.drawLine(x + 3, y, x + 5, y + 2, color); // folded diagonal
+		display.drawLine(x + 5, y + 2, x + 5, y + 7, color); // right
+		display.drawLine(x, y + 7, x + 5, y + 7, color); // bottom
+		display.drawLine(x, y, x, y + 7, color);         // left
 	}
 }
 
@@ -658,15 +658,15 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		if (t == selTrack)
 			display.fillRect(x, 6, 4, 1, WHITE); // selected underline
 	}
-	// F2: box the selected track square (invert it) to show track-change mode.
-	if (modOverlay == 2)
+	// While holding F1/F2, box + invert the selected track square to show it's in focus.
+	if (modOverlay != 0)
 	{
 		int x = 1 + selTrack * 6;
-		display.fillRect(x - 1, 0, 6, 6, WHITE);
+		display.fillRect(x - 1, 0, 6, 6, WHITE); // highlight box
 		if (!trackMuted[selTrack])
-			display.fillRect(x, 1, 4, 4, BLACK); // invert the fill inside the box
+			display.fillRect(x, 1, 4, 4, BLACK); // inverted fill
 		else
-			display.drawRect(x, 1, 4, 4, BLACK);
+			display.drawRect(x, 1, 4, 4, BLACK); // inverted outline
 	}
 
 	// --- BPM, top-right.
@@ -687,23 +687,35 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	u8g2_display.setCursor(74, 18);
 	u8g2_display.print(rateStr);
 
-	// --- 4 page icons (right): filled = enabled, outline = muted, active underlined.
+	// --- 4 page icons (right): filled = enabled, outline = muted, active underlined. F1 boxes +
+	// inverts the active page (it's what F1 selects).
 	for (uint8_t p = 0; p < 4; p++)
 	{
 		int x = 98 + p * 8;
-		drawPageIcon(x, 8, (enabledPages & (1 << p)) != 0);
-		if (p == activePage)
-			display.fillRect(x, 18, 6, 1, WHITE); // active underline
+		bool enabled = (enabledPages & (1 << p)) != 0;
+		bool inv = (modOverlay == 1 && p == activePage);
+		if (inv)
+		{
+			display.fillRect(x - 1, 7, 8, 13, WHITE); // highlight box
+			drawPageIcon(x, 8, enabled, BLACK);
+			display.fillRect(x, 18, 6, 1, BLACK); // underline (inverted)
+		}
+		else
+		{
+			drawPageIcon(x, 8, enabled, WHITE);
+			if (p == activePage)
+				display.fillRect(x, 18, 6, 1, WHITE);
+		}
 	}
 
 	// --- Bottom: while holding F1/F2, a box over the step area labels the modifier; otherwise
 	// the 16 step boxes (0 empty outline · 1 notes filled · 2 ghost outline + dot).
 	if (modOverlay != 0)
 	{
-		display.drawRect(1, 23, 126, 9, WHITE);
+		display.fillRect(1, 23, 126, 9, WHITE); // inverted box
 		u8g2_display.setFont(FONT_LABELS);
-		u8g2_display.setForegroundColor(WHITE);
-		u8g2_display.setBackgroundColor(BLACK);
+		u8g2_display.setForegroundColor(BLACK);
+		u8g2_display.setBackgroundColor(WHITE);
 		u8g2centerText(modOverlay == 1 ? "COPY" : "CUT / PASTE", 0, 30, 128, 8);
 		return;
 	}
