@@ -214,6 +214,8 @@ private:
 	bool stepTrackSelEdit_ = false; // overview: encoder-click armed to change the track
 	bool stepDefaultEdit_ = false;  // param page (no step held): encoder-click armed to edit the default
 	bool stepPasteArmed_ = false;   // F2 buffer state: next F2 pastes (after a copy/cut)
+	uint8_t heldPageMask_ = 0;      // F1 + page keys currently held (for loop-range gesture)
+	bool pageGestureDone_ = false;  // a range gesture consumed this F1+page press group
 	void onKeyUpdateStep(OMXKeypadEvent e);
 	bool onEncoderStep(Encoder::Update enc);   // returns true if the Step view consumed the encoder
 	bool onEncoderButtonStep();                // returns true if consumed

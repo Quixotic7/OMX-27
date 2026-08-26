@@ -92,14 +92,18 @@ namespace FormOmni
         void setFill(bool on) { fillActive_ = on; }
 
         // v2 length / polymeter. setTrackLen takes a flat 0-63 length and rebuilds pages;
-        // setPageLen sets one page's length (1-16); setNumPages sets the loop page count (1-4).
-        void setTrackLen(uint8_t len)
+        // setPageLen sets one page's length (1-16); setEnabledPages sets the loop bitmask.
+        void setTrackLen(uint8_t len) // flat 0-63 -> enable pages 0..lastPage, rebuild lengths
         {
             Track *t = getTrack();
             if (len > 63) len = 63;
-            t->numPages = (len / 16) + 1;
-            for (uint8_t p = 0; p < t->numPages; p++)
-                t->pageLen[p] = (p == t->numPages - 1) ? (len % 16) + 1 : 16;
+            uint8_t lastPage = len / 16;
+            t->enabledPages = 0;
+            for (uint8_t p = 0; p <= lastPage; p++)
+            {
+                t->enabledPages |= (1 << p);
+                t->pageLen[p] = (p == lastPage) ? (len % 16) + 1 : 16;
+            }
             t->syncLen();
             onTrackLengthChanged();
         }
@@ -108,20 +112,18 @@ namespace FormOmni
             if (page >= 4) return;
             Track *t = getTrack();
             t->pageLen[page] = len < 1 ? 1 : (len > 16 ? 16 : len);
-            if (page >= t->numPages)
-                t->numPages = page + 1;
+            t->enabledPages |= (1 << page); // setting a page's length puts it in the loop
             t->syncLen();
             onTrackLengthChanged();
         }
-        void setNumPages(uint8_t n)
+        void setEnabledPages(uint8_t mask)
         {
-            Track *t = getTrack();
-            t->numPages = n < 1 ? 1 : (n > 4 ? 4 : n);
-            t->syncLen();
+            getTrack()->enabledPages = mask & 0x0F;
+            getTrack()->syncLen();
             onTrackLengthChanged();
         }
+        uint8_t getEnabledPages() { return getTrack()->enabledPages; }
         uint8_t getPageLen(uint8_t page) { return page < 4 ? getTrack()->pageLen[page] : 16; }
-        uint8_t getNumPages() { return getTrack()->numPages; }
         // v2 Step F3: set the rate from a top-row key (0-7), like Mix F3.
         void setRateShortcut(uint8_t topKeyIndex);
         int8_t rateShortcutSel(); // which top-row key (0-7) matches the current rate, -1 if none

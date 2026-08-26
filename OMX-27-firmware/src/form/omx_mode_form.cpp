@@ -433,14 +433,50 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		return;
 	}
 
-	// F1 top row (3-6) = select page; the playback loop spans pages 1..selected.
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 6)
+	// F1 + page keys (3-6): single-click selects the edit page; double-click solos that page;
+	// hold one page + press another enables just that range (loop). Muted pages don't play.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && (thisKey >= 3 && thisKey <= 6))
 	{
 		uint8_t p = thisKey - 3;
-		omni->setActivePage(p);
-		omni->setNumPages(p + 1);
-		omxDisp.displayMessage("PAGE " + String(p + 1));
-		omxLeds.setDirty();
+		if (e.down() && !e.held())
+		{
+			if (heldPageMask_ != 0 && !(heldPageMask_ & (1 << p)))
+			{
+				// loop-range: enable pages between the first held page and p.
+				uint8_t a = 0;
+				for (uint8_t i = 0; i < 4; i++) if (heldPageMask_ & (1 << i)) { a = i; break; }
+				uint8_t lo = a < p ? a : p, hi = a < p ? p : a;
+				uint8_t mask = 0;
+				for (uint8_t i = lo; i <= hi; i++) mask |= (1 << i);
+				omni->setEnabledPages(mask);
+				omni->setActivePage(a);
+				pageGestureDone_ = true;
+				omxDisp.displayMessage("PAGES " + String(lo + 1) + "-" + String(hi + 1));
+			}
+			heldPageMask_ |= (1 << p);
+			omxLeds.setDirty();
+		}
+		else if (!e.down() && (heldPageMask_ & (1 << p)))
+		{
+			if (!pageGestureDone_)
+			{
+				if (e.clicks() == 2)
+				{
+					omni->setEnabledPages(1 << p); // double-click = solo
+					omni->setActivePage(p);
+					omxDisp.displayMessage("SOLO PG " + String(p + 1));
+				}
+				else if (e.quickClicked())
+				{
+					omni->setActivePage(p); // single-click = select edit page
+					omxDisp.displayMessage("PAGE " + String(p + 1));
+				}
+			}
+			heldPageMask_ &= ~(1 << p);
+			if (heldPageMask_ == 0)
+				pageGestureDone_ = false;
+			omxLeds.setDirty();
+		}
 		return;
 	}
 	// F2 top row (3-7) = track play mode.
@@ -571,14 +607,31 @@ void OmxModeForm::updateStepLEDs()
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	bool blink = omxLeds.getBlinkState();
 
-	// F1: top row 3-6 = pages (active bright); step row = content (copy targets).
+	// F1: top row 3-6 = pages; step row = content (copy targets).
+	// Colours: selected = GREEN (RED if muted) · enabled = BLUE · muted = very dim ·
+	// currently-playing page = flashing YELLOW.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && heldStepMask_ == 0)
 	{
 		uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
 		for (uint8_t k = 1; k <= 10; k++)
 			strip.setPixelColor(k, LEDOFF);
+		uint8_t en = omni->getEnabledPages();
+		uint8_t sel = omni->activePage();
+		uint8_t playingPage = omni->playingStepIndex() / 16;
 		for (uint8_t p = 0; p < 4; p++)
-			strip.setPixelColor(3 + p, (p == omni->activePage()) ? (uint32_t)WHITE : (uint32_t)LOWWHITE);
+		{
+			bool enabled = en & (1 << p);
+			uint32_t c;
+			if (p == sel)
+				c = enabled ? (uint32_t)GREEN : (uint32_t)RED;
+			else if (enabled)
+				c = (uint32_t)BLUE;
+			else
+				c = (uint32_t)VLOWWHITE;
+			if (omxFormGlobal.isPlaying && p == playingPage && blink)
+				c = (uint32_t)YELLOW; // flashing playhead page
+			strip.setPixelColor(3 + p, c);
+		}
 		for (uint8_t i = 0; i < 16; i++)
 			strip.setPixelColor(11 + i, omni->stepIsOn(i) ? hue : (uint32_t)LEDOFF);
 		return;

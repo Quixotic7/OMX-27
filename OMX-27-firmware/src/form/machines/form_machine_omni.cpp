@@ -3008,7 +3008,7 @@ namespace FormOmni
     // Bump whenever the OmniSeq layout changes so old saves are skipped rather than
     // blitted into a mismatched struct. (The global EEPROM_VERSION also gates loads,
     // but this makes an OmniSeq change safe on its own.)
-    static const uint8_t kOmniSaveVersion = 6; // v6: per-page length (numPages, pageLen)
+    static const uint8_t kOmniSaveVersion = 7; // v7: per-page length + enabledPages
 
     int FormMachineOmni::saveToDisk(int startingAddress, Storage *storage)
 	{
