@@ -614,6 +614,32 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 	drawPlayIcon(playModeIndex, 82, cellY + (cellH - 9) / 2);
 }
 
+void OmxDisp::dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead)
+{
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// Mode name, chunky, centred on top.
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_TENFAT);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	u8g2centerText(modeName, 0, 13, 128, 8);
+
+	// Step cells: filled = has content, outline = empty. Playhead gets a tick beneath it.
+	const uint8_t bw = 6, bh = 6, pitch = 8, y = 22;
+	uint8_t startX = (128 - (count * pitch - (pitch - bw))) / 2;
+	for (uint8_t i = 0; i < count; i++)
+	{
+		int x = startX + i * pitch;
+		if (filled && filled[i])
+			display.fillRect(x, y, bw, bh, WHITE);
+		else
+			display.drawRect(x, y, bw, bh, WHITE);
+		if ((int8_t)i == playhead)
+			display.fillRect(x, y + bh + 1, bw, 1, WHITE);
+	}
+}
+
 void OmxDisp::dispTrackLength(const char *rateStr, uint8_t activeCount)
 {
 	display.fillRect(0, 0, 128, 32, BLACK);

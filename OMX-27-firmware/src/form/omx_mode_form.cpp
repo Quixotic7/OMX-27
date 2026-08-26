@@ -335,6 +335,79 @@ void OmxModeForm::onDisplayMI()
 	omxDisp.dispGenericModeLabelDoubleLine("MI VIEW", "(todo)", 0, 0);
 }
 
+// ---- Step view (container-rendered v2 editor) ----
+
+static const char *kStepModeNames[STEPMODE_COUNT] = {
+	"NOTE", "VELOCITY", "LENGTH", "REPEAT", "CHANCE", "MATH", "FUNCTION", "MIDI FX"};
+
+// Distinct colour per edit mode for the top-row selector.
+static const uint32_t kStepModeColors[STEPMODE_COUNT] = {
+	WHITE, YELLOW, CYAN, ORANGE, GREEN, MAGENTA, BLUE, RED};
+
+// Top row (3-10) selects the edit mode; step row (11-26): single-click clears the step to the
+// buffer (F2 pastes it back). Hold-step value palettes come in the next stage.
+void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
+{
+	uint8_t thisKey = e.key();
+	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
+		return; // F1/F2/F3 + AUX handled in later stages
+
+	// Mode selector.
+	if (e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
+	{
+		stepEditMode_ = thisKey - 3;
+		omxDisp.displayMessage(kStepModeNames[stepEditMode_]);
+		omxLeds.setDirty();
+		return;
+	}
+
+	// Step keys: single-click clears the step (into the copy buffer for undo/paste).
+	if (thisKey >= 11 && thisKey < 27 && e.quickClicked())
+	{
+		auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		omni->stepCut(thisKey - 11);
+		omxDisp.displayMessage("CLEAR");
+		omxLeds.setDirty();
+	}
+}
+
+void OmxModeForm::updateStepLEDs()
+{
+	// Top row 3-10 = the 8 edit modes; active bright, others dim.
+	for (uint8_t m = 0; m < STEPMODE_COUNT; m++)
+		strip.setPixelColor(3 + m, (m == stepEditMode_) ? kStepModeColors[m] : LOWWHITE);
+
+	// Step row 11-26 = the current page's 16 steps.
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
+	int16_t pageStart = (int16_t)omni->activePage() * 16;
+	int16_t playhead = (int16_t)omni->playingStepIndex() - pageStart;
+	bool blink = omxLeds.getBlinkState();
+
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		uint32_t col = LEDOFF;
+		if (omni->stepHasNotes(i))
+			col = omni->getStepMute(i) ? DKRED : hue;
+		if (omxFormGlobal.isPlaying && i == playhead && blink)
+			col = WHITE; // playhead flashes over the step
+		strip.setPixelColor(11 + i, col);
+	}
+}
+
+void OmxModeForm::onDisplayStep()
+{
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	int16_t pageStart = (int16_t)omni->activePage() * 16;
+	int8_t playhead = omxFormGlobal.isPlaying
+						  ? (int8_t)((int16_t)omni->playingStepIndex() - pageStart)
+						  : -1;
+	bool filled[16];
+	for (uint8_t i = 0; i < 16; i++)
+		filled[i] = omni->stepHasNotes(i);
+	omxDisp.dispStepOverview(kStepModeNames[stepEditMode_], filled, 16, playhead);
+}
+
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
 // single tap = select. (Low-row keys still go to the machine's step editor.)
 void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
@@ -975,6 +1048,12 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 
 
 	// v2 shell: container-rendered views take their own keys (not the machine).
+	if (formView_ == FORMVIEW_STEP)
+	{
+		if (!keyConsumed)
+			onKeyUpdateStep(e);
+		return;
+	}
 	if (formView_ == FORMVIEW_PATTERNS)
 	{
 		if (!keyConsumed)
@@ -1203,6 +1282,11 @@ void OmxModeForm::updateLEDs()
 	}
 
 	// v2 shell: container-rendered views
+	if (formView_ == FORMVIEW_STEP)
+	{
+		updateStepLEDs();
+		return;
+	}
 	if (formView_ == FORMVIEW_PATTERNS)
 	{
 		updatePatternsLEDs();
@@ -1287,6 +1371,11 @@ void OmxModeForm::onDisplayUpdate()
 		return;
 
 	// v2 shell: container-rendered views
+	if (formView_ == FORMVIEW_STEP)
+	{
+		onDisplayStep();
+		return;
+	}
 	if (formView_ == FORMVIEW_PATTERNS)
 	{
 		onDisplayPatterns();

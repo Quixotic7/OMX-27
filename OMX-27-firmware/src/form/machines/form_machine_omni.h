@@ -90,6 +90,13 @@ namespace FormOmni
         // v2 Mix (hold F2): momentary FILL — steps with a Fill condition play while active.
         void setFill(bool on) { fillActive_ = on; }
 
+        // v2 Step view: read step content + playhead, and the copy/paste buffer (key16 = 0-15).
+        bool stepHasNotes(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].hasNotes(); }
+        uint8_t playingStepIndex() { return playingStep_; }
+        void stepCopy(uint8_t key16) { copyStep(key16); }
+        void stepCut(uint8_t key16) { cutStep(key16); }
+        void stepPaste(uint8_t key16) { pasteStep(key16); }
+
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }
         void setSeq(const OmniSeq &s)

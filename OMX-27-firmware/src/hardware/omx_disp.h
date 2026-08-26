@@ -50,6 +50,9 @@ public:
 	// Held-track status (Mix): "TRACK n" with M / S cells (filled when active) and a
 	// play-direction icon (playModeIndex 0-4 = fwd/rev/fwd-pong/rev-pong/random).
 	void dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t playModeIndex);
+	// Step view overview: mode name on top, a row of `count` step cells on the bottom (filled
+	// = has content). The playhead step (0-based, -1 = none) gets a tick underneath.
+	void dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead);
 	// Mix F3 (LEN | RATE): rate label on top, track length as a 16-cell bar on the bottom.
 	// activeCount cells (0-16) are full boxes (steps within the length); the rest are dashes.
 	// Every 4th active cell gets a left notch to make groups of 4 easier to count.

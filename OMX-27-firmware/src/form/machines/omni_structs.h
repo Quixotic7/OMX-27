@@ -158,6 +158,7 @@ namespace FormOmni
     struct Step
     {
         uint8_t mute : 1;      // bool for mute
+        uint8_t repeat : 3;    // ratchet count index: 0 = 1x (off), 1 = 2x, 2 = 3x (triplet), 3 = 4x
         int8_t notes[6];       // 0 - 127, -1 for off
         int8_t potVals[5];     // 0 -> 127, -1 for off
         uint8_t vel : 7;       // 0 - 127
@@ -182,6 +183,7 @@ namespace FormOmni
         {
             // Set defaults
             mute = 0;
+            repeat = 0;
             for (uint8_t i = 0; i < 6; i++)
                 notes[i] = -1;
             for (uint8_t i = 0; i < 5; i++)

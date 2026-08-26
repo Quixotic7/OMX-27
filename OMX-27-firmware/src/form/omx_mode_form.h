@@ -125,6 +125,20 @@ enum FormView
 	FORMVIEW_COUNT
 };
 
+// Step-view edit modes: top row keys 3-10 select one. Each edits one Step field.
+enum StepMode
+{
+	STEPMODE_NOTE,   // notes[6]      (chord entry)
+	STEPMODE_VEL,    // vel
+	STEPMODE_LENGTH, // len
+	STEPMODE_REPEAT, // repeat (ratchet)
+	STEPMODE_CHANCE, // prob
+	STEPMODE_MATH,   // condition (conditional trig)
+	STEPMODE_FUNC,   // func
+	STEPMODE_MFX,    // mfxIndex
+	STEPMODE_COUNT
+};
+
 // This mode is designed to be used with samplers or drum machines
 // Each key can be configured to whatever Note, Vel, Midi Chan you want.
 // This class is very similar to the midi keyboard, maybe we merge or inherit.
@@ -186,6 +200,11 @@ private:
 	void onKeyUpdatePatterns(OMXKeypadEvent e);
 	void onDisplayPatterns();
 	void onDisplayMI();
+	// ---- Step view (container-rendered v2 editor) ----
+	uint8_t stepEditMode_ = STEPMODE_NOTE; // which of the 8 modes is active (top row 3-10)
+	void onKeyUpdateStep(OMXKeypadEvent e);
+	void updateStepLEDs();
+	void onDisplayStep();
 	void onKeyUpdateMix(OMXKeypadEvent e);     // Mix-view track keys (mute/solo/select)
 	void onKeyUpdateMixHold(OMXKeypadEvent e); // low-row per-track controls while holding a track
 	void onKeyUpdateMixStep(OMXKeypadEvent e);     // low-row taps audition the selected track's steps
