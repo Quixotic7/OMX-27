@@ -579,16 +579,16 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 	u8g2_display.setFontMode(1);
 
 	// Title: TRACK n
-	u8g2_display.setFont(FONT_VALUES);
+	u8g2_display.setFont(FONT_TENFAT);
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
 	char buf[16];
 	snprintf(buf, sizeof(buf), "TRACK %u", (unsigned)trackNum);
-	u8g2centerText(buf, 0, 11, 128, 8);
+	u8g2centerText(buf, 0, 14, 128, 8);
 
 	// M / S cells (filled/inverted when active).
-	u8g2_display.setFont(FONT_LABELS);
-	const int cellY = 19, cellH = 12, cellW = 14;
+	u8g2_display.setFont(FONT_TENFAT);
+	const int cellY = 17, cellH = 14, cellW = 14;
 	const struct { const char *s; int x; bool active; } ms[2] = {
 		{"M", 24, muted},
 		{"S", 44, soloed},
@@ -607,7 +607,7 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 			u8g2_display.setForegroundColor(WHITE);
 			u8g2_display.setBackgroundColor(BLACK);
 		}
-		u8g2centerText(ms[i].s, ms[i].x, 28, cellW, 8);
+		u8g2centerText(ms[i].s, ms[i].x, 31, cellW, 8);
 	}
 
 	// Play-direction icon (17x9, right side), vertically centred in the cell band.
@@ -618,12 +618,12 @@ void OmxDisp::dispTrackLength(const char *rateStr, uint8_t activeCount)
 {
 	display.fillRect(0, 0, 128, 32, BLACK);
 
-	// Rate value, centred on top.
+	// Rate value, centred on top (chunky pixel font).
 	u8g2_display.setFontMode(1);
-	u8g2_display.setFont(FONT_VALUES);
+	u8g2_display.setFont(FONT_TENFAT);
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
-	u8g2centerText(rateStr, 0, 13, 128, 8);
+	u8g2centerText(rateStr, 0, 15, 128, 8);
 
 	// Length bar: 16 cells at 8px pitch, each a 6px-wide box. Active steps are filled boxes;
 	// steps past the length are drawn as a thin dash. Every 4th active cell gets a 1px notch.
@@ -649,23 +649,24 @@ void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool *topFill, ui
 {
 	display.fillRect(0, 0, 128, 32, BLACK);
 	u8g2_display.setFontMode(1);
-	u8g2_display.setFont(FONT_CHAR16); // 6x12 — readable
+	u8g2_display.setFont(FONT_TENFAT); // chunky pixel font
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
 
 	if (bottomCount == 0 && (bottomLabel == nullptr || bottomLabel[0] == '\0'))
 	{
 		// Single-row layout: one label + one box row, vertically centred.
-		u8g2centerText(topLabel, 0, 13, 128, 8); // baseline ~13, text ~y5-13
+		u8g2centerText(topLabel, 0, 11, 128, 8); // baseline ~9 (text y0-9)
 		drawKeyBoxRow(topCount, topFill, 18);    // boxes y18-21
 		return;
 	}
 
-	// Two-row layout: top label + top boxes, 1px gap, bottom boxes + bottom label.
-	u8g2centerText(topLabel, 0, 10, 128, 8);    // baseline ~10 (text y1-10)
+	// Two-row layout: TENFAT labels are ~12px tall, so the two labels and two box rows fill
+	// the 32px screen edge-to-edge with no spare gap.
+	u8g2centerText(topLabel, 0, 13, 128, 8);    // baseline ~11 (text y0-11)
 	drawKeyBoxRow(topCount, topFill, 12);       // boxes y12-15
-	drawKeyBoxRow(bottomCount, bottomFill, 17); // boxes y17-20 (1px gap at y16)
-	u8g2centerText(bottomLabel, 0, 30, 128, 8); // baseline ~30 (text y21-30)
+	drawKeyBoxRow(bottomCount, bottomFill, 16); // boxes y16-19
+	u8g2centerText(bottomLabel, 0, 33, 128, 8); // baseline ~31 (text y20-31)
 }
 
 void OmxDisp::dispGenericModeLabelDoubleLine(const char *label1, const char *label2, uint8_t numPages, int8_t selectedPage)
