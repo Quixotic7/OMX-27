@@ -728,13 +728,19 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		{
 			// Within the page length: full-height box.
 			if (stepState[i] == 1)
-				display.fillRect(x, y, bw2, bh, WHITE);
-			else
+				display.fillRect(x, y, bw2, bh, WHITE); // has notes = solid
+			else if (stepState[i] == 2)
 			{
-				display.drawRect(x, y, bw2, bh, WHITE);
-				if (stepState[i] == 2)
-					display.fillRect(x + 2, y + 2, 2, 2, WHITE); // ghost dot
+				// Ghost: box with an inset top edge and two inner dots.
+				display.fillRect(x + 1, y, 4, 1, WHITE);       // inset top
+				display.drawFastVLine(x, y + 1, 4, WHITE);     // left side
+				display.drawFastVLine(x + 5, y + 1, 4, WHITE); // right side
+				display.fillRect(x, y + 5, bw2, 1, WHITE);     // bottom
+				display.drawPixel(x + 2, y + 2, WHITE);
+				display.drawPixel(x + 4, y + 2, WHITE);
 			}
+			else
+				display.drawRect(x, y, bw2, bh, WHITE); // empty = outline
 		}
 		else
 		{
