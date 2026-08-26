@@ -630,6 +630,8 @@ static void drawStepRow(uint8_t y, const uint8_t *stepState, uint8_t pageLen, in
 		{
 			if (stepState[i] == 1)
 				display.fillRect(x, y, bw, bh, WHITE); // has notes = solid
+			else if (stepState[i] == 4)
+				display.fillRect(x + 1, y + 1, 4, 4, WHITE); // has notes + muted = inset block
 			else if (stepState[i] == 2)
 			{
 				// Ghost: box with an inset top edge and two inner dots.
@@ -640,6 +642,16 @@ static void drawStepRow(uint8_t y, const uint8_t *stepState, uint8_t pageLen, in
 				display.drawPixel(x + 2, y + 2, WHITE);
 				display.drawPixel(x + 4, y + 2, WHITE);
 			}
+			else if (stepState[i] == 3)
+			{
+				// Ghost + muted: inset block with top corners and a punched-out dot row.
+				display.drawPixel(x, y, WHITE);
+				display.drawPixel(x + 5, y, WHITE);
+				display.fillRect(x + 1, y + 1, 4, 1, WHITE);
+				display.drawPixel(x + 1, y + 2, WHITE);
+				display.drawPixel(x + 3, y + 2, WHITE);
+				display.fillRect(x + 1, y + 3, 4, 2, WHITE);
+			}
 			else
 				display.drawRect(x, y, bw, bh, WHITE); // empty = outline
 		}
@@ -647,7 +659,7 @@ static void drawStepRow(uint8_t y, const uint8_t *stepState, uint8_t pageLen, in
 		{
 			// Beyond the page length: a short 3px box at the bottom.
 			int sy = y + bh - 3;
-			if (stepState[i] == 1)
+			if (stepState[i] == 1 || stepState[i] == 4)
 				display.fillRect(x, sy, bw, 3, WHITE);
 			else
 				display.drawRect(x, sy, bw, 3, WHITE);

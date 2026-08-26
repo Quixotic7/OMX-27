@@ -1019,11 +1019,14 @@ void OmxModeForm::onDisplayStep()
 	// once edited), so a quick-click doesn't flash it.
 	if (heldStepMask_ != 0 && (stepHoldUIShown_ || stepEdited_))
 	{
-		// Step states (0 empty · 1 notes · 2 ghost) + the active page's length: same data the
-		// track page uses, so the step row renders identically everywhere.
+		// Step states (0 empty · 1 notes · 2 ghost · 3 muted ghost · 4 muted notes) + the active
+		// page's length: same data the track page uses, so the step row renders identically.
 		uint8_t stepState[16];
 		for (uint8_t i = 0; i < 16; i++)
-			stepState[i] = omni->stepHasNotes(i) ? 1 : (omni->stepIsOn(i) ? 2 : 0);
+		{
+			bool m = omni->getStepMute(i);
+			stepState[i] = omni->stepHasNotes(i) ? (m ? 4 : 1) : (omni->stepIsOn(i) ? (m ? 3 : 2) : 0);
+		}
 		uint8_t pageLen = omni->getPageLen(omni->activePage());
 
 		// Note mode: compact piano keyboard for the held step's chord, with step markers below.
@@ -1055,10 +1058,13 @@ void OmxModeForm::onDisplaySeqTrackPage()
 	int16_t pageStart = (int16_t)omni->activePage() * 16;
 	int8_t playhead = omxFormGlobal.isPlaying ? (int8_t)((int16_t)omni->playingStepIndex() - pageStart) : -1;
 
-	// Step states: 0 empty · 1 has notes · 2 ghost (on but no notes).
+	// Step states: 0 empty · 1 notes · 2 ghost · 3 muted ghost · 4 muted notes.
 	uint8_t stepState[16];
 	for (uint8_t i = 0; i < 16; i++)
-		stepState[i] = omni->stepHasNotes(i) ? 1 : (omni->stepIsOn(i) ? 2 : 0);
+	{
+		bool m = omni->getStepMute(i);
+		stepState[i] = omni->stepHasNotes(i) ? (m ? 4 : 1) : (omni->stepIsOn(i) ? (m ? 3 : 2) : 0);
+	}
 
 	// Track mute states, with solo override (any soloed -> non-soloed render muted).
 	bool anySolo = false;
