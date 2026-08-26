@@ -87,6 +87,9 @@ namespace FormOmni
         }
         bool getStepMute(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].mute; }
 
+        // v2 Mix (hold F2): momentary FILL — steps with a Fill condition play while active.
+        void setFill(bool on) { fillActive_ = on; }
+
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }
         void setSeq(const OmniSeq &s)

@@ -462,14 +462,15 @@ void OmxModeForm::onKeyUpdateMixStep(OMXKeypadEvent e)
 	omxLeds.setDirty();
 }
 
-// F1 + low-row taps toggle the selected track's step mutes. F2 (step solo) has no per-step
-// data model yet, so it is a safe no-op for now (and, importantly, no longer cuts the step).
+// F1 + low-row taps toggle the selected track's step mutes. Under F2 the low row is a no-op
+// (F2 = momentary FILL, a held global state — not a per-step control), and importantly no
+// longer falls through to the machine's destructive cut-step.
 void OmxModeForm::onKeyUpdateMixStepMute(OMXKeypadEvent e)
 {
 	if (e.held() || !e.down())
 		return;
 	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_F1)
-		return; // F2/solo: no-op until per-step solo exists
+		return; // F2 = fill (handled by holding F2); low-row does nothing
 	uint8_t key16 = e.key() - 11;
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	omni->toggleStepMute(key16);
@@ -533,6 +534,11 @@ void OmxModeForm::updateShortcutMode()
 	if (prevMode != omxFormGlobal.shortcutMode)
 	{
 		omxFormGlobal.shortcutPaste = false;
+
+		// Mix: holding F2 activates FILL on all tracks (steps with a Fill condition play).
+		bool fillOn = (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F2);
+		for (uint8_t i = 0; i < kNumMachines; i++)
+			static_cast<FormOmni::FormMachineOmni *>(machines_[i])->setFill(fillOn);
 
 		omxDisp.setDirty();
 		omxLeds.setDirty();
@@ -1333,14 +1339,20 @@ void OmxModeForm::onDisplayUpdate()
 		bool topFill[kNumMachines]; // one box per track (keys 3-10)
 		for (uint8_t t = 0; t < kNumMachines; t++)
 			topFill[t] = f1 ? !machines_[t]->getMute() : machines_[t]->getSolo(); // mute: filled = unmuted
-		// Bottom row = the 16 step keys of the selected track. F1: filled = step will play
-		// (not muted). F2 (step solo) has no data model yet, so the boxes stay empty.
-		auto omni = static_cast<FormOmni::FormMachineOmni *>(selMachine);
-		bool bottomFill[16];
-		for (uint8_t i = 0; i < 16; i++)
-			bottomFill[i] = f1 ? !omni->getStepMute(i) : false;
-		const char *label = f1 ? "MUTE" : "SOLO";
-		omxDisp.dispKeyFunctionSplit(label, topFill, kNumMachines, label, bottomFill, 16);
+		if (f1)
+		{
+			// F1: top = track mutes, bottom = the selected track's step mutes (filled = plays).
+			auto omni = static_cast<FormOmni::FormMachineOmni *>(selMachine);
+			bool bottomFill[16];
+			for (uint8_t i = 0; i < 16; i++)
+				bottomFill[i] = !omni->getStepMute(i);
+			omxDisp.dispKeyFunctionSplit("MUTE", topFill, kNumMachines, "MUTE", bottomFill, 16);
+		}
+		else
+		{
+			// F2: top = track solos, bottom = FILL (a global momentary state, no per-key boxes).
+			omxDisp.dispKeyFunctionSplit("SOLO", topFill, kNumMachines, "Fill", nullptr, 0);
+		}
 		return;
 	}
 
