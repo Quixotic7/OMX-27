@@ -288,6 +288,9 @@ namespace FormOmni
         uint8_t playMode : 3;      // Shuffles and randomizes
         uint8_t midiFx : 3;        // MidiFX index, 0 for off, 1-5 for MidiFX Groups 1-5
 
+        uint8_t numPages : 3; // pages in the playback loop (1-4)
+        uint8_t pageLen[4];   // steps per page (1-16), for polymeter
+
         // Per-track defaults for the P-Lockable step params (pid 0-7: Vel/Nudge/Len/MFX/Prob/
         // Cond/Func/Accum). Unlocked steps track these; editing a default pushes it to them.
         int8_t paramDefaults[8];
@@ -302,7 +305,49 @@ namespace FormOmni
             playDirection = TRACKDIRECTION_FORWARD;
             playMode = TRACKMODE_NONE;
             midiFx = 0;
+            numPages = 1;
+            for (uint8_t i = 0; i < 4; i++)
+                pageLen[i] = 16;
             initParamDefaults();
+            syncLen();
+        }
+
+        // ---- Polymeter: playback runs in "position space" (0 .. totalLen-1); each position
+        // maps to an absolute step index. `len` is kept = totalLen-1 for the rest of the engine.
+        uint16_t totalLen()
+        {
+            uint16_t t = 0;
+            for (uint8_t p = 0; p < numPages && p < 4; p++)
+                t += (pageLen[p] == 0 ? 1 : pageLen[p]);
+            return t == 0 ? 1 : t;
+        }
+        void syncLen()
+        {
+            uint16_t t = totalLen();
+            len = (t > 64 ? 64 : t) - 1;
+        }
+        uint8_t positionToStep(uint16_t pos)
+        {
+            for (uint8_t p = 0; p < numPages && p < 4; p++)
+            {
+                uint8_t pl = pageLen[p] == 0 ? 1 : pageLen[p];
+                if (pos < pl)
+                    return p * 16 + pos;
+                pos -= pl;
+            }
+            return 0;
+        }
+        uint16_t stepToPosition(uint8_t absIdx)
+        {
+            uint8_t page = absIdx / 16, sp = absIdx % 16;
+            if (page >= numPages)
+                return 0;
+            uint16_t pos = 0;
+            for (uint8_t p = 0; p < page; p++)
+                pos += (pageLen[p] == 0 ? 1 : pageLen[p]);
+            uint8_t maxsp = (pageLen[page] == 0 ? 1 : pageLen[page]) - 1;
+            pos += (sp > maxsp ? maxsp : sp);
+            return pos;
         }
 
         void initParamDefaults()

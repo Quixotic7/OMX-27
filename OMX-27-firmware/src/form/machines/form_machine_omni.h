@@ -91,19 +91,44 @@ namespace FormOmni
         // v2 Mix (hold F2): momentary FILL — steps with a Fill condition play while active.
         void setFill(bool on) { fillActive_ = on; }
 
-        // v2 Step F3 structure layer: set the track length (0-63 = 1-64 steps).
+        // v2 length / polymeter. setTrackLen takes a flat 0-63 length and rebuilds pages;
+        // setPageLen sets one page's length (1-16); setNumPages sets the loop page count (1-4).
         void setTrackLen(uint8_t len)
         {
-            getTrack()->len = len > 63 ? 63 : len;
+            Track *t = getTrack();
+            if (len > 63) len = 63;
+            t->numPages = (len / 16) + 1;
+            for (uint8_t p = 0; p < t->numPages; p++)
+                t->pageLen[p] = (p == t->numPages - 1) ? (len % 16) + 1 : 16;
+            t->syncLen();
             onTrackLengthChanged();
         }
+        void setPageLen(uint8_t page, uint8_t len)
+        {
+            if (page >= 4) return;
+            Track *t = getTrack();
+            t->pageLen[page] = len < 1 ? 1 : (len > 16 ? 16 : len);
+            if (page >= t->numPages)
+                t->numPages = page + 1;
+            t->syncLen();
+            onTrackLengthChanged();
+        }
+        void setNumPages(uint8_t n)
+        {
+            Track *t = getTrack();
+            t->numPages = n < 1 ? 1 : (n > 4 ? 4 : n);
+            t->syncLen();
+            onTrackLengthChanged();
+        }
+        uint8_t getPageLen(uint8_t page) { return page < 4 ? getTrack()->pageLen[page] : 16; }
+        uint8_t getNumPages() { return getTrack()->numPages; }
         // v2 Step F3: set the rate from a top-row key (0-7), like Mix F3.
         void setRateShortcut(uint8_t topKeyIndex);
 
         // v2 Step view: read step content + playhead, and the copy/paste buffer (key16 = 0-15).
         bool stepHasNotes(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].hasNotes(); }
         bool stepIsOn(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].isOn(); }
-        uint8_t playingStepIndex() { return playingStep_; }
+        uint8_t playingStepIndex() { return getTrack()->positionToStep(playingStep_); } // absolute step
         // Function mode: is the step currently a jump (random J? or a specific jump target)?
         bool stepIsJump(uint8_t key16)
         {

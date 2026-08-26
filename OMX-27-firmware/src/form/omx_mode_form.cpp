@@ -433,11 +433,13 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		return;
 	}
 
-	// F1 top row (3-6) = select page.
+	// F1 top row (3-6) = select page; the playback loop spans pages 1..selected.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 6)
 	{
-		omni->setActivePage(thisKey - 3);
-		omxDisp.displayMessage("PAGE " + String(thisKey - 3 + 1));
+		uint8_t p = thisKey - 3;
+		omni->setActivePage(p);
+		omni->setNumPages(p + 1);
+		omxDisp.displayMessage("PAGE " + String(p + 1));
 		omxLeds.setDirty();
 		return;
 	}
@@ -486,9 +488,10 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	}
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 	{
-		uint8_t len = (uint8_t)omni->activePage() * 16 + (thisKey - 11);
-		omni->setTrackLen(len);
-		omxDisp.displayMessage("LENGTH " + String(len + 1));
+		uint8_t page = omni->activePage();
+		uint8_t pageLen = (thisKey - 11) + 1; // tapped step -> that page's length (1-16)
+		omni->setPageLen(page, pageLen);
+		omxDisp.displayMessage("P" + String(page + 1) + " LEN " + String(pageLen));
 		omxLeds.setDirty();
 		return;
 	}
@@ -610,14 +613,12 @@ void OmxModeForm::updateStepLEDs()
 	{
 		for (uint8_t k = 1; k <= 10; k++)
 			strip.setPixelColor(k, LEDOFF);
-		int16_t pageStart = (int16_t)omni->activePage() * 16;
-		int16_t trackLen = (int16_t)omni->trackPtr()->getLength();
+		uint8_t pageLen = omni->getPageLen(omni->activePage()); // this page's length (1-16)
 		for (uint8_t i = 0; i < 16; i++)
 		{
-			int16_t idx = pageStart + i;
 			uint32_t c = LEDOFF;
-			if (idx < trackLen)
-				c = (idx == trackLen - 1) ? (uint32_t)GREEN : (uint32_t)LOWWHITE;
+			if (i < pageLen)
+				c = (i == pageLen - 1) ? (uint32_t)GREEN : (uint32_t)LOWWHITE;
 			strip.setPixelColor(11 + i, c);
 		}
 		return;
@@ -913,13 +914,10 @@ void OmxModeForm::onDisplayStep()
 		omxDisp.dispKeyFunctionSplit("MODE", topFill, 5, "Cut / Paste", bottomFill, 16);
 		return;
 	}
-	// F3 structure layer: rate on top, the track-length bar on the bottom (same as Mix F3).
+	// F3 structure layer: rate on top, the active page's length bar on the bottom.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
 	{
-		uint16_t pageStart = (uint16_t)omni->activePage() * 16;
-		uint16_t trackLen = omni->trackPtr()->getLength();
-		uint16_t rem = trackLen <= pageStart ? 0 : (trackLen - pageStart);
-		uint8_t activeCount = rem > 16 ? 16 : (uint8_t)rem;
+		uint8_t activeCount = omni->getPageLen(omni->activePage());
 		char rbuf[12];
 		snprintf(rbuf, sizeof(rbuf), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
 		omxDisp.dispTrackLength(rbuf, activeCount);

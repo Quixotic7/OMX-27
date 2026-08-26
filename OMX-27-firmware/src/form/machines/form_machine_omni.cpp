@@ -1151,12 +1151,9 @@ namespace FormOmni
         {
             auto track = getTrack();
 
+            // The jump target is an absolute step index; convert it to a playback position.
             uint8_t jumpStep = functionIndex - STEPFUNC_COUNT;
-
-            // Keep jump inside length
-            jumpStep = jumpStep % (track->len + 1);
-
-            return jumpStep;
+            return (int8_t)track->stepToPosition(jumpStep);
         }
 
         switch (functionIndex)
@@ -1793,7 +1790,8 @@ namespace FormOmni
             auto track = getTrack();
             uint8_t length = track->len + 1;
 
-            auto currentStep = &track->steps[playingStep_];
+            // playingStep_ is a position (0..length-1); map it to the absolute step index.
+            auto currentStep = &track->steps[track->positionToStep(playingStep_)];
 
             bool shouldBeOnRate = currentStep->nudge == 0;
 
@@ -1883,12 +1881,12 @@ namespace FormOmni
                 }
             }
             // uint8_t nextStepIndex = (playingStep_ + directionIncrement) % length;
-            auto nextStep = &track->steps[nextStepIndex];
+            auto nextStep = &track->steps[track->positionToStep(nextStepIndex)];
 
             if(shouldTriggerStep)
             {
                 auto trackDynamic = getDynamicTrack();
-                auto dynamicStep = &trackDynamic->steps[playingStep_];
+                auto dynamicStep = &trackDynamic->steps[track->positionToStep(playingStep_)];
 
                 triggerStep(currentStep, dynamicStep);
 
@@ -2390,12 +2388,9 @@ namespace FormOmni
                     }
                     if (e.down() && thisKey >= 11 && thisKey < 27)
                     {
-                        auto track = getTrack();
-
-                        uint8_t pageKey = (thisKey - 11) + (16 * min(activePage_, kPageMax[zoomLevel_] - 1));
-                        track->len = pageKey * kZoomMults[zoomLevel_] + (kZoomMults[zoomLevel_] - 1);
-                        onTrackLengthChanged();
-                        omxDisp.displayMessage("LENGTH " + String(track->getLength()));
+                        uint8_t flatLen = (thisKey - 11) + (16 * min(activePage_, kPageMax[zoomLevel_] - 1));
+                        setTrackLen(flatLen); // rebuild the page structure from a flat length
+                        omxDisp.displayMessage("LENGTH " + String(getTrack()->getLength()));
                     }
                     break;
                 }
@@ -3004,7 +2999,7 @@ namespace FormOmni
     // Bump whenever the OmniSeq layout changes so old saves are skipped rather than
     // blitted into a mismatched struct. (The global EEPROM_VERSION also gates loads,
     // but this makes an OmniSeq change safe on its own.)
-    static const uint8_t kOmniSaveVersion = 5; // v5: packed Step lock bits
+    static const uint8_t kOmniSaveVersion = 6; // v6: per-page length (numPages, pageLen)
 
     int FormMachineOmni::saveToDisk(int startingAddress, Storage *storage)
 	{
