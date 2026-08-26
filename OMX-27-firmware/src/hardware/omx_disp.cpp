@@ -782,9 +782,9 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 			display.fillRect(x, 18, 6, 1, pgFg);
 	}
 
-	// --- Bottom: while holding F1/F2, a box over the step area labels the modifier; otherwise
-	// the 16 step boxes (0 empty outline · 1 notes filled · 2 ghost outline + dot).
-	if (modOverlay != 0)
+	// --- Bottom: while holding F1/F2 with a label, a box over the step area names the modifier;
+	// otherwise the 16 step boxes (a boxed name with no label keeps the step row, e.g. Mix MUTE).
+	if (modOverlay != 0 && overlayLabel != nullptr)
 	{
 		display.fillRect(1, 23, 126, 9, WHITE); // inverted box
 		u8g2_display.setFont(FONT_LABELS);

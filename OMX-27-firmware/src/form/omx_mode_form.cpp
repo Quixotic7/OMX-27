@@ -1087,8 +1087,10 @@ void OmxModeForm::onDisplaySeqTrackPage()
 	const char *overlayLabel = nullptr;
 	if (mixMute)
 	{
-		// Mix F1: keep the step row visible (its glyphs show mute state); only the name changes.
-		modOverlay = 0;
+		// Mix F1: box/invert the "MUTE" name but keep the step row (a null label = no bottom box,
+		// so the step glyphs stay visible to show mute state).
+		modOverlay = 2;
+		overlayLabel = nullptr;
 	}
 	else if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
 	{
@@ -1139,7 +1141,7 @@ void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 			selectMachine(track);
 			auto m = getSelectedMachine();
 			m->setMute(!m->getMute());
-			omxDisp.displayMessage(m->getMute() ? "MUTE" : "UNMUTE");
+			omxDisp.setDirty(); // the MUTE page's track squares show the state; no popup
 		}
 		return;
 	}
@@ -1232,7 +1234,7 @@ void OmxModeForm::onKeyUpdateMixStepMute(OMXKeypadEvent e)
 	uint8_t key16 = e.key() - 11;
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	omni->toggleStepMute(key16);
-	omxDisp.displayMessage(omni->getStepMute(key16) ? "STEP MUTE" : "STEP ON");
+	omxDisp.setDirty(); // the MUTE page's step glyphs show the state; no popup
 	omxLeds.setDirty();
 }
 
