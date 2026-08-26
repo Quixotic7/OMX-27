@@ -90,6 +90,13 @@ namespace FormOmni
         // v2 Mix (hold F2): momentary FILL — steps with a Fill condition play while active.
         void setFill(bool on) { fillActive_ = on; }
 
+        // v2 Step F3 structure layer: set the track length (0-63 = 1-64 steps).
+        void setTrackLen(uint8_t len)
+        {
+            getTrack()->len = len > 63 ? 63 : len;
+            onTrackLengthChanged();
+        }
+
         // v2 Step view: read step content + playhead, and the copy/paste buffer (key16 = 0-15).
         bool stepHasNotes(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].hasNotes(); }
         bool stepIsOn(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].isOn(); }

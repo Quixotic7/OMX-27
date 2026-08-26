@@ -415,8 +415,47 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		return;
 	}
 
+	// F1 = copy step · F2 = paste/cut step (§3.5 buffer) · F3 = structure layer (set length).
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
+	{
+		omni->stepCopy(thisKey - 11);
+		omxDisp.displayMessage("COPY");
+		stepPasteArmed_ = true; // right after a copy, F2 pastes
+		return;
+	}
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
+	{
+		uint8_t k = thisKey - 11;
+		if (stepPasteArmed_)
+		{
+			omni->stepPaste(k);
+			omxDisp.displayMessage("PASTE");
+			stepPasteArmed_ = false;
+		}
+		else if (omni->stepIsOn(k))
+		{
+			omni->stepCut(k); // cut content into the buffer; next F2 pastes
+			omxDisp.displayMessage("CUT");
+			stepPasteArmed_ = true;
+		}
+		else
+		{
+			omni->stepPaste(k); // paste the buffer into an empty step
+			omxDisp.displayMessage("PASTE");
+		}
+		return;
+	}
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
+	{
+		uint8_t len = (uint8_t)omni->activePage() * 16 + (thisKey - 11);
+		omni->setTrackLen(len);
+		omxDisp.displayMessage("LENGTH " + String(len + 1));
+		omxLeds.setDirty();
+		return;
+	}
+
 	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
-		return; // F1/F2/F3 handled in a later stage
+		return; // other modifier combos: ignore
 
 	// Mode selector (only when no step is held).
 	if (heldStepMask_ == 0 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
@@ -494,6 +533,25 @@ void OmxModeForm::updateStepLEDs()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	bool blink = omxLeds.getBlinkState();
+
+	// F3 structure layer: the step row shows the track length — steps beyond it go dark,
+	// the last step lit bright. Tap a step to set the length.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3 && heldStepMask_ == 0)
+	{
+		for (uint8_t k = 1; k <= 10; k++)
+			strip.setPixelColor(k, LEDOFF);
+		int16_t pageStart = (int16_t)omni->activePage() * 16;
+		int16_t trackLen = (int16_t)omni->trackPtr()->getLength();
+		for (uint8_t i = 0; i < 16; i++)
+		{
+			int16_t idx = pageStart + i;
+			uint32_t c = LEDOFF;
+			if (idx < trackLen)
+				c = (idx == trackLen - 1) ? (uint32_t)GREEN : (uint32_t)LOWWHITE;
+			strip.setPixelColor(11 + i, c);
+		}
+		return;
+	}
 
 	// While step(s) are held on the overview page, the top row is the value palette.
 	if (heldStepMask_ != 0 && stepMenuPage_ == 0)
@@ -759,6 +817,19 @@ void OmxModeForm::onDisplayStepMenu()
 void OmxModeForm::onDisplayStep()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+
+	// F3 structure layer: rate on top, the track-length bar on the bottom (same as Mix F3).
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
+	{
+		uint16_t pageStart = (uint16_t)omni->activePage() * 16;
+		uint16_t trackLen = omni->trackPtr()->getLength();
+		uint16_t rem = trackLen <= pageStart ? 0 : (trackLen - pageStart);
+		uint8_t activeCount = rem > 16 ? 16 : (uint8_t)rem;
+		char rbuf[12];
+		snprintf(rbuf, sizeof(rbuf), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
+		omxDisp.dispTrackLength(rbuf, activeCount);
+		return;
+	}
 
 	// Machine menu (page 3): the machine renders it natively (Notes/CC/Transpose/track params).
 	if (stepMenuPage_ == 3)
@@ -1491,9 +1562,15 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	{
 		if (keyConsumed)
 			return;
-		// Machine menu (page 3): a step tap selects which step the notes/CC pages edit.
+		// Machine menu (page 3): F1/F2/F3 still copy/paste/length; a plain step tap selects
+		// which step the notes/CC pages edit.
 		if (stepMenuPage_ == 3)
 		{
+			if (omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
+			{
+				onKeyUpdateStep(e);
+				return;
+			}
 			if (e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 			{
 				static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine())->setSelStepByKey(thisKey - 11);
