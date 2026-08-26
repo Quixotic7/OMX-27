@@ -54,6 +54,8 @@ public:
 	// selected cell is boxed when navigating; when `editing` (holding a step) it is fully
 	// inverted to show the encoder is locked onto it.
 	void dispStepParams(const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel, bool editing);
+	// Step F2 view: the 5 play-direction icons across the top (selected boxed) + a bottom label.
+	void dispStepPlayModes(uint8_t selected, const char *bottomLabel);
 	// Step view Note hold: a compact piano keyboard (chord = notesAsKeys[6]) on top, with the
 	// 16 step-marker cells beneath (filled = has content; `focus` step gets a tick). No text.
 	void dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, int8_t focus);

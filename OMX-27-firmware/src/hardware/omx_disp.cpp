@@ -614,6 +614,33 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 	drawPlayIcon(playModeIndex, 82, cellY + (cellH - 9) / 2);
 }
 
+void OmxDisp::dispStepPlayModes(uint8_t selected, const char *bottomLabel)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// 5 play-direction icons across the top; the selected one is boxed.
+	const int spacing = 24;
+	for (uint8_t i = 0; i < 5; i++)
+	{
+		int x = 5 + i * spacing;
+		if (i == selected)
+			display.drawRect(x - 3, 0, 22, 13, WHITE);
+		drawPlayIcon(i, x, 2);
+	}
+
+	// Bottom label.
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_TENFAT);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	u8g2centerText(bottomLabel, 0, 30, 128, 8);
+}
+
 void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel, bool editing)
 {
 	if (isMessageActive())

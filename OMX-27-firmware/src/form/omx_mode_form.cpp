@@ -538,20 +538,11 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		else if (!e.down() && (heldStepMask_ & (1 << key16)))
 		{
 			omni->auditionStep(key16, false); // stop any preview for this step
-			// Quick tap (not a hold) on the only held step: Note mode stamps the last chord;
-			// other modes clear it. Holding never clears.
+			// Quick tap (not a hold) on the only held step clears it (all modes). Holding never clears.
 			if (heldStepMask_ == (uint16_t)(1 << key16) && !stepEdited_ && e.quickClicked())
 			{
-				if (stepEditMode_ == STEPMODE_NOTE)
-				{
-					omni->stepSetNotes(key16, lastNotes_);
-					omxDisp.displayMessage("STAMP");
-				}
-				else
-				{
-					omni->stepCut(key16);
-					omxDisp.displayMessage("CLEAR");
-				}
+				omni->stepCut(key16);
+				omxDisp.displayMessage("CLEAR");
 			}
 			heldStepMask_ &= ~(1 << key16);
 			if (heldStepKey_ == (int8_t)key16)
@@ -613,6 +604,10 @@ void OmxModeForm::updateStepLEDs()
 	{
 		for (uint8_t k = 1; k <= 10; k++)
 			strip.setPixelColor(k, LEDOFF);
+		// Top row 3-10 = rate options; the current rate is bright.
+		int8_t rsel = omni->rateShortcutSel();
+		for (uint8_t i = 0; i < 8; i++)
+			strip.setPixelColor(3 + i, ((int8_t)i == rsel) ? (uint32_t)CYAN : (uint32_t)DKCYAN);
 		uint8_t pageLen = omni->getPageLen(omni->activePage()); // this page's length (1-16)
 		for (uint8_t i = 0; i < 16; i++)
 		{
@@ -901,17 +896,10 @@ void OmxModeForm::onDisplayStep()
 		omxDisp.dispKeyFunctionSplit("PAGE", topFill, 4, "COPY", bottomFill, 16);
 		return;
 	}
-	// F2: top row sets the play mode, the step row cut/pastes steps. Split view + "Cut / Paste".
+	// F2: top row sets the play mode (icons), the step row cut/pastes steps.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
 	{
-		uint8_t pm = mixPlayModeIndex(omni->trackPtr());
-		bool topFill[5];
-		for (uint8_t i = 0; i < 5; i++)
-			topFill[i] = (i == pm);
-		bool bottomFill[16];
-		for (uint8_t i = 0; i < 16; i++)
-			bottomFill[i] = omni->stepIsOn(i);
-		omxDisp.dispKeyFunctionSplit("MODE", topFill, 5, "Cut / Paste", bottomFill, 16);
+		omxDisp.dispStepPlayModes(mixPlayModeIndex(omni->trackPtr()), "Cut / Paste");
 		return;
 	}
 	// F3 structure layer: rate on top, the active page's length bar on the bottom.

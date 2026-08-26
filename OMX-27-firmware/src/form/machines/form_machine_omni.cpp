@@ -628,6 +628,14 @@ namespace FormOmni
         onRateChanged();
     }
 
+    int8_t FormMachineOmni::rateShortcutSel()
+    {
+        for (uint8_t i = 0; i < 8; i++)
+            if (kRateShortcuts[i] == seq_.rate)
+                return (int8_t)i;
+        return -1;
+    }
+
     void FormMachineOmni::seqMenuEnter()
     {
         trackParams_.setSelPageAndParam(OMNIPAGE_STEPNOTES, 0);
@@ -890,6 +898,7 @@ namespace FormOmni
         ng.velocity = on ? 100 : 0;
         ng.sendMidi = (bool)seq_.sendMidi;
         ng.sendCV = (bool)seq_.sendCV;
+        ng.unknownLength = true; // send/stop directly — do NOT schedule a pending note-off
         if (on)
         {
             ng.noteonMicros = seqConfig.lastClockMicros;
