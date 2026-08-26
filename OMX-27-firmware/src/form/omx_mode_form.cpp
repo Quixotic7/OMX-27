@@ -494,9 +494,9 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		{
 			uint8_t track = thisKey - 3;
 			selectMachine(track);
-			heldTrackKey_ = track;
-			omxDisp.displayMessage("Track " + String(track + 1));
+			heldTrackKey_ = track; // the page's track box shows the selection — no popup
 			omxLeds.setDirty();
+			omxDisp.setDirty();
 		}
 		return;
 	}
@@ -971,8 +971,9 @@ void OmxModeForm::onDisplayStep()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
-	// F1: top row selects the page, the step row copies steps. Split view + "COPY".
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
+	// On a param page (not the overview), F1/F2 show the split / track-hold popup. On the
+	// overview page these are drawn as an overlay on the track page instead (below).
+	if (stepMenuPage_ != 0 && stepMenuPage_ != 3 && omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
 	{
 		bool topFill[4];
 		for (uint8_t i = 0; i < 4; i++)
@@ -983,8 +984,7 @@ void OmxModeForm::onDisplayStep()
 		omxDisp.dispKeyFunctionSplit("PAGE", topFill, 4, "COPY", bottomFill, 16);
 		return;
 	}
-	// F2: holding a track shows its status (number, mute/solo, play mode) like Mix.
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ >= 0)
+	if (stepMenuPage_ != 0 && stepMenuPage_ != 3 && omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ >= 0)
 	{
 		auto omniT = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
 		omxDisp.dispTrackHold(heldTrackKey_ + 1, omniT->getMute(), omniT->getSolo(), mixPlayModeIndex(omniT->trackPtr()));
@@ -1063,9 +1063,12 @@ void OmxModeForm::onDisplayStep()
 	char rateStr[10];
 	snprintf(rateStr, sizeof(rateStr), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
 
+	uint8_t modOverlay = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1) ? 1
+						 : (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2) ? 2
+																		  : 0;
 	omxDisp.dispSeqTrackPage(title, trackMuted, selectedMachine_, rateStr,
 							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
-							 omni->getEnabledPages(), omni->activePage(), stepState, playhead);
+							 omni->getEnabledPages(), omni->activePage(), stepState, playhead, modOverlay);
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,

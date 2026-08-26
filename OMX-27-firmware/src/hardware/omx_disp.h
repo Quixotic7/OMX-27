@@ -62,9 +62,10 @@ public:
 	// Seq page-1 track overview: 8 track-state squares (selected underlined, muted = outline)
 	// top-left, left-justified track name, rate + 4 page icons + BPM on the right, and 16 step
 	// boxes on the bottom (stepState: 0 empty / 1 has-notes / 2 ghost). playhead -1 = none.
+	// modOverlay: 0 none · 1 F1 (COPY box over steps) · 2 F2 (CUT/PASTE box + selected track boxed).
 	void dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
 						  const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
-						  uint8_t activePage, const uint8_t *stepState, int8_t playhead);
+						  uint8_t activePage, const uint8_t *stepState, int8_t playhead, uint8_t modOverlay);
 	// Step view overview: mode name on top, a row of `count` step cells on the bottom (filled
 	// = has content). The playhead step (0-based, -1 = none) gets a tick underneath.
 	void dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead, bool invertTitle = false);

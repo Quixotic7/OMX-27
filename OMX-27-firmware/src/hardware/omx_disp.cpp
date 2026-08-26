@@ -635,7 +635,7 @@ static void drawPageIcon(int x, int y, bool filled)
 
 void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
 							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
-							   uint8_t activePage, const uint8_t *stepState, int8_t playhead)
+							   uint8_t activePage, const uint8_t *stepState, int8_t playhead, uint8_t modOverlay)
 {
 	if (isMessageActive())
 	{
@@ -658,6 +658,16 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		if (t == selTrack)
 			display.fillRect(x, 6, 4, 1, WHITE); // selected underline
 	}
+	// F2: box the selected track square (invert it) to show track-change mode.
+	if (modOverlay == 2)
+	{
+		int x = 1 + selTrack * 6;
+		display.fillRect(x - 1, 0, 6, 6, WHITE);
+		if (!trackMuted[selTrack])
+			display.fillRect(x, 1, 4, 4, BLACK); // invert the fill inside the box
+		else
+			display.drawRect(x, 1, 4, 4, BLACK);
+	}
 
 	// --- BPM, top-right.
 	u8g2_display.setFont(FONT_LABELS);
@@ -667,15 +677,14 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	u8g2_display.setCursor(127 - bw, 6);
 	u8g2_display.print(bpmStr);
 
-	// --- Name row: "TRK n" (chunky) + play-mode icon + rate, all on one line.
+	// --- Name row: "TRK n" (chunky) + play-mode icon + rate. Icon/rate are at FIXED positions
+	// so they don't shift with the (proportional) name width.
 	u8g2_display.setFont(FONT_TENFAT);
 	u8g2_display.setCursor(1, 19);
 	u8g2_display.print(trackName);
-	int cx = 1 + (int)u8g2_display.getUTF8Width(trackName) + 6;
-	drawPlayIcon(playMode, cx, 10); // 17x9 icon after the name
-	cx += 17 + 6;
+	drawPlayIcon(playMode, 50, 10); // 17x9 icon, fixed x
 	u8g2_display.setFont(FONT_LABELS);
-	u8g2_display.setCursor(cx, 18);
+	u8g2_display.setCursor(74, 18);
 	u8g2_display.print(rateStr);
 
 	// --- 4 page icons (right): filled = enabled, outline = muted, active underlined.
@@ -687,7 +696,18 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 			display.fillRect(x, 18, 6, 1, WHITE); // active underline
 	}
 
-	// --- 16 step boxes (bottom): 0 empty (outline) · 1 notes (filled) · 2 ghost (outline + dot).
+	// --- Bottom: while holding F1/F2, a box over the step area labels the modifier; otherwise
+	// the 16 step boxes (0 empty outline · 1 notes filled · 2 ghost outline + dot).
+	if (modOverlay != 0)
+	{
+		display.drawRect(1, 23, 126, 9, WHITE);
+		u8g2_display.setFont(FONT_LABELS);
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+		u8g2centerText(modOverlay == 1 ? "COPY" : "CUT / PASTE", 0, 30, 128, 8);
+		return;
+	}
+
 	const uint8_t bw2 = 6, bh = 6, pitch = 8, y = 25;
 	uint8_t startX = (128 - (16 * pitch - (pitch - bw2))) / 2;
 	for (uint8_t i = 0; i < 16; i++)
