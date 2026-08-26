@@ -620,6 +620,14 @@ namespace FormOmni
         }
     }
 
+    void FormMachineOmni::setRateShortcut(uint8_t topKeyIndex)
+    {
+        if (topKeyIndex >= 8) return;
+        seq_.rate = kRateShortcuts[topKeyIndex];
+        omxDisp.displayMessage("RATE 1:" + String(kSeqRates[seq_.rate]));
+        onRateChanged();
+    }
+
     void FormMachineOmni::seqMenuEnter()
     {
         trackParams_.setSelPageAndParam(OMNIPAGE_STEPNOTES, 0);

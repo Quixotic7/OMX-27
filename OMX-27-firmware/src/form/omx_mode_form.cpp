@@ -387,7 +387,8 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 					}
 				heldNoteKeys_ |= (1 << degree);
 				stepEdited_ = true;
-				omni->previewNote(note, true);
+				if (!omxFormGlobal.isPlaying)
+					omni->previewNote(note, true); // audition only while stopped
 				if (heldStepKey_ >= 0) omni->getStepNotes(heldStepKey_, lastNotes_); // remember chord
 				omxDisp.setDirty();
 				omxLeds.setDirty();
@@ -445,6 +446,11 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		}
 		return;
 	}
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
+	{
+		omni->setRateShortcut(thisKey - 3); // F3 + top row = rate (like Mix)
+		return;
+	}
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 	{
 		uint8_t len = (uint8_t)omni->activePage() * 16 + (thisKey - 11);
@@ -487,11 +493,15 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 			}
 			heldStepMask_ |= (1 << key16);
 			heldStepKey_ = key16;
+			// Preview the step's notes while stopped (Note mode previews via its note keys).
+			if (!omxFormGlobal.isPlaying && stepEditMode_ != STEPMODE_NOTE)
+				omni->auditionStep(key16, true);
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
 		else if (!e.down() && (heldStepMask_ & (1 << key16)))
 		{
+			omni->auditionStep(key16, false); // stop any preview for this step
 			// Quick tap (not a hold) on the only held step: Note mode stamps the last chord;
 			// other modes clear it. Holding never clears.
 			if (heldStepMask_ == (uint16_t)(1 << key16) && !stepEdited_ && e.quickClicked())

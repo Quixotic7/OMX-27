@@ -761,6 +761,11 @@ void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, in
 
 void OmxDisp::dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead, bool invertTitle)
 {
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
 	display.fillRect(0, 0, 128, 32, BLACK);
 
 	// Mode name, chunky, centred on top (inverted when the title is armed for editing).

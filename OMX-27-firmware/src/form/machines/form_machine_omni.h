@@ -96,6 +96,8 @@ namespace FormOmni
             getTrack()->len = len > 63 ? 63 : len;
             onTrackLengthChanged();
         }
+        // v2 Step F3: set the rate from a top-row key (0-7), like Mix F3.
+        void setRateShortcut(uint8_t topKeyIndex);
 
         // v2 Step view: read step content + playhead, and the copy/paste buffer (key16 = 0-15).
         bool stepHasNotes(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].hasNotes(); }

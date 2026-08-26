@@ -206,7 +206,7 @@ private:
 	int8_t heldStepKey_ = -1;              // most-recently-pressed held step (focus for display), -1 = none
 	bool stepEdited_ = false;              // a palette value was set during this hold (suppresses clear)
 	uint16_t heldNoteKeys_ = 0;            // Note mode: note-palette keys (degree 0-9) held right now
-	int8_t lastNotes_[6] = {-1, -1, -1, -1, -1, -1}; // last chord entered (Note quick-click stamp)
+	int8_t lastNotes_[6] = {60, -1, -1, -1, -1, -1}; // last chord entered; defaults to middle C
 	// Step menu cursor: page 0 = overview (palettes on hold); pages 1-2 = P-Lockable param
 	// pages (STEP: Vel/Nudge/Len/MFX, TRIG: Prob/Cond/Func/Accum), selMenu = param 0-3.
 	uint8_t stepMenuPage_ = 0;
