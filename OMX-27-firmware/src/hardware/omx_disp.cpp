@@ -658,16 +658,6 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		if (t == selTrack)
 			display.fillRect(x, 6, 4, 1, WHITE); // selected underline
 	}
-	// While holding F1/F2, box + invert the selected track square to show it's in focus.
-	if (modOverlay != 0)
-	{
-		int x = 1 + selTrack * 6;
-		display.fillRect(x - 1, 0, 6, 6, WHITE); // highlight box
-		if (!trackMuted[selTrack])
-			display.fillRect(x, 1, 4, 4, BLACK); // inverted fill
-		else
-			display.drawRect(x, 1, 4, 4, BLACK); // inverted outline
-	}
 
 	// --- BPM, top-right.
 	u8g2_display.setFont(FONT_LABELS);
@@ -678,34 +668,42 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	u8g2_display.print(bpmStr);
 
 	// --- Name row: "TRK n" (chunky) + play-mode icon + rate. Icon/rate are at FIXED positions
-	// so they don't shift with the (proportional) name width.
+	// so they don't shift with the (proportional) name width. F2 boxes + inverts the name.
 	u8g2_display.setFont(FONT_TENFAT);
-	u8g2_display.setCursor(1, 19);
+	uint16_t nameW = u8g2_display.getUTF8Width(trackName);
+	if (modOverlay == 2)
+	{
+		display.fillRect(0, 7, nameW + 4, 14, WHITE);
+		u8g2_display.setForegroundColor(BLACK);
+		u8g2_display.setBackgroundColor(WHITE);
+	}
+	else
+	{
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+	}
+	u8g2_display.setCursor(2, 19);
 	u8g2_display.print(trackName);
+
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
 	drawPlayIcon(playMode, 50, 10); // 17x9 icon, fixed x
 	u8g2_display.setFont(FONT_LABELS);
 	u8g2_display.setCursor(74, 18);
 	u8g2_display.print(rateStr);
 
 	// --- 4 page icons (right): filled = enabled, outline = muted, active underlined. F1 boxes +
-	// inverts the active page (it's what F1 selects).
+	// inverts the whole page section (it's what F1 controls).
+	bool pageInv = (modOverlay == 1);
+	uint16_t pgFg = pageInv ? BLACK : WHITE;
+	if (pageInv)
+		display.fillRect(96, 6, 32, 15, WHITE); // section box
 	for (uint8_t p = 0; p < 4; p++)
 	{
 		int x = 98 + p * 8;
-		bool enabled = (enabledPages & (1 << p)) != 0;
-		bool inv = (modOverlay == 1 && p == activePage);
-		if (inv)
-		{
-			display.fillRect(x - 1, 7, 8, 13, WHITE); // highlight box
-			drawPageIcon(x, 8, enabled, BLACK);
-			display.fillRect(x, 18, 6, 1, BLACK); // underline (inverted)
-		}
-		else
-		{
-			drawPageIcon(x, 8, enabled, WHITE);
-			if (p == activePage)
-				display.fillRect(x, 18, 6, 1, WHITE);
-		}
+		drawPageIcon(x, 8, (enabledPages & (1 << p)) != 0, pgFg);
+		if (p == activePage)
+			display.fillRect(x, 18, 6, 1, pgFg);
 	}
 
 	// --- Bottom: while holding F1/F2, a box over the step area labels the modifier; otherwise
