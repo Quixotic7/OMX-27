@@ -562,6 +562,7 @@ namespace FormOmni
     {
         if (key16 >= 16) return;
         Step *s = &getTrack()->steps[key16toStep(key16)];
+        s->trig = 1; // locking a value turns the step on (ghost step if it has no notes)
         switch (mode)
         {
         case 1: s->vel = constrain(((int)(p + 1) * 127) / 10, 1, 127); break;
@@ -591,7 +592,7 @@ namespace FormOmni
         Step *s = &getTrack()->steps[key16toStep(key16)];
         switch (mode)
         {
-        case 1: return constrain(((int)s->vel * 10) / 127 - 1, 0, 9);
+        case 1: return constrain(((int)s->vel * 10 + 63) / 127 - 1, 0, 9); // rounded inverse of the vel palette
         case 2: for (uint8_t i = 0; i < 10; i++) if (kLenPalette[i] == s->len) return i; return -1;
         case 3: return s->repeat;
         case 4: return constrain(((int)s->prob / 10) - 1, 0, 9);
@@ -627,8 +628,8 @@ namespace FormOmni
         case 2: return getStepLenString(s->len);
         case 3: return "x" + String(s->repeat + 1);
         case 4: return String(s->prob) + "%";
-        case 5: return getCondChar(s->condition);
-        case 6: return (s->func < STEPFUNC_COUNT) ? String(kStepFuncs[s->func]) : ("J" + String(s->func - STEPFUNC_COUNT + 1));
+        case 5: return s->condition == 2 ? String("!FILL") : (s->condition == 1 ? String("FILL") : String(getCondChar(s->condition)));
+        case 6: return (s->func < STEPFUNC_COUNT) ? String(kStepFuncs[s->func]) : ("JMP" + String(s->func - STEPFUNC_COUNT + 1));
         case 7: return s->mfxIndex == 0 ? String("OFF") : (s->mfxIndex == 1 ? String("TRK") : ("FX" + String(s->mfxIndex - 1)));
         default: return "";
         }

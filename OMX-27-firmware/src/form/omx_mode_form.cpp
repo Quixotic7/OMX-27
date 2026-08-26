@@ -344,25 +344,40 @@ static const char *kStepModeNames[STEPMODE_COUNT] = {
 static const uint32_t kStepModeColors[STEPMODE_COUNT] = {
 	WHITE, YELLOW, CYAN, ORANGE, GREEN, MAGENTA, BLUE, RED};
 
-// Top row (3-10) selects the edit mode. Hold a step (11-26) → top row 1-10 becomes the value
+// Apply a palette value (or refresh the value message) to every held step.
+void OmxModeForm::stepApplyToHeld(uint8_t paletteIndex)
+{
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	for (uint8_t s = 0; s < 16; s++)
+		if (heldStepMask_ & (1 << s))
+			omni->setStepPalette(s, stepEditMode_, paletteIndex);
+	stepEdited_ = true;
+	if (heldStepKey_ >= 0)
+		omxDisp.displayMessage(omni->stepValueString(heldStepKey_, stepEditMode_));
+	omxLeds.setDirty();
+}
+
+// Top row (3-10) selects the edit mode. Hold step(s) (11-26) → top row becomes the value
 // palette for the current mode; single-click a step clears it (into the buffer for undo/paste).
+// Multiple steps can be held to edit them together. In Function mode, pressing another step
+// while holding a jump step sets that step as the jump target.
 void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 {
 	uint8_t thisKey = e.key();
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
-	// While a step is held, top row 1-10 is the value palette for the current mode.
-	if (heldStepKey_ >= 0 && thisKey >= 1 && thisKey <= 10)
+	// While step(s) are held, the top row is the value palette for the current mode.
+	// MFX uses keys 5-10 (Off + FX 1-5, like the AUX MIDI-FX layout); others use keys 1-N.
+	if (heldStepMask_ != 0 && thisKey >= 1 && thisKey <= 10)
 	{
 		if (e.down() && !e.held() && stepEditMode_ != STEPMODE_NOTE)
 		{
-			uint8_t p = thisKey - 1;
-			if (p < omni->stepPaletteCount(stepEditMode_))
+			uint8_t base = (stepEditMode_ == STEPMODE_MFX) ? 5 : 1;
+			if (thisKey >= base)
 			{
-				omni->setStepPalette(heldStepKey_, stepEditMode_, p);
-				stepEdited_ = true;
-				omxDisp.displayMessage(omni->stepValueString(heldStepKey_, stepEditMode_));
-				omxLeds.setDirty();
+				uint8_t p = thisKey - base;
+				if (p < omni->stepPaletteCount(stepEditMode_))
+					stepApplyToHeld(p);
 			}
 		}
 		return;
@@ -372,7 +387,7 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		return; // F1/F2/F3 handled in a later stage
 
 	// Mode selector (only when no step is held).
-	if (heldStepKey_ < 0 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
+	if (heldStepMask_ == 0 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
 	{
 		stepEditMode_ = thisKey - 3;
 		omxDisp.displayMessage(kStepModeNames[stepEditMode_]);
@@ -380,31 +395,49 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		return;
 	}
 
-	// Step keys: press = begin hold; release = clear if it was a bare single-click.
+	// Step keys.
 	if (thisKey >= 11 && thisKey < 27)
 	{
 		uint8_t key16 = thisKey - 11;
 		if (e.down() && !e.held())
 		{
+			// Function mode: pressing another step while holding a jump step sets its target.
+			if (stepEditMode_ == STEPMODE_FUNC && heldStepMask_ != 0 && !(heldStepMask_ & (1 << key16)) &&
+				heldStepKey_ >= 0 && omni->stepIsJump(heldStepKey_))
+			{
+				for (uint8_t s = 0; s < 16; s++)
+					if (heldStepMask_ & (1 << s))
+						omni->setStepJumpTarget(s, key16);
+				stepEdited_ = true;
+				if (heldStepKey_ >= 0)
+					omxDisp.displayMessage(omni->stepValueString(heldStepKey_, stepEditMode_));
+				omxLeds.setDirty();
+				return;
+			}
+			heldStepMask_ |= (1 << key16);
 			heldStepKey_ = key16;
-			stepEdited_ = false;
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
-		else if (!e.down())
+		else if (!e.down() && (heldStepMask_ & (1 << key16)))
 		{
+			// Bare single-click on the only held step = clear it.
+			if (heldStepMask_ == (uint16_t)(1 << key16) && !stepEdited_ && e.clicks() == 1)
+			{
+				omni->stepCut(key16);
+				omxDisp.displayMessage("CLEAR");
+			}
+			heldStepMask_ &= ~(1 << key16);
 			if (heldStepKey_ == (int8_t)key16)
 			{
-				if (!stepEdited_ && e.clicks() == 1)
-				{
-					omni->stepCut(key16); // single-click clear (to buffer)
-					omxDisp.displayMessage("CLEAR");
-				}
-				heldStepKey_ = -1;
-				stepEdited_ = false;
-				omxDisp.setDirty();
-				omxLeds.setDirty();
+				heldStepKey_ = -1; // refocus on another still-held step, if any
+				for (int8_t s = 15; s >= 0; s--)
+					if (heldStepMask_ & (1 << s)) { heldStepKey_ = s; break; }
 			}
+			if (heldStepMask_ == 0)
+				stepEdited_ = false;
+			omxDisp.setDirty();
+			omxLeds.setDirty();
 		}
 	}
 }
@@ -414,19 +447,19 @@ void OmxModeForm::updateStepLEDs()
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	bool blink = omxLeds.getBlinkState();
 
-	// While a step is held, the top row 1-10 is the value palette and the held step flashes.
-	if (heldStepKey_ >= 0)
+	// While step(s) are held, the top row is the value palette and the held steps flash.
+	if (heldStepMask_ != 0)
 	{
 		for (uint8_t i = 11; i < 27; i++)
-			strip.setPixelColor(i, LEDOFF);
-		strip.setPixelColor(11 + heldStepKey_, blink ? WHITE : LOWWHITE);
+			strip.setPixelColor(i, (heldStepMask_ & (1 << (i - 11))) ? (blink ? WHITE : LOWWHITE) : LEDOFF);
 
 		for (uint8_t k = 1; k <= 10; k++)
 			strip.setPixelColor(k, LEDOFF);
 
+		int8_t focus = heldStepKey_;
 		if (stepEditMode_ == STEPMODE_MATH)
 		{
-			uint8_t a, b, kind = omni->stepMathInfo(heldStepKey_, a, b);
+			uint8_t a = 0, b = 0, kind = focus >= 0 ? omni->stepMathInfo(focus, a, b) : 0;
 			strip.setPixelColor(1, kind == 1 ? 0xff8000 : 0x4d2600); // Fill
 			strip.setPixelColor(2, kind == 2 ? 0xff0080 : 0x4d0026); // !Fill
 			for (uint8_t i = 0; i < 4; i++)
@@ -434,10 +467,18 @@ void OmxModeForm::updateStepLEDs()
 			for (uint8_t i = 0; i < 4; i++)
 				strip.setPixelColor(7 + i, (kind == 3 && b == i + 1) ? 0x00ffff : 0x004c4d); // ratio B
 		}
+		else if (stepEditMode_ == STEPMODE_MFX)
+		{
+			// Off on key 5, FX groups on 6-10 — same layout/colours as the AUX MIDI-FX view.
+			int16_t sel = focus >= 0 ? omni->stepPaletteSelected(focus, STEPMODE_MFX) : -1; // 0=Off, 1-5=group
+			strip.setPixelColor(5, sel == 0 ? colorConfig.selMidiFXGRPOffColor : colorConfig.midiFXGRPOffColor);
+			for (uint8_t i = 0; i < NUM_MIDIFX_GROUPS; i++)
+				strip.setPixelColor(6 + i, (sel == (int16_t)(i + 1)) ? colorConfig.selMidiFXGRPColor : colorConfig.midiFXGRPColor);
+		}
 		else if (stepEditMode_ != STEPMODE_NOTE)
 		{
 			uint8_t count = omni->stepPaletteCount(stepEditMode_);
-			int16_t sel = omni->stepPaletteSelected(heldStepKey_, stepEditMode_);
+			int16_t sel = focus >= 0 ? omni->stepPaletteSelected(focus, stepEditMode_) : -1;
 			uint32_t col = kStepModeColors[stepEditMode_];
 			uint32_t dim = (col >> 3) & 0x1f1f1f;
 			bool isBar = (stepEditMode_ == STEPMODE_VEL || stepEditMode_ == STEPMODE_LENGTH || stepEditMode_ == STEPMODE_CHANCE);
@@ -466,7 +507,7 @@ void OmxModeForm::updateStepLEDs()
 	for (uint8_t i = 0; i < 16; i++)
 	{
 		uint32_t col = LEDOFF;
-		if (omni->stepHasNotes(i))
+		if (omni->stepIsOn(i))
 			col = omni->getStepMute(i) ? DKRED : hue;
 		if (omxFormGlobal.isPlaying && i == playhead && blink)
 			col = WHITE; // playhead flashes over the step
@@ -478,13 +519,13 @@ void OmxModeForm::onDisplayStep()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
-	// Holding a step: show its value (or "NOTE" for the chord mode) + the step position.
-	if (heldStepKey_ >= 0)
+	// Holding step(s): show the focused step's value (or "NOTE") + the step positions.
+	if (heldStepMask_ != 0)
 	{
 		bool filled[16];
 		for (uint8_t i = 0; i < 16; i++)
-			filled[i] = omni->stepHasNotes(i);
-		String v = (stepEditMode_ == STEPMODE_NOTE)
+			filled[i] = omni->stepIsOn(i);
+		String v = (stepEditMode_ == STEPMODE_NOTE || heldStepKey_ < 0)
 					   ? String("NOTE")
 					   : omni->stepValueString(heldStepKey_, stepEditMode_);
 		omxDisp.dispStepOverview(v.c_str(), filled, 16, heldStepKey_);
@@ -671,7 +712,7 @@ void OmxModeForm::updateShortcutMode()
 
 	// Step view: while a step is held the top row 1-10 is the value palette, so keys 1/2
 	// must not become the F1/F2 shortcut. Freeze the shortcut mode at NONE.
-	if (formView_ == FORMVIEW_STEP && heldStepKey_ >= 0)
+	if (formView_ == FORMVIEW_STEP && heldStepMask_ != 0)
 	{
 		omxFormGlobal.shortcutMode = FORMSHORTCUT_NONE;
 		return;
@@ -1074,13 +1115,15 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	{
 		if (thisKey == 0)
 		{
-			// Step view: AUX while holding a step resets that step's value (no view browsing).
-			if (formView_ == FORMVIEW_STEP && heldStepKey_ >= 0)
+			// Step view: AUX while holding step(s) resets their value (no view browsing).
+			if (formView_ == FORMVIEW_STEP && heldStepMask_ != 0)
 			{
 				if (e.down() && !e.held())
 				{
 					auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
-					omni->resetStepValue(heldStepKey_, stepEditMode_);
+					for (uint8_t s = 0; s < 16; s++)
+						if (heldStepMask_ & (1 << s))
+							omni->resetStepValue(s, stepEditMode_);
 					stepEdited_ = true;
 					omxDisp.displayMessage("RESET");
 					omxLeds.setDirty();

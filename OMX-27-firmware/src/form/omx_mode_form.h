@@ -202,9 +202,11 @@ private:
 	void onDisplayMI();
 	// ---- Step view (container-rendered v2 editor) ----
 	uint8_t stepEditMode_ = STEPMODE_NOTE; // which of the 8 modes is active (top row 3-10)
-	int8_t heldStepKey_ = -1;              // step key (0-15) held right now, -1 = none
+	uint16_t heldStepMask_ = 0;            // bitmask of step keys (0-15) held right now
+	int8_t heldStepKey_ = -1;              // most-recently-pressed held step (focus for display), -1 = none
 	bool stepEdited_ = false;              // a palette value was set during this hold (suppresses clear)
 	void onKeyUpdateStep(OMXKeypadEvent e);
+	void stepApplyToHeld(uint8_t paletteIndex); // set the palette value on every held step
 	void updateStepLEDs();
 	void onDisplayStep();
 	void onKeyUpdateMix(OMXKeypadEvent e);     // Mix-view track keys (mute/solo/select)

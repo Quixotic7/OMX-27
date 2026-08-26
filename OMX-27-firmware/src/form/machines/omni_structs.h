@@ -159,6 +159,7 @@ namespace FormOmni
     {
         uint8_t mute : 1;      // bool for mute
         uint8_t repeat : 3;    // ratchet count index: 0 = 1x (off), 1 = 2x, 2 = 3x (triplet), 3 = 4x
+        uint8_t trig : 1;      // "ghost" trigger: step is on with no notes (e.g. a locked value/CC)
         int8_t notes[6];       // 0 - 127, -1 for off
         int8_t potVals[5];     // 0 -> 127, -1 for off
         uint8_t vel : 7;       // 0 - 127
@@ -184,6 +185,7 @@ namespace FormOmni
             // Set defaults
             mute = 0;
             repeat = 0;
+            trig = 0;
             for (uint8_t i = 0; i < 6; i++)
                 notes[i] = -1;
             for (uint8_t i = 0; i < 5; i++)
@@ -210,6 +212,9 @@ namespace FormOmni
             }
             return false;
         }
+
+        // "On" for the Step-view grid: has notes, or is an intentional ghost trigger.
+        bool isOn() { return trig || hasNotes(); }
 
         void CopyFrom(Step *other)
         {

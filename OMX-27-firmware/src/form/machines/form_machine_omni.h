@@ -92,7 +92,21 @@ namespace FormOmni
 
         // v2 Step view: read step content + playhead, and the copy/paste buffer (key16 = 0-15).
         bool stepHasNotes(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].hasNotes(); }
+        bool stepIsOn(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].isOn(); }
         uint8_t playingStepIndex() { return playingStep_; }
+        // Function mode: is the step currently a jump (random J? or a specific jump target)?
+        bool stepIsJump(uint8_t key16)
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            return s->func == STEPFUNC_RANDJUMP || s->func >= STEPFUNC_COUNT;
+        }
+        // Function mode: point the held step's jump function at another step (key16 = 0-15).
+        void setStepJumpTarget(uint8_t key16, uint8_t targetKey16)
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            s->func = STEPFUNC_COUNT + key16toStep(targetKey16);
+            s->trig = 1;
+        }
         void stepCopy(uint8_t key16) { copyStep(key16); }
         void stepCut(uint8_t key16) { cutStep(key16); }
         void stepPaste(uint8_t key16) { pasteStep(key16); }
