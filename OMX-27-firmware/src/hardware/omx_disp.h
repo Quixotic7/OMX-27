@@ -50,6 +50,10 @@ public:
 	// Held-track status (Mix): "TRACK n" with M / S cells (filled when active) and a
 	// play-direction icon (playModeIndex 0-4 = fwd/rev/fwd-pong/rev-pong/random).
 	void dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t playModeIndex);
+	// Mix F3 (LEN | RATE): rate label on top, track length as a 16-cell bar on the bottom.
+	// activeCount cells (0-16) are full boxes (steps within the length); the rest are dashes.
+	// Every 4th active cell gets a left notch to make groups of 4 easier to count.
+	void dispTrackLength(const char *rateStr, uint8_t activeCount);
 	void dispGenericModeLabelSmallText(const char *label, uint8_t numPages, int8_t selectedPage);
 
 	// Displays a header and options below

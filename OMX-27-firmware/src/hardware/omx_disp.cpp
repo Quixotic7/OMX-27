@@ -614,6 +614,36 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 	drawPlayIcon(playModeIndex, 82, cellY + (cellH - 9) / 2);
 }
 
+void OmxDisp::dispTrackLength(const char *rateStr, uint8_t activeCount)
+{
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// Rate value, centred on top.
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_VALUES);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	u8g2centerText(rateStr, 0, 13, 128, 8);
+
+	// Length bar: 16 cells at 8px pitch, each a 6px-wide box. Active steps are filled boxes;
+	// steps past the length are drawn as a thin dash. Every 4th active cell gets a 1px notch.
+	const int barTop = 17, barH = 14;
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		int x = i * 8;
+		if (i < activeCount)
+		{
+			display.fillRect(x + 1, barTop, 6, barH, WHITE);
+			if (i % 4 == 0)
+				display.drawFastVLine(x + 2, barTop + 5, 3, BLACK); // group-of-4 notch
+		}
+		else
+		{
+			display.fillRect(x + 1, barTop + 7, 6, 1, WHITE); // dash
+		}
+	}
+}
+
 void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool *topFill, uint8_t topCount,
 								   const char *bottomLabel, const bool *bottomFill, uint8_t bottomCount)
 {

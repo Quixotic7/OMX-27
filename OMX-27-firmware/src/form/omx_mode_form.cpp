@@ -1287,6 +1287,21 @@ void OmxModeForm::onDisplayUpdate()
 		return;
 	}
 
+	// Mix view: held F3 (LEN | RATE) shows the selected track's rate on top and its length as
+	// a 16-cell bar on the bottom (full boxes for steps within length, dashes past it).
+	if (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
+	{
+		auto omni = static_cast<FormOmni::FormMachineOmni *>(selMachine);
+		uint16_t pageStart = (uint16_t)omni->activePage() * 16;
+		uint16_t trackLen = omni->trackPtr()->getLength(); // 1-64
+		uint16_t rem = trackLen <= pageStart ? 0 : (trackLen - pageStart);
+		uint8_t activeCount = rem > 16 ? 16 : (uint8_t)rem;
+		char rbuf[12];
+		snprintf(rbuf, sizeof(rbuf), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
+		omxDisp.dispTrackLength(rbuf, activeCount);
+		return;
+	}
+
 	// Mix view: held F1/F2 show the split key-function view (top-keys / bottom-keys),
 	// not the machine's Copy/Cut labels. Track boxes (top keys 3-10) fill when muted/soloed.
 	if (formView_ == FORMVIEW_MIX &&

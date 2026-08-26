@@ -72,6 +72,9 @@ namespace FormOmni
         // v2: expose the track (play mode / direction / length etc.) to the container.
         Track *trackPtr() { return getTrack(); }
 
+        // v2 Mix F3: which 16-step page is active (for the length bar window).
+        uint8_t activePage() const { return activePage_; }
+
         // v2 Mix: audition (preview) a step's programmed notes. key16 = 0-15 (mapped to the
         // active page's step). on=true = note-on, on=false = note-off.
         void auditionStep(uint8_t key16, bool on);
