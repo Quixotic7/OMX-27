@@ -600,7 +600,22 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		return true;
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
-	// Holding a step on a param page: encoder edits the selected param (auto edit-mode).
+	// Machine menu (page 3+): let the machine navigate/edit, except turning left off its first
+	// page returns to the custom TRIG page.
+	if (stepMenuPage_ == 3)
+	{
+		if (dir < 0 && omni->seqMenuAtStart())
+		{
+			stepMenuPage_ = 2;
+			stepMenuSel_ = 3;
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+			return true;
+		}
+		return false; // forward to the machine
+	}
+
+	// Holding a step on a custom param page: encoder edits the selected param (auto edit-mode).
 	if (heldStepMask_ != 0 && stepMenuPage_ != 0)
 	{
 		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
@@ -611,7 +626,6 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 			if (heldStepMask_ & (1 << s))
 				omni->editStepParam(s, pid, delta);
 		stepEdited_ = true;
-		// Only pop up the full value for wide params (Cond/Func); numbers update in the cell.
 		if (heldStepKey_ >= 0 && omni->stepParamWide(pid))
 			omxDisp.displayMessage(omni->stepParamValueString2(heldStepKey_, pid));
 		omxDisp.setDirty();
@@ -619,9 +633,20 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		return true;
 	}
 
-	// Otherwise: navigate the linear cursor [overview=0, params 1..8].
+	// Navigate the custom cursor [overview=0, params 1..8], then hand off to the machine menu.
 	int idx = (stepMenuPage_ == 0) ? 0 : (1 + (stepMenuPage_ - 1) * 4 + stepMenuSel_);
-	idx = constrain(idx + dir, 0, 8);
+	idx += dir;
+	if (idx > 8)
+	{
+		stepMenuPage_ = 3; // enter the machine menu
+		omni->seqMenuEnter();
+		omxDisp.displayMessage("Step Params");
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
+	if (idx < 0)
+		idx = 0;
 	if (idx == 0)
 	{
 		stepMenuPage_ = 0;
@@ -643,6 +668,8 @@ bool OmxModeForm::onEncoderButtonStep()
 {
 	if (formView_ != FORMVIEW_STEP)
 		return false;
+	if (stepMenuPage_ == 3)
+		return false; // machine menu: let it toggle its own select/edit
 	if (heldStepMask_ != 0 && stepMenuPage_ != 0)
 	{
 		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
@@ -694,7 +721,14 @@ void OmxModeForm::onDisplayStep()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
-	// Param page (menu): show the held step's params (locks indicated) or the defaults.
+	// Machine menu (page 3): the machine renders it natively (Notes/CC/Transpose/track params).
+	if (stepMenuPage_ == 3)
+	{
+		omni->onDisplayUpdate();
+		return;
+	}
+
+	// Custom param page (menu): show the held step's params (locks indicated) or the defaults.
 	if (stepMenuPage_ != 0)
 	{
 		onDisplayStepMenu();
@@ -1416,8 +1450,20 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	// v2 shell: container-rendered views take their own keys (not the machine).
 	if (formView_ == FORMVIEW_STEP)
 	{
-		if (!keyConsumed)
-			onKeyUpdateStep(e);
+		if (keyConsumed)
+			return;
+		// Machine menu (page 3): a step tap selects which step the notes/CC pages edit.
+		if (stepMenuPage_ == 3)
+		{
+			if (e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
+			{
+				static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine())->setSelStepByKey(thisKey - 11);
+				omxLeds.setDirty();
+				omxDisp.setDirty();
+			}
+			return;
+		}
+		onKeyUpdateStep(e);
 		return;
 	}
 	if (formView_ == FORMVIEW_PATTERNS)
@@ -1650,6 +1696,11 @@ void OmxModeForm::updateLEDs()
 	// v2 shell: container-rendered views
 	if (formView_ == FORMVIEW_STEP)
 	{
+		if (stepMenuPage_ == 3)
+		{
+			getSelectedMachine()->updateLEDs(); // machine menu uses the machine's own LEDs
+			return;
+		}
 		updateStepLEDs();
 		return;
 	}

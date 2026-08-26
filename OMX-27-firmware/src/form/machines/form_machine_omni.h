@@ -162,6 +162,12 @@ namespace FormOmni
         // for a ratio, the A/B components (1-8) via the out params.
         uint8_t stepMathInfo(uint8_t key16, uint8_t &a, uint8_t &b);
 
+        // v2 SEQ menu handoff: after the container's custom Vel/.../Accum pages, delegate to
+        // this machine's native param menu (Notes/CC/Transpose/track params, same as MIX view).
+        void seqMenuEnter();       // position the menu at the first delegated page (Notes)
+        bool seqMenuAtStart();     // true when on that first page/param (for the back boundary)
+        void setSelStepByKey(uint8_t key16); // point step-scoped menu edits at this step
+
         // v2 Step menu (P-Lockable params). pid: 0 Vel,1 Nudge,2 Len,3 MFX,4 Prob,5 Cond,6 Func,7 Accum.
         static const uint8_t kStepMenuParamCount = 8;
         const char *stepParamLabel(uint8_t pid);

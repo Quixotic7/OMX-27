@@ -620,6 +620,20 @@ namespace FormOmni
         }
     }
 
+    void FormMachineOmni::seqMenuEnter()
+    {
+        trackParams_.setSelPageAndParam(OMNIPAGE_STEPNOTES, 0);
+    }
+    bool FormMachineOmni::seqMenuAtStart()
+    {
+        return trackParams_.getSelPage() == OMNIPAGE_STEPNOTES && trackParams_.getSelParam() == 0;
+    }
+    void FormMachineOmni::setSelStepByKey(uint8_t key16)
+    {
+        if (key16 < 16)
+            selStep_ = key16toStep(key16);
+    }
+
     // ---- v2 Step menu params (P-Lockable) ----
     static const uint8_t kStepParamLockBits[8] = {
         SLOCK_VEL, SLOCK_NUDGE, SLOCK_LEN, SLOCK_MFX, SLOCK_PROB, SLOCK_COND, SLOCK_FUNC, SLOCK_ACCUM};
