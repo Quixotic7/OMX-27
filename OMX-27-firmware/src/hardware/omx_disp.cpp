@@ -635,7 +635,8 @@ static void drawPageIcon(int x, int y, bool filled, uint16_t color)
 
 void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
 							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
-							   uint8_t activePage, const uint8_t *stepState, int8_t playhead, uint8_t modOverlay)
+							   uint8_t activePage, const uint8_t *stepState, int8_t playhead,
+							   uint8_t modOverlay, const char *overlayLabel)
 {
 	if (isMessageActive())
 	{
@@ -714,7 +715,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		u8g2_display.setFont(FONT_LABELS);
 		u8g2_display.setForegroundColor(BLACK);
 		u8g2_display.setBackgroundColor(WHITE);
-		u8g2centerText(modOverlay == 1 ? "COPY" : "CUT / PASTE", 0, 30, 128, 8);
+		u8g2centerText(overlayLabel ? overlayLabel : "", 0, 30, 128, 8);
 		return;
 	}
 

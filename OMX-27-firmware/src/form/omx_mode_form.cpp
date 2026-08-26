@@ -451,9 +451,9 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 				omni->setEnabledPages(mask);
 				omni->setActivePage(a);
 				pageGestureDone_ = true;
-				omxDisp.displayMessage("PAGES " + String(lo + 1) + "-" + String(hi + 1));
 			}
 			heldPageMask_ |= (1 << p);
+			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
 		else if (!e.down() && (heldPageMask_ & (1 << p)))
@@ -464,12 +464,10 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 				{
 					omni->setEnabledPages(1 << p); // double-click = solo
 					omni->setActivePage(p);
-					omxDisp.displayMessage("SOLO PG " + String(p + 1));
 				}
 				else if (e.quickClicked())
 				{
 					omni->setActivePage(p); // single-click = select edit page
-					omxDisp.displayMessage("PAGE " + String(p + 1));
 				}
 			}
 			heldPageMask_ &= ~(1 << p);
@@ -500,10 +498,26 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		}
 		return;
 	}
-	// F2 + low row while holding a track = mute/solo/play mode/colour (same as Mix hold-track).
+	// F2 + low row: with a track held = mute/solo/play mode/colour (Mix hold-track); otherwise
+	// cut (a step with content) / paste (an empty step).
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ >= 0 && thisKey >= 11 && thisKey < 27)
 	{
 		onKeyUpdateMixHold(e);
+		return;
+	}
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ < 0 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
+	{
+		uint8_t k = thisKey - 11;
+		if (omni->stepIsOn(k))
+		{
+			omni->stepCut(k);
+			omxDisp.displayMessage("CUT");
+		}
+		else
+		{
+			omni->stepPaste(k);
+			omxDisp.displayMessage("PASTE");
+		}
 		return;
 	}
 	// F1 + step key = copy (a step with content) / paste (an empty step). F3 = structure layer.
@@ -971,25 +985,6 @@ void OmxModeForm::onDisplayStep()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
-	// On a param page (not the overview), F1/F2 show the split / track-hold popup. On the
-	// overview page these are drawn as an overlay on the track page instead (below).
-	if (stepMenuPage_ != 0 && stepMenuPage_ != 3 && omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
-	{
-		bool topFill[4];
-		for (uint8_t i = 0; i < 4; i++)
-			topFill[i] = (i == omni->activePage());
-		bool bottomFill[16];
-		for (uint8_t i = 0; i < 16; i++)
-			bottomFill[i] = omni->stepIsOn(i);
-		omxDisp.dispKeyFunctionSplit("PAGE", topFill, 4, "COPY", bottomFill, 16);
-		return;
-	}
-	if (stepMenuPage_ != 0 && stepMenuPage_ != 3 && omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ >= 0)
-	{
-		auto omniT = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
-		omxDisp.dispTrackHold(heldTrackKey_ + 1, omniT->getMute(), omniT->getSolo(), mixPlayModeIndex(omniT->trackPtr()));
-		return;
-	}
 	// F3 structure layer: rate on top, the active page's length bar on the bottom.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
 	{
@@ -997,6 +992,13 @@ void OmxModeForm::onDisplayStep()
 		char rbuf[12];
 		snprintf(rbuf, sizeof(rbuf), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
 		omxDisp.dispTrackLength(rbuf, activeCount);
+		return;
+	}
+	// Holding F1/F2 always shows the track page (with the copy/track overlay), from any menu
+	// page — so the whole seq view is consistent while a modifier is held.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
+	{
+		onDisplaySeqTrackPage();
 		return;
 	}
 
@@ -1042,6 +1044,13 @@ void OmxModeForm::onDisplayStep()
 	}
 
 	// Overview page, idle: the full track/page overview.
+	onDisplaySeqTrackPage();
+}
+
+// Render the page-1 track overview, with an F1/F2 hold overlay when a modifier is held.
+void OmxModeForm::onDisplaySeqTrackPage()
+{
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	int16_t pageStart = (int16_t)omni->activePage() * 16;
 	int8_t playhead = omxFormGlobal.isPlaying ? (int8_t)((int16_t)omni->playingStepIndex() - pageStart) : -1;
 
@@ -1063,12 +1072,23 @@ void OmxModeForm::onDisplayStep()
 	char rateStr[10];
 	snprintf(rateStr, sizeof(rateStr), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
 
-	uint8_t modOverlay = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1) ? 1
-						 : (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2) ? 2
-																		  : 0;
+	uint8_t modOverlay = 0;
+	const char *overlayLabel = nullptr;
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
+	{
+		modOverlay = 1;
+		overlayLabel = "COPY";
+	}
+	else if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
+	{
+		modOverlay = 2;
+		overlayLabel = (heldTrackKey_ >= 0) ? "MUTE / PLAY MODE" : "CUT / PASTE";
+	}
+
 	omxDisp.dispSeqTrackPage(title, trackMuted, selectedMachine_, rateStr,
 							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
-							 omni->getEnabledPages(), omni->activePage(), stepState, playhead, modOverlay);
+							 omni->getEnabledPages(), omni->activePage(), stepState, playhead,
+							 modOverlay, overlayLabel);
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
