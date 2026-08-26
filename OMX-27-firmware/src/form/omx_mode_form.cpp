@@ -598,14 +598,9 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 			if (heldStepMask_ == (uint16_t)(1 << key16) && !stepEdited_ && e.quickClicked())
 			{
 				if (omni->stepIsOn(key16))
-				{
-					omni->stepCut(key16);
-					omxDisp.displayMessage("CLEAR");
-				}
+					omni->stepCut(key16); // clear (no message — the grid shows it)
 				else
-				{
 					omni->stepSetNotes(key16, lastNotes_); // create
-				}
 			}
 			heldStepMask_ &= ~(1 << key16);
 			if (heldStepKey_ == (int8_t)key16)

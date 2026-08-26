@@ -688,7 +688,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
-	drawPlayIcon(playMode, 50, 10); // 17x9 icon, fixed x
+	drawPlayIcon(playMode, 52, 10); // 17x9 icon, fixed x
 	u8g2_display.setFont(FONT_LABELS);
 	u8g2_display.setCursor(74, 18);
 	u8g2_display.print(rateStr);
