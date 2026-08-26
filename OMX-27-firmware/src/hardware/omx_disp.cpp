@@ -614,7 +614,7 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 	drawPlayIcon(playModeIndex, 82, cellY + (cellH - 9) / 2);
 }
 
-void OmxDisp::dispStepParams(const char *pageLabel, const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel)
+void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel, bool editing)
 {
 	if (isMessageActive())
 	{
@@ -628,10 +628,19 @@ void OmxDisp::dispStepParams(const char *pageLabel, const char *labels[4], const
 	for (uint8_t i = 0; i < 4; i++)
 	{
 		int x = i * cw;
+		bool inv = (i == sel) && editing; // whole-cell invert: the encoder is editing this param
 
-		// Label (header) — inverted when that param is locked on the step.
+		if (inv)
+			display.fillRect(x + 1, 0, cw - 2, 31, WHITE);
+
+		// Label (header): inverted when locked; black when the whole cell is inverted.
 		u8g2_display.setFont(FONT_LABELS);
-		if (locked[i])
+		if (inv)
+		{
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else if (locked[i])
 		{
 			display.fillRect(x + 2, 1, cw - 4, 10, WHITE);
 			u8g2_display.setForegroundColor(BLACK);
@@ -645,24 +654,22 @@ void OmxDisp::dispStepParams(const char *pageLabel, const char *labels[4], const
 		u8g2centerText(labels[i], x, 9, cw, 8);
 
 		// Value (chunky).
-		u8g2_display.setForegroundColor(WHITE);
-		u8g2_display.setBackgroundColor(BLACK);
+		if (inv)
+		{
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
 		u8g2_display.setFont(FONT_TENFAT);
 		u8g2centerText(values[i], x, 28, cw, 8);
 
-		// Selection box.
-		if (i == sel)
+		// Selection box when navigating (not editing).
+		if (i == sel && !editing)
 			display.drawRect(x + 1, 0, cw - 2, 31, WHITE);
-	}
-
-	// Page label, small, top-left corner.
-	if (pageLabel && pageLabel[0])
-	{
-		u8g2_display.setFont(FONT_LABELS);
-		u8g2_display.setForegroundColor(WHITE);
-		u8g2_display.setBackgroundColor(BLACK);
-		u8g2_display.setCursor(1, 6);
-		u8g2_display.print(pageLabel);
 	}
 }
 

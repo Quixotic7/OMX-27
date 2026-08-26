@@ -50,9 +50,10 @@ public:
 	// Held-track status (Mix): "TRACK n" with M / S cells (filled when active) and a
 	// play-direction icon (playModeIndex 0-4 = fwd/rev/fwd-pong/rev-pong/random).
 	void dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t playModeIndex);
-	// Step menu param page: 4 cells (label + value). The selected cell is boxed; a locked
-	// cell's label is inverted. `pageLabel` shows small at the top-left.
-	void dispStepParams(const char *pageLabel, const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel);
+	// Step menu param page: 4 cells (label + value). A locked cell's label is inverted. The
+	// selected cell is boxed when navigating; when `editing` (holding a step) it is fully
+	// inverted to show the encoder is locked onto it.
+	void dispStepParams(const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel, bool editing);
 	// Step view Note hold: a compact piano keyboard (chord = notesAsKeys[6]) on top, with the
 	// 16 step-marker cells beneath (filled = has content; `focus` step gets a tick). No text.
 	void dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, int8_t focus);

@@ -651,6 +651,41 @@ namespace FormOmni
         }
     }
 
+    // Compact value for the param cell (<= ~4 chars). Floats < 1 drop the leading zero (".75").
+    String FormMachineOmni::stepParamBox(uint8_t key16, uint8_t pid)
+    {
+        if (key16 >= 16) return "";
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        switch (pid)
+        {
+        case 0: return String(s->vel);
+        case 1: return String(s->nudge);
+        case 2:
+        {
+            float m = getStepLenMult(s->len);
+            if (m < 1.0f) { String v = String(m, 2); return v.substring(1); } // "0.75" -> ".75"
+            if (m == (float)(int)m) return String((int)m);                     // whole: "1","16"
+            return String(m, 1);                                              // "1.2"
+        }
+        case 3: return s->mfxIndex == 0 ? String("OFF") : (s->mfxIndex == 1 ? String("TRK") : ("FX" + String(s->mfxIndex - 1)));
+        case 4: return String(s->prob);
+        case 5:
+            if (s->condition == 1) return "FIL";
+            if (s->condition == 2) return "!FL";
+            return String(getCondChar(s->condition));
+        case 6:
+            if (s->func >= STEPFUNC_COUNT) return "J" + String(s->func - STEPFUNC_COUNT + 1);
+            return String(kStepFuncs[s->func]);
+        case 7: return String(s->accumTPat);
+        default: return "";
+        }
+    }
+
+    bool FormMachineOmni::stepParamWide(uint8_t pid)
+    {
+        return pid == 5 || pid == 6; // Cond / Func can read long -> show the value popup while editing
+    }
+
     void FormMachineOmni::editStepParam(uint8_t key16, uint8_t pid, int delta)
     {
         if (key16 >= 16 || pid >= 8) return;

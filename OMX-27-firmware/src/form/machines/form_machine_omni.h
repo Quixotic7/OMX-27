@@ -165,7 +165,9 @@ namespace FormOmni
         // v2 Step menu (P-Lockable params). pid: 0 Vel,1 Nudge,2 Len,3 MFX,4 Prob,5 Cond,6 Func,7 Accum.
         static const uint8_t kStepMenuParamCount = 8;
         const char *stepParamLabel(uint8_t pid);
-        String stepParamValueString2(uint8_t key16, uint8_t pid);
+        String stepParamValueString2(uint8_t key16, uint8_t pid); // full value (for the popup)
+        String stepParamBox(uint8_t key16, uint8_t pid);          // compact value (for the cell)
+        bool stepParamWide(uint8_t pid);                          // true = show the popup while editing
         void editStepParam(uint8_t key16, uint8_t pid, int delta); // edits value, sets its lock
         bool stepParamLocked(uint8_t key16, uint8_t pid);
         void clearStepParamLock(uint8_t key16, uint8_t pid); // clears the lock and resets to default

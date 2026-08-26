@@ -611,7 +611,8 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 			if (heldStepMask_ & (1 << s))
 				omni->editStepParam(s, pid, delta);
 		stepEdited_ = true;
-		if (heldStepKey_ >= 0)
+		// Only pop up the full value for wide params (Cond/Func); numbers update in the cell.
+		if (heldStepKey_ >= 0 && omni->stepParamWide(pid))
 			omxDisp.displayMessage(omni->stepParamValueString2(heldStepKey_, pid));
 		omxDisp.setDirty();
 		omxLeds.setDirty();
@@ -664,7 +665,7 @@ void OmxModeForm::onDisplayStepMenu()
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	bool holding = (heldStepMask_ != 0 && heldStepKey_ >= 0);
 	uint8_t base = (stepMenuPage_ - 1) * 4;
-	static const char *kDefaults[8] = {"127", "0", "0.75", "TRK", "100", "--", "--", "0"};
+	static const char *kDefaults[8] = {"127", "0", ".75", "TRK", "100", "--", "--", "0"};
 
 	const char *labels[4];
 	String vals[4];
@@ -676,7 +677,7 @@ void OmxModeForm::onDisplayStepMenu()
 		labels[i] = omni->stepParamLabel(pid);
 		if (holding)
 		{
-			vals[i] = omni->stepParamValueString2(heldStepKey_, pid);
+			vals[i] = omni->stepParamBox(heldStepKey_, pid);
 			locked[i] = omni->stepParamLocked(heldStepKey_, pid);
 		}
 		else
@@ -686,7 +687,7 @@ void OmxModeForm::onDisplayStepMenu()
 		}
 		values[i] = vals[i].c_str();
 	}
-	omxDisp.dispStepParams(stepMenuPage_ == 1 ? "STEP" : "TRIG", labels, values, locked, stepMenuSel_);
+	omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, holding);
 }
 
 void OmxModeForm::onDisplayStep()
