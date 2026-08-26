@@ -172,11 +172,12 @@ namespace FormOmni
 
     struct Step
     {
-        uint8_t mute : 1;      // bool for mute
-        uint8_t repeat : 3;    // ratchet count index: 0 = 1x (off), 1 = 2x, 2 = 3x (triplet), 3 = 4x
-        uint8_t trig : 1;      // "ghost" trigger: step is on with no notes (e.g. a locked value/CC)
-        uint16_t locks;        // P-Lock flags: bit set = that param is explicitly locked (StepLockBit)
-        int8_t notes[6];       // 0 - 127, -1 for off
+        // Packed into one 2-byte unit (14 bits) so the lock flags cost almost nothing.
+        uint16_t mute : 1;   // bool for mute
+        uint16_t repeat : 3; // ratchet count index: 0 = 1x (off), 1 = 2x, 2 = 3x (triplet), 3 = 4x
+        uint16_t trig : 1;   // "ghost" trigger: step is on with no notes (e.g. a locked value/CC)
+        uint16_t locks : 9;  // P-Lock flags: bit set = that param is explicitly locked (StepLockBit)
+        int8_t notes[6];     // 0 - 127, -1 for off
         int8_t potVals[5];     // 0 -> 127, -1 for off
         uint8_t vel : 7;       // 0 - 127
         int8_t nudge : 7;      // Nudge note back or forward. Range is +- 60, displayed as -100% to +100%, , displ

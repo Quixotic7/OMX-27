@@ -838,21 +838,37 @@ namespace FormOmni
         }
     }
 
+    // Step-view edit mode -> menu param id (-1 = none, e.g. Note / Repeat which has no track default).
+    static int8_t stepModeToPid(uint8_t mode)
+    {
+        switch (mode)
+        {
+        case 1: return 0; // Vel
+        case 2: return 2; // Len
+        case 4: return 4; // Chance -> prob
+        case 5: return 5; // Math -> cond
+        case 6: return 6; // Func
+        case 7: return 3; // MFX
+        default: return -1;
+        }
+    }
+
     void FormMachineOmni::resetStepValue(uint8_t key16, uint8_t mode)
     {
         if (key16 >= 16) return;
-        Step *s = &getTrack()->steps[key16toStep(key16)];
-        int8_t lock = stepModeToLock(mode);
-        if (lock >= 0) s->clearLock(lock); // resetting to default clears the P-Lock
-        switch (mode)
+        // Params with a track default: clear the lock and revert to that default.
+        int8_t pid = stepModeToPid(mode);
+        if (pid >= 0)
         {
-        case 1: s->vel = 127; break;
-        case 2: s->len = 3; break;
-        case 3: s->repeat = 0; break;
-        case 4: s->prob = 100; break;
-        case 5: s->condition = 0; break;
-        case 6: s->func = 0; break;
-        case 7: s->mfxIndex = 1; break;
+            clearStepParamLock(key16, pid);
+            return;
+        }
+        // Repeat has no track default: clear its lock and reset to the built-in default.
+        if (mode == 3)
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            s->clearLock(SLOCK_REPEAT);
+            s->repeat = 0;
         }
     }
 
@@ -2980,7 +2996,7 @@ namespace FormOmni
     // Bump whenever the OmniSeq layout changes so old saves are skipped rather than
     // blitted into a mismatched struct. (The global EEPROM_VERSION also gates loads,
     // but this makes an OmniSeq change safe on its own.)
-    static const uint8_t kOmniSaveVersion = 4; // v4: added Track::paramDefaults
+    static const uint8_t kOmniSaveVersion = 5; // v5: packed Step lock bits
 
     int FormMachineOmni::saveToDisk(int startingAddress, Storage *storage)
 	{
