@@ -506,26 +506,26 @@ void OmxModeForm::updateStepLEDs()
 		int8_t focus = heldStepKey_;
 		if (stepEditMode_ == STEPMODE_NOTE)
 		{
-			// 10 note keys. In a scale: root periwinkle, in-scale dim blue. Chromatic: white
-			// notes periwinkle, black notes a contrasting amber. In the chord = yellow, held = white.
+			// 10 note keys, each with a hue: chromatic = white notes periwinkle / black notes
+			// amber; scale = root periwinkle / in-scale blue. Selected notes (in the chord or
+			// held) show that same hue at full brightness; the rest are the dim version.
 			bool chromatic = (scaleConfig.scalePattern < 0);
 			for (uint8_t i = 0; i < 10; i++)
 			{
 				int8_t note = omxFormGlobal.musicScale->getNoteByDegree(i, midiSettings.octave);
-				uint32_t c;
+				uint32_t full;
 				if (chromatic)
 				{
 					uint8_t pc = ((note % 12) + 12) % 12;
 					bool black = (pc == 1 || pc == 3 || pc == 6 || pc == 8 || pc == 10);
-					c = black ? 0x5a2400 : 0xa8a8ff; // amber vs periwinkle
+					full = black ? 0xff6a1a : 0xa8a8ff; // amber vs periwinkle
 				}
 				else
 				{
-					c = (i == 0) ? 0xa8a8ff : 0x00004d;
+					full = (i == 0) ? 0xa8a8ff : 0x3838ff; // root periwinkle vs in-scale blue
 				}
-				if (focus >= 0 && omni->stepHasNote(focus, note)) c = 0xffff00;
-				if (heldNoteKeys_ & (1 << i)) c = WHITE;
-				strip.setPixelColor(1 + i, c);
+				bool selected = (heldNoteKeys_ & (1 << i)) || (focus >= 0 && omni->stepHasNote(focus, note));
+				strip.setPixelColor(1 + i, selected ? full : ((full >> 2) & 0x3f3f3f));
 			}
 		}
 		else if (stepEditMode_ == STEPMODE_MATH)
