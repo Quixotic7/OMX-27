@@ -147,6 +147,10 @@ namespace FormOmni
     {
         ensureParamsInit();
 
+        for (uint8_t k = 0; k < 16; k++)
+            for (uint8_t i = 0; i < 6; i++)
+                auditionNotes_[k][i] = -1;
+
         resetPlayback();
 
         onRateChanged();
@@ -1007,6 +1011,63 @@ namespace FormOmni
 
         // Increment steps tPat position
         stepDynamic->tPatPos = (stepDynamic->tPatPos + step->accumTPat) % (seq_.transposePattern.len + 1);
+    }
+
+    // Preview a step's programmed notes on a manual key press (Mix low-row audition).
+    // Plays the raw stored notes (no transpose / MIDI FX) so the note-off on key release
+    // reliably matches the note-on. key16 is the physical low-row key 0-15.
+    void FormMachineOmni::auditionStep(uint8_t key16, bool on)
+    {
+        if (context_ == nullptr || noteOnFuncPtr == nullptr || key16 >= 16)
+            return;
+
+        // Always release anything currently sounding on this key first.
+        for (int8_t i = 0; i < 6; i++)
+        {
+            int8_t n = auditionNotes_[key16][i];
+            if (n < 0)
+                continue;
+            MidiNoteGroup off;
+            off.channel = seq_.channel + 1;
+            off.noteNumber = n;
+            off.prevNoteNumber = n;
+            off.velocity = 0;
+            off.sendMidi = (bool)seq_.sendMidi;
+            off.sendCV = (bool)seq_.sendCV;
+            seqNoteOff(off, 255);
+            auditionNotes_[key16][i] = -1;
+        }
+
+        if (!on)
+            return;
+
+        uint8_t stepIndex = key16toStep(key16);
+        Step *step = &getTrack()->steps[stepIndex];
+
+        // Monophonic: only the last set note sounds.
+        int8_t monoNoteIdx = -1;
+        if (seq_.monoPhonic)
+            for (int8_t i = 0; i < 6; i++)
+                if (step->notes[i] >= 0 && step->notes[i] <= 127)
+                    monoNoteIdx = i;
+
+        for (int8_t i = 0; i < 6; i++)
+        {
+            if (seq_.monoPhonic && i != monoNoteIdx)
+                continue;
+
+            int8_t noteNumber = step->notes[i];
+            if (noteNumber < 0 || noteNumber > 127)
+                continue;
+
+            auto noteGroup = step2NoteGroup(i, step);
+            noteGroup.noteNumber = noteNumber;
+            noteGroup.prevNoteNumber = noteNumber;
+            noteGroup.noteOff = false;
+            noteGroup.noteonMicros = seqConfig.lastClockMicros;
+            seqNoteOn(noteGroup, 255);
+            auditionNotes_[key16][i] = noteNumber;
+        }
     }
 
     void FormMachineOmni::onEnabled()

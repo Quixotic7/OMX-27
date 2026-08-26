@@ -450,6 +450,18 @@ void OmxModeForm::onKeyUpdateMixHold(OMXKeypadEvent e)
 	omxLeds.setDirty();
 }
 
+// Low-row taps audition (preview) the selected track's programmed steps: note-on on key
+// down, note-off on release. key16 = 0-15.
+void OmxModeForm::onKeyUpdateMixStep(OMXKeypadEvent e)
+{
+	if (e.held())
+		return;
+	uint8_t key16 = e.key() - 11;
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	omni->auditionStep(key16, e.down());
+	omxLeds.setDirty();
+}
+
 void OmxModeForm::updateMixHoldLEDs()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
@@ -967,7 +979,13 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			onKeyUpdateMixHold(e);
 			return;
 		}
-		// Otherwise (low-row, no track held; F3 + track) falls through to the machine.
+		// Low-row taps (no track held, no modifier) audition the selected track's steps.
+		if (heldTrackKey_ < 0 && thisKey >= 11 && thisKey < 27 && omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE)
+		{
+			onKeyUpdateMixStep(e);
+			return;
+		}
+		// Otherwise (F3 + track) falls through to the machine.
 	}
 
 	if(selMachine->doesConsumeKeys())

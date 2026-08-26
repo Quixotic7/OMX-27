@@ -72,6 +72,10 @@ namespace FormOmni
         // v2: expose the track (play mode / direction / length etc.) to the container.
         Track *trackPtr() { return getTrack(); }
 
+        // v2 Mix: audition (preview) a step's programmed notes. key16 = 0-15 (mapped to the
+        // active page's step). on=true = note-on, on=false = note-off.
+        void auditionStep(uint8_t key16, bool on);
+
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }
         void setSeq(const OmniSeq &s)
@@ -86,6 +90,9 @@ namespace FormOmni
 
         uint8_t selStep_ = 0;
         bool stepHeld_ = false;
+
+        // Notes currently sounding from a Mix step audition, per low-row key (0-15). -1 = none.
+        int8_t auditionNotes_[16][6];
 
         uint8_t activePage_ = 0;
         uint8_t zoomLevel_ = 0;
