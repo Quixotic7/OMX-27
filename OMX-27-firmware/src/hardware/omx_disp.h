@@ -59,6 +59,12 @@ public:
 	// Step view Note hold: a compact piano keyboard (chord = notesAsKeys[6]) on top, with the
 	// 16 step-marker cells beneath (filled = has content; `focus` step gets a tick). No text.
 	void dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, int8_t focus);
+	// Seq page-1 track overview: 8 track-state squares (selected underlined, muted = outline)
+	// top-left, left-justified track name, rate + 4 page icons + BPM on the right, and 16 step
+	// boxes on the bottom (stepState: 0 empty / 1 has-notes / 2 ghost). playhead -1 = none.
+	void dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
+						  const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
+						  uint8_t activePage, const uint8_t *stepState, int8_t playhead);
 	// Step view overview: mode name on top, a row of `count` step cells on the bottom (filled
 	// = has content). The playhead step (0-based, -1 = none) gets a tick underneath.
 	void dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead, bool invertTitle = false);

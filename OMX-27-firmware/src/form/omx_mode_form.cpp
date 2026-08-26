@@ -1041,15 +1041,31 @@ void OmxModeForm::onDisplayStep()
 		return;
 	}
 
-	// Overview page, idle: the 16-step markers titled with the track name.
-	bool filled[16];
-	for (uint8_t i = 0; i < 16; i++)
-		filled[i] = omni->stepIsOn(i);
+	// Overview page, idle: the full track/page overview.
 	int16_t pageStart = (int16_t)omni->activePage() * 16;
 	int8_t playhead = omxFormGlobal.isPlaying ? (int8_t)((int16_t)omni->playingStepIndex() - pageStart) : -1;
+
+	// Step states: 0 empty · 1 has notes · 2 ghost (on but no notes).
+	uint8_t stepState[16];
+	for (uint8_t i = 0; i < 16; i++)
+		stepState[i] = omni->stepHasNotes(i) ? 1 : (omni->stepIsOn(i) ? 2 : 0);
+
+	// Track mute states, with solo override (any soloed -> non-soloed render muted).
+	bool anySolo = false;
+	for (uint8_t t = 0; t < kNumMachines; t++)
+		if (machines_[t]->getSolo()) { anySolo = true; break; }
+	bool trackMuted[8];
+	for (uint8_t t = 0; t < 8; t++)
+		trackMuted[t] = anySolo ? !machines_[t]->getSolo() : machines_[t]->getMute();
+
 	char title[16];
-	snprintf(title, sizeof(title), "TRACK %u", (unsigned)(selectedMachine_ + 1));
-	omxDisp.dispStepOverview(title, filled, 16, playhead, stepTrackSelEdit_);
+	snprintf(title, sizeof(title), "TRK %u", (unsigned)(selectedMachine_ + 1));
+	char rateStr[10];
+	snprintf(rateStr, sizeof(rateStr), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
+
+	omxDisp.dispSeqTrackPage(title, trackMuted, selectedMachine_, rateStr,
+							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
+							 omni->getEnabledPages(), omni->activePage(), stepState, playhead);
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,

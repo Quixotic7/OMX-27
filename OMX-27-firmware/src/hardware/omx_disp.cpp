@@ -614,6 +614,97 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 	drawPlayIcon(playModeIndex, 82, cellY + (cellH - 9) / 2);
 }
 
+// A small folded-corner "page" icon (6x8) at top-left (x,y), filled or outline.
+static void drawPageIcon(int x, int y, bool filled)
+{
+	if (filled)
+	{
+		display.fillRect(x, y, 4, 8, WHITE);     // left part, full height
+		display.fillRect(x + 4, y + 2, 2, 6, WHITE); // right part below the fold
+	}
+	else
+	{
+		display.drawLine(x, y, x + 3, y, WHITE);         // top edge (to fold)
+		display.drawLine(x + 3, y, x + 5, y + 2, WHITE); // folded diagonal
+		display.drawLine(x + 5, y + 2, x + 5, y + 7, WHITE); // right
+		display.drawLine(x, y + 7, x + 5, y + 7, WHITE); // bottom
+		display.drawLine(x, y, x, y + 7, WHITE);         // left
+	}
+}
+
+void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
+							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
+							   uint8_t activePage, const uint8_t *stepState, int8_t playhead)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+
+	// --- 8 track-state squares (top-left): filled = unmuted, outline = muted, selected underlined.
+	for (uint8_t t = 0; t < 8; t++)
+	{
+		int x = 1 + t * 6;
+		if (!trackMuted[t])
+			display.fillRect(x, 1, 4, 4, WHITE);
+		else
+			display.drawRect(x, 1, 4, 4, WHITE);
+		if (t == selTrack)
+			display.fillRect(x, 6, 4, 1, WHITE); // selected underline
+	}
+
+	// --- BPM, top-right.
+	u8g2_display.setFont(FONT_LABELS);
+	char bpmStr[8];
+	snprintf(bpmStr, sizeof(bpmStr), "%u", (unsigned)bpm);
+	uint16_t bw = u8g2_display.getUTF8Width(bpmStr);
+	u8g2_display.setCursor(127 - bw, 6);
+	u8g2_display.print(bpmStr);
+
+	// --- Name row: "TRK n" (chunky) + play-mode icon + rate, all on one line.
+	u8g2_display.setFont(FONT_TENFAT);
+	u8g2_display.setCursor(1, 17);
+	u8g2_display.print(trackName);
+	int cx = 1 + (int)u8g2_display.getUTF8Width(trackName) + 6;
+	drawPlayIcon(playMode, cx, 8); // 17x9 icon after the name
+	cx += 17 + 6;
+	u8g2_display.setFont(FONT_LABELS);
+	u8g2_display.setCursor(cx, 16);
+	u8g2_display.print(rateStr);
+
+	// --- 4 page icons (right): filled = enabled, outline = muted, active underlined.
+	for (uint8_t p = 0; p < 4; p++)
+	{
+		int x = 98 + p * 8;
+		drawPageIcon(x, 8, (enabledPages & (1 << p)) != 0);
+		if (p == activePage)
+			display.fillRect(x, 18, 6, 1, WHITE); // active underline
+	}
+
+	// --- 16 step boxes (bottom): 0 empty (outline) · 1 notes (filled) · 2 ghost (outline + dot).
+	const uint8_t bw2 = 6, bh = 6, pitch = 8, y = 24;
+	uint8_t startX = (128 - (16 * pitch - (pitch - bw2))) / 2;
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		int x = startX + i * pitch;
+		if (stepState[i] == 1)
+			display.fillRect(x, y, bw2, bh, WHITE);
+		else
+		{
+			display.drawRect(x, y, bw2, bh, WHITE);
+			if (stepState[i] == 2)
+				display.fillRect(x + 2, y + 2, 2, 2, WHITE); // ghost dot
+		}
+		if ((int8_t)i == playhead)
+			display.fillRect(x, y + bh + 1, bw2, 1, WHITE);
+	}
+}
+
 void OmxDisp::dispStepPlayModes(uint8_t selected, const char *name, const char *bottomLabel)
 {
 	if (isMessageActive())
