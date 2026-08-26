@@ -367,10 +367,41 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
 	// While step(s) are held, the top row is the value palette for the current mode.
-	// MFX uses keys 5-10 (Off + FX 1-5, like the AUX MIDI-FX layout); others use keys 1-N.
 	if (heldStepMask_ != 0 && thisKey >= 1 && thisKey <= 10)
 	{
-		if (e.down() && !e.held() && stepEditMode_ != STEPMODE_NOTE)
+		// Note mode: keys 1-10 = chord entry. Held keys build the chord; a fresh press (from
+		// no note keys held) replaces. Notes audition while held.
+		if (stepEditMode_ == STEPMODE_NOTE)
+		{
+			uint8_t degree = thisKey - 1;
+			int8_t note = omxFormGlobal.musicScale->getNoteByDegree(degree, midiSettings.octave);
+			if (e.down() && !e.held())
+			{
+				bool fresh = (heldNoteKeys_ == 0);
+				for (uint8_t s = 0; s < 16; s++)
+					if (heldStepMask_ & (1 << s))
+					{
+						if (fresh) omni->stepClearNotes(s);
+						omni->stepAddNote(s, note);
+					}
+				heldNoteKeys_ |= (1 << degree);
+				stepEdited_ = true;
+				omni->previewNote(note, true);
+				if (heldStepKey_ >= 0) omni->getStepNotes(heldStepKey_, lastNotes_); // remember chord
+				omxDisp.setDirty();
+				omxLeds.setDirty();
+			}
+			else if (!e.down())
+			{
+				heldNoteKeys_ &= ~(1 << degree);
+				omni->previewNote(note, false);
+				omxLeds.setDirty();
+			}
+			return;
+		}
+
+		// Other modes: MFX palette lives on keys 5-10 (Off + FX 1-5, like AUX); others on 1-N.
+		if (e.down() && !e.held())
 		{
 			uint8_t base = (stepEditMode_ == STEPMODE_MFX) ? 5 : 1;
 			if (thisKey >= base)
@@ -421,11 +452,20 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		}
 		else if (!e.down() && (heldStepMask_ & (1 << key16)))
 		{
-			// Quick tap (not a hold) on the only held step = clear it. Holding never clears.
+			// Quick tap (not a hold) on the only held step: Note mode stamps the last chord;
+			// other modes clear it. Holding never clears.
 			if (heldStepMask_ == (uint16_t)(1 << key16) && !stepEdited_ && e.quickClicked())
 			{
-				omni->stepCut(key16);
-				omxDisp.displayMessage("CLEAR");
+				if (stepEditMode_ == STEPMODE_NOTE)
+				{
+					omni->stepSetNotes(key16, lastNotes_);
+					omxDisp.displayMessage("STAMP");
+				}
+				else
+				{
+					omni->stepCut(key16);
+					omxDisp.displayMessage("CLEAR");
+				}
 			}
 			heldStepMask_ &= ~(1 << key16);
 			if (heldStepKey_ == (int8_t)key16)
@@ -435,7 +475,14 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 					if (heldStepMask_ & (1 << s)) { heldStepKey_ = s; break; }
 			}
 			if (heldStepMask_ == 0)
+			{
 				stepEdited_ = false;
+				// Releasing the last step ends chord entry: note-off any auditioning notes.
+				for (uint8_t d = 0; d < 10; d++)
+					if (heldNoteKeys_ & (1 << d))
+						omni->previewNote(omxFormGlobal.musicScale->getNoteByDegree(d, midiSettings.octave), false);
+				heldNoteKeys_ = 0;
+			}
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
@@ -457,7 +504,19 @@ void OmxModeForm::updateStepLEDs()
 			strip.setPixelColor(k, LEDOFF);
 
 		int8_t focus = heldStepKey_;
-		if (stepEditMode_ == STEPMODE_MATH)
+		if (stepEditMode_ == STEPMODE_NOTE)
+		{
+			// 10 note keys: root periwinkle, in-scale dim blue, in the chord yellow, held white.
+			for (uint8_t i = 0; i < 10; i++)
+			{
+				int8_t note = omxFormGlobal.musicScale->getNoteByDegree(i, midiSettings.octave);
+				uint32_t c = (i == 0) ? 0xa8a8ff : 0x00004d;
+				if (focus >= 0 && omni->stepHasNote(focus, note)) c = 0xffff00;
+				if (heldNoteKeys_ & (1 << i)) c = WHITE;
+				strip.setPixelColor(1 + i, c);
+			}
+		}
+		else if (stepEditMode_ == STEPMODE_MATH)
 		{
 			uint8_t a = 0, b = 0, kind = focus >= 0 ? omni->stepMathInfo(focus, a, b) : 0;
 			strip.setPixelColor(1, kind == 1 ? 0xff8000 : 0x4d2600); // Fill
@@ -525,9 +584,27 @@ void OmxModeForm::onDisplayStep()
 		bool filled[16];
 		for (uint8_t i = 0; i < 16; i++)
 			filled[i] = omni->stepIsOn(i);
-		String v = (stepEditMode_ == STEPMODE_NOTE || heldStepKey_ < 0)
-					   ? String("NOTE")
-					   : omni->stepValueString(heldStepKey_, stepEditMode_);
+		String v;
+		if (stepEditMode_ == STEPMODE_NOTE && heldStepKey_ >= 0)
+		{
+			int8_t nts[6];
+			omni->getStepNotes(heldStepKey_, nts);
+			for (uint8_t i = 0; i < 6; i++)
+				if (nts[i] >= 0)
+				{
+					if (v.length()) v += " ";
+					v += omxFormGlobal.musicScale->getNoteName(nts[i] % 12, true);
+				}
+			if (v.length() == 0) v = "NOTE";
+		}
+		else if (heldStepKey_ >= 0)
+		{
+			v = omni->stepValueString(heldStepKey_, stepEditMode_);
+		}
+		else
+		{
+			v = "NOTE";
+		}
 		omxDisp.dispStepOverview(v.c_str(), filled, 16, heldStepKey_);
 		return;
 	}

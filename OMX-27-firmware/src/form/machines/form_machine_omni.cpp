@@ -654,6 +654,27 @@ namespace FormOmni
         }
     }
 
+    void FormMachineOmni::previewNote(int8_t note, bool on)
+    {
+        if (context_ == nullptr || note < 0 || note > 127) return;
+        MidiNoteGroup ng;
+        ng.channel = seq_.channel + 1;
+        ng.noteNumber = note;
+        ng.prevNoteNumber = note;
+        ng.velocity = on ? 100 : 0;
+        ng.sendMidi = (bool)seq_.sendMidi;
+        ng.sendCV = (bool)seq_.sendCV;
+        if (on)
+        {
+            ng.noteonMicros = seqConfig.lastClockMicros;
+            seqNoteOn(ng, 255);
+        }
+        else
+        {
+            seqNoteOff(ng, 255);
+        }
+    }
+
     MidiNoteGroup FormMachineOmni::step2NoteGroup(uint8_t noteIndex, Step *step)
     {
         MidiNoteGroup noteGroup;

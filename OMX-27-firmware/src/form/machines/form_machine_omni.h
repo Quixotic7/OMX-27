@@ -125,6 +125,38 @@ namespace FormOmni
             for (uint8_t i = 0; i < 6; i++) s->notes[i] = -1;
             s->trig = 1;
         }
+
+        // Note-mode chord entry helpers (key16 = 0-15).
+        void stepClearNotes(uint8_t key16)
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            for (uint8_t i = 0; i < 6; i++) s->notes[i] = -1;
+        }
+        void stepAddNote(uint8_t key16, int8_t note)
+        {
+            if (note < 0 || note > 127) return;
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            for (uint8_t i = 0; i < 6; i++) if (s->notes[i] == note) return; // dedup
+            for (uint8_t i = 0; i < 6; i++) if (s->notes[i] < 0) { s->notes[i] = note; return; }
+        }
+        void stepSetNotes(uint8_t key16, const int8_t src[6])
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            for (uint8_t i = 0; i < 6; i++) s->notes[i] = src[i];
+        }
+        void getStepNotes(uint8_t key16, int8_t dst[6])
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            for (uint8_t i = 0; i < 6; i++) dst[i] = s->notes[i];
+        }
+        bool stepHasNote(uint8_t key16, int8_t note)
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            for (uint8_t i = 0; i < 6; i++) if (s->notes[i] == note) return true;
+            return false;
+        }
+        // Audition a single note (chord-entry preview): on = note-on, off = note-off.
+        void previewNote(int8_t note, bool on);
         // Math introspection for LEDs: returns kind (0 other, 1 Fill, 2 !Fill, 3 ratio) and,
         // for a ratio, the A/B components (1-8) via the out params.
         uint8_t stepMathInfo(uint8_t key16, uint8_t &a, uint8_t &b);
