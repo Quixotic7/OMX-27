@@ -615,6 +615,17 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		return false; // forward to the machine
 	}
 
+	// Overview, track-select armed (no step held): the encoder changes the track.
+	if (stepMenuPage_ == 0 && stepTrackSelEdit_ && heldStepMask_ == 0)
+	{
+		int8_t t = constrain((int)selectedMachine_ + dir, 0, kNumMachines - 1);
+		if (t != (int8_t)selectedMachine_)
+			selectMachine(t);
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
+
 	// Holding a step on a custom param page: encoder edits the selected param (auto edit-mode).
 	if (heldStepMask_ != 0 && stepMenuPage_ != 0)
 	{
@@ -670,6 +681,13 @@ bool OmxModeForm::onEncoderButtonStep()
 		return false;
 	if (stepMenuPage_ == 3)
 		return false; // machine menu: let it toggle its own select/edit
+	// Overview (no step held): arm/disarm changing the track with the encoder.
+	if (stepMenuPage_ == 0 && heldStepMask_ == 0)
+	{
+		stepTrackSelEdit_ = !stepTrackSelEdit_;
+		omxDisp.setDirty();
+		return true;
+	}
 	if (heldStepMask_ != 0 && stepMenuPage_ != 0)
 	{
 		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
@@ -678,7 +696,7 @@ bool OmxModeForm::onEncoderButtonStep()
 			if (heldStepMask_ & (1 << s))
 				omni->clearStepParamLock(s, pid);
 		stepEdited_ = true;
-		omxDisp.displayMessage("CLR LOCK");
+		// No message — the header un-inverting communicates the cleared lock.
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 	}
@@ -692,7 +710,7 @@ void OmxModeForm::onDisplayStepMenu()
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	bool holding = (heldStepMask_ != 0 && heldStepKey_ >= 0);
 	uint8_t base = (stepMenuPage_ - 1) * 4;
-	static const char *kDefaults[8] = {"127", "0", ".75", "TRK", "100", "--", "--", "0"};
+	static const char *kDefaults[8] = {"127", "0", ".75", "T", "100", "--", "--", "0"};
 
 	const char *labels[4];
 	String vals[4];
@@ -770,7 +788,7 @@ void OmxModeForm::onDisplayStep()
 	int8_t playhead = omxFormGlobal.isPlaying ? (int8_t)((int16_t)omni->playingStepIndex() - pageStart) : -1;
 	char title[16];
 	snprintf(title, sizeof(title), "TRACK %u", (unsigned)(selectedMachine_ + 1));
-	omxDisp.dispStepOverview(title, filled, 16, playhead);
+	omxDisp.dispStepOverview(title, filled, 16, playhead, stepTrackSelEdit_);
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,

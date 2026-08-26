@@ -59,7 +59,7 @@ public:
 	void dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, int8_t focus);
 	// Step view overview: mode name on top, a row of `count` step cells on the bottom (filled
 	// = has content). The playhead step (0-based, -1 = none) gets a tick underneath.
-	void dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead);
+	void dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead, bool invertTitle = false);
 	// Mix F3 (LEN | RATE): rate label on top, track length as a 16-cell bar on the bottom.
 	// activeCount cells (0-16) are full boxes (steps within the length); the rest are dashes.
 	// Every 4th active cell gets a left notch to make groups of 4 easier to count.

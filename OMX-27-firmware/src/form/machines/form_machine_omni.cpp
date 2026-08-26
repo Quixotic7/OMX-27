@@ -681,14 +681,17 @@ namespace FormOmni
             if (m == (float)(int)m) return String((int)m);                     // whole: "1","16"
             return String(m, 1);                                              // "1.2"
         }
-        case 3: return s->mfxIndex == 0 ? String("OFF") : (s->mfxIndex == 1 ? String("TRK") : ("FX" + String(s->mfxIndex - 1)));
+        case 3: return s->mfxIndex == 0 ? String("--") : (s->mfxIndex == 1 ? String("T") : String(s->mfxIndex - 1)); // -- / T / 1..5
         case 4: return String(s->prob);
         case 5:
-            if (s->condition == 1) return "FIL";
-            if (s->condition == 2) return "!FL";
-            return String(getCondChar(s->condition));
+        {
+            static const char *kCondBox[9] = {"--", "F", "!F", "P", "!P", "N", "!N", "1", "!1"};
+            if (s->condition < 9) return String(kCondBox[s->condition]);
+            return String(getCondChar(s->condition)); // ratios "A:B"
+        }
         case 6:
             if (s->func >= STEPFUNC_COUNT) return "J" + String(s->func - STEPFUNC_COUNT + 1);
+            if (s->func == STEPFUNC_RESTART) return String("RT"); // "RSET" -> "RT"
             return String(kStepFuncs[s->func]);
         case 7: return String(s->accumTPat);
         default: return "";

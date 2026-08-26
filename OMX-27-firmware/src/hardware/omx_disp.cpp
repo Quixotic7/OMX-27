@@ -628,19 +628,11 @@ void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const
 	for (uint8_t i = 0; i < 4; i++)
 	{
 		int x = i * cw;
-		bool inv = (i == sel) && editing; // whole-cell invert: the encoder is editing this param
+		bool valInv = (i == sel) && editing; // value box inverts while the encoder edits it
 
-		if (inv)
-			display.fillRect(x + 1, 0, cw - 2, 31, WHITE);
-
-		// Label (header): inverted when locked; black when the whole cell is inverted.
+		// Label (header): inverted only when that param is locked.
 		u8g2_display.setFont(FONT_LABELS);
-		if (inv)
-		{
-			u8g2_display.setForegroundColor(BLACK);
-			u8g2_display.setBackgroundColor(WHITE);
-		}
-		else if (locked[i])
+		if (locked[i])
 		{
 			display.fillRect(x + 2, 1, cw - 4, 10, WHITE);
 			u8g2_display.setForegroundColor(BLACK);
@@ -653,9 +645,10 @@ void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const
 		}
 		u8g2centerText(labels[i], x, 9, cw, 8);
 
-		// Value (chunky).
-		if (inv)
+		// Value: inverted box while editing this cell.
+		if (valInv)
 		{
+			display.fillRect(x + 2, 13, cw - 4, 18, WHITE);
 			u8g2_display.setForegroundColor(BLACK);
 			u8g2_display.setBackgroundColor(WHITE);
 		}
@@ -766,15 +759,24 @@ void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, in
 	}
 }
 
-void OmxDisp::dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead)
+void OmxDisp::dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead, bool invertTitle)
 {
 	display.fillRect(0, 0, 128, 32, BLACK);
 
-	// Mode name, chunky, centred on top.
+	// Mode name, chunky, centred on top (inverted when the title is armed for editing).
 	u8g2_display.setFontMode(1);
 	u8g2_display.setFont(FONT_TENFAT);
-	u8g2_display.setForegroundColor(WHITE);
-	u8g2_display.setBackgroundColor(BLACK);
+	if (invertTitle)
+	{
+		display.fillRect(0, 0, 128, 15, WHITE);
+		u8g2_display.setForegroundColor(BLACK);
+		u8g2_display.setBackgroundColor(WHITE);
+	}
+	else
+	{
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+	}
 	u8g2centerText(modeName, 0, 13, 128, 8);
 
 	// Step cells: filled = has content, outline = empty. Playhead gets a tick beneath it.

@@ -211,6 +211,7 @@ private:
 	// pages (STEP: Vel/Nudge/Len/MFX, TRIG: Prob/Cond/Func/Accum), selMenu = param 0-3.
 	uint8_t stepMenuPage_ = 0;
 	uint8_t stepMenuSel_ = 0;
+	bool stepTrackSelEdit_ = false; // overview: encoder-click armed to change the track
 	void onKeyUpdateStep(OMXKeypadEvent e);
 	bool onEncoderStep(Encoder::Update enc);   // returns true if the Step view consumed the encoder
 	bool onEncoderButtonStep();                // returns true if consumed
