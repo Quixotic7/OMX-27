@@ -614,6 +614,99 @@ void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t p
 	drawPlayIcon(playModeIndex, 82, cellY + (cellH - 9) / 2);
 }
 
+void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const bool *filled, int8_t focus)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// Which keys are lit (chord) — same split as dispSeqKeyboard.
+	bool blackNotes[10];
+	bool whiteNotes[16];
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		if (i < 10) blackNotes[i] = false;
+		whiteNotes[i] = false;
+	}
+	for (uint8_t i = 0; i < 6; i++)
+	{
+		int8_t key = notesAsKeys[i];
+		if (key >= 1 && key <= 26)
+		{
+			if (key >= 11) whiteNotes[key - 11] = true;
+			else blackNotes[key - 1] = true;
+		}
+	}
+
+	// --- compact keyboard in the top ~22px (leaves the bottom for the step markers) ---
+	const uint8_t wkInc = 6, wkWidth = 7, wkStartX = 16, wkStartY = 0, wkHeight = 22;
+	const uint8_t bkInc = 6, bkWidth = 7, bkStartX = 13, bkStartY = 0, bkHeight = 14;
+
+	for (uint8_t i = 0; i < 16; i++)
+		if (!whiteNotes[i])
+			display.drawRect(wkStartX + (wkInc * i), wkStartY, wkWidth, wkHeight, WHITE);
+	for (uint8_t i = 0; i < 16; i++)
+		if (whiteNotes[i])
+		{
+			display.drawRect(wkStartX + (wkInc * i), wkStartY, wkWidth, wkHeight, BLACK);
+			display.fillRect(wkStartX + (wkInc * i) + 1, wkStartY, wkWidth - 2, wkHeight, WHITE);
+		}
+
+	uint8_t bOffset = 0;
+	for (uint8_t i = 0; i < 12; i++)
+	{
+		if (i == 1 || i == 3 || i == 6 || i == 8 || i == 11)
+			bOffset += 6;
+		uint8_t xStart = bkStartX + bOffset + (bkInc * i);
+		if (i > 0 && i < 11)
+		{
+			bool blackOn = blackNotes[i - 1];
+			if (blackOn)
+			{
+				display.fillRect(xStart, bkStartY, bkWidth, bkHeight, BLACK);
+				display.fillRect(xStart + 1, bkStartY + 1, bkWidth - 2, bkHeight - 2, WHITE);
+			}
+			else
+			{
+				display.fillRect(xStart, bkStartY, bkWidth, bkHeight, BLACK);
+				display.drawRect(xStart + 1, bkStartY + 1, bkWidth - 2, bkHeight - 2, WHITE);
+			}
+		}
+		else
+		{
+			display.fillRect(xStart, bkStartY, bkWidth, bkHeight, BLACK);
+			display.drawRect(xStart + 1, bkStartY + 1, bkWidth - 2, bkHeight - 2, WHITE);
+			display.fillRect(xStart + 2, bkStartY, bkWidth - 4, bkHeight - 1, BLACK);
+		}
+	}
+
+	display.fillRect(0, wkStartY, 16, wkHeight + 1, BLACK);	 // trim left side
+	display.fillRect(113, wkStartY, 15, wkHeight + 1, BLACK); // trim right side
+	display.drawLine(18, wkStartY, 110, wkStartY, WHITE);	 // cap the top
+	if (!whiteNotes[0])
+		display.drawLine(16, wkHeight - 8, 16, wkHeight - 1, WHITE); // left wall
+	if (!whiteNotes[15])
+		display.drawLine(112, wkHeight - 8, 112, wkHeight - 1, WHITE); // right wall
+
+	// --- 16 step-marker cells beneath the keyboard ---
+	const uint8_t bw = 6, bh = 4, pitch = 7, my = 27;
+	uint8_t startX = (128 - (16 * pitch - 1)) / 2;
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		int x = startX + i * pitch;
+		if (filled && filled[i])
+			display.fillRect(x, my, bw, bh, WHITE);
+		else
+			display.drawRect(x, my, bw, bh, WHITE);
+		if ((int8_t)i == focus)
+			display.fillRect(x, my - 2, bw, 1, WHITE); // focus tick above
+	}
+}
+
 void OmxDisp::dispStepOverview(const char *modeName, const bool *filled, uint8_t count, int8_t playhead)
 {
 	display.fillRect(0, 0, 128, 32, BLACK);

@@ -581,26 +581,18 @@ void OmxModeForm::onDisplayStep()
 	// Holding step(s):
 	if (heldStepMask_ != 0)
 	{
-		// Note mode: render the piano keyboard (like the Notes view) for the held step's chord.
+		// Note mode: compact piano keyboard for the held step's chord, with step markers below.
 		if (stepEditMode_ == STEPMODE_NOTE && heldStepKey_ >= 0)
 		{
 			int8_t nts[6];
 			omni->getStepNotes(heldStepKey_, nts);
 			int8_t noteKeys[6];
-			String names;
 			for (uint8_t i = 0; i < 6; i++)
-			{
-				if (nts[i] >= 0 && nts[i] <= 127)
-				{
-					noteKeys[i] = omxUtil.noteNumberToKeyNumber(nts[i]);
-					names += omxFormGlobal.musicScale->getNoteName(nts[i] % 12, true);
-				}
-				else
-					noteKeys[i] = -1;
-			}
-			String pos = String(heldStepKey_ + 1) + ":" + String(omni->activePage() + 1);
-			const char *labels[2] = {pos.c_str(), names.c_str()};
-			omxDisp.dispSeqKeyboard(noteKeys, true, labels, 2);
+				noteKeys[i] = (nts[i] >= 0 && nts[i] <= 127) ? omxUtil.noteNumberToKeyNumber(nts[i]) : -1;
+			bool filled[16];
+			for (uint8_t i = 0; i < 16; i++)
+				filled[i] = omni->stepIsOn(i);
+			omxDisp.dispStepNoteKeyboard(noteKeys, filled, heldStepKey_);
 			return;
 		}
 
