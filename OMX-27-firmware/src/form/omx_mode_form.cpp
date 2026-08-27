@@ -517,8 +517,10 @@ bool OmxModeForm::onEncoderNotes(int dir)
 		omxLeds.setDirty();
 		return true;
 	}
-	if (notesCursor_ <= 1) // keyboard / seq-notes: change the selected step
+	if (notesCursor_ == 0) // keyboard: change the selected step
 		notesSelStep_ = (uint8_t)constrain((int)notesSelStep_ + dir, 0, 15);
+	else if (notesCursor_ == 1) // seq notes page: toggle the names/numbers switch
+		omxFormGlobal.useNoteNumbers = (dir > 0);
 	else if (notesCursor_ <= 5) // scale params
 		notesEditScaleParam(notesCursor_ - 2, dir);
 	else // step params (pid 0-7)
@@ -936,23 +938,24 @@ void OmxModeForm::onDisplayNotes()
 		noteKeys[i] = (chord[i] >= 0 && chord[i] <= 127) ? omxUtil.noteNumberToKeyNumber(chord[i]) : -1;
 
 	// --- Encoder pages ---
-	// Page 1 (cursor 1): the selected step's note names as text (no keyboard).
+	// Page 1 (cursor 1): the exact Seq notes page (STEPNOTES) — up to 6 notes with the
+	// names/numbers switch. Edit mode boxes + toggles the switch.
 	if (notesCursor_ == 1)
 	{
-		String noteStr = "";
-		uint8_t cnt = 0;
+		const char *headers[1] = {omxFormGlobal.useNoteNumbers ? "Note Numbers" : "Notes"};
+		String slots[6];
+		const char *labels6[6];
 		for (uint8_t i = 0; i < 6; i++)
+		{
 			if (chord[i] >= 0 && chord[i] <= 127)
 			{
-				if (cnt)
-					noteStr += " ";
-				noteStr += MusicScales::getFullNoteName(chord[i]);
-				cnt++;
+				slots[i] = omxFormGlobal.useNoteNumbers ? String((int)chord[i]) : String(MusicScales::getFullNoteName(chord[i]));
+				labels6[i] = slots[i].c_str();
 			}
-		if (cnt == 0)
-			noteStr = "---";
-		String stepLbl = "STEP " + String(notesSelStep_ + 1);
-		omxDisp.dispGenericModeLabelDoubleLine(noteStr.c_str(), stepLbl.c_str(), 0, 0);
+			else
+				labels6[i] = "-";
+		}
+		omxDisp.dispNoteSlots(labels6, headers[0], 6, notesEncEdit_);
 		return;
 	}
 
@@ -962,9 +965,11 @@ void OmxModeForm::onDisplayNotes()
 		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
 		String vals[4];
 		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
-		vals[1] = (scaleConfig.scalePattern < 0) ? String("OFF") : String(MusicScales::getScaleName(scaleConfig.scalePattern));
-		vals[2] = scaleConfig.lockScale ? "ON" : "OFF";
-		vals[3] = scaleConfig.group16 ? "ON" : "OFF";
+		// SCALE shows a number (name pops as a message on change); LOCK/GROUP show 0/1 — full words
+		// overflow the narrow cell font.
+		vals[1] = (scaleConfig.scalePattern < 0) ? String("-") : String((int)scaleConfig.scalePattern);
+		vals[2] = scaleConfig.lockScale ? "1" : "0";
+		vals[3] = scaleConfig.group16 ? "1" : "0";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 2, notesEncEdit_);

@@ -1030,6 +1030,12 @@ void OmxDisp::dispNotesJump(const uint8_t *stepState, uint8_t pageLen, int8_t fo
 	drawStepRow(23, stepState, pageLen, focus);
 }
 
+void OmxDisp::dispNoteSlots(const char *slotNames[6], const char *header, uint8_t selected, bool encoderSelect)
+{
+	const char *headers[1] = {header};
+	dispCenteredSlots(FONT_LABELS, slotNames, 6, selected, encoderSelect, true, true, headers, 1);
+}
+
 void OmxDisp::dispTrackLength(const char *rateStr, uint8_t activeCount)
 {
 	display.fillRect(0, 0, 128, 32, BLACK);

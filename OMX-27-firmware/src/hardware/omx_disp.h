@@ -78,6 +78,9 @@ public:
 	// Notes-view F1 (jump): "JUMP" on the left, the 4 page icons on the right (same position as
 	// the track page), and the 16-step row below (focus = the step being edited).
 	void dispNotesJump(const uint8_t *stepState, uint8_t pageLen, int8_t focus, uint8_t enabledPages, uint8_t activePage);
+	// The Seq STEPNOTES page: 6 note slots (FONT_LABELS) under a header. selected 0-5 boxes a
+	// slot, 6 boxes the header (the names/numbers switch); encoderSelect draws the box.
+	void dispNoteSlots(const char *slotNames[6], const char *header, uint8_t selected, bool encoderSelect);
 	// Mix F3 (LEN | RATE): rate label on top, track length as a 16-cell bar on the bottom.
 	// activeCount cells (0-16) are full boxes (steps within the length); the rest are dashes.
 	// Every 4th active cell gets a left notch to make groups of 4 easier to count.
