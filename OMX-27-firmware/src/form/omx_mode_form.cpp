@@ -275,6 +275,8 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	notesModalHeld_ = false;
 	notesHoldUIShown_ = false;
 	notesF1Used_ = notesF2Used_ = false;
+	notesCursor_ = 0; // open on the keyboard page, select mode
+	notesEncEdit_ = false;
 
 	// Editor views map to an OMNI UI mode, applied to every track so the view stays
 	// consistent when you switch tracks. Patterns / MI are rendered by the container.
@@ -467,6 +469,71 @@ int8_t OmxModeForm::notesPaletteMode()
 	if (h12)
 		return STEPMODE_LENGTH;
 	return -1;
+}
+
+// Scale page params: 0 root · 1 scale · 2 lock · 3 group (global scaleConfig).
+void OmxModeForm::notesEditScaleParam(uint8_t param, int dir)
+{
+	if (dir == 0)
+		return;
+	switch (param)
+	{
+	case 0: // root
+	{
+		int prev = scaleConfig.scaleRoot;
+		scaleConfig.scaleRoot = constrain(scaleConfig.scaleRoot + dir, 0, 11);
+		if (prev != scaleConfig.scaleRoot)
+			omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
+		break;
+	}
+	case 1: // scale pattern (-1 = off / chromatic)
+	{
+		int prev = scaleConfig.scalePattern;
+		scaleConfig.scalePattern = constrain(scaleConfig.scalePattern + dir, -1, (int)MusicScales::getNumScales() - 1);
+		if (prev != scaleConfig.scalePattern)
+		{
+			omxDisp.displayMessage(MusicScales::getScaleName(scaleConfig.scalePattern));
+			omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
+		}
+		break;
+	}
+	case 2: scaleConfig.lockScale = (dir > 0); break; // lock
+	case 3: scaleConfig.group16 = (dir > 0); break;   // group
+	}
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+}
+
+// Encoder turn in the Notes view: select mode moves the page cursor; edit mode changes the
+// value (the step on the keyboard/notes pages, the param on the scale/step-param pages).
+bool OmxModeForm::onEncoderNotes(int dir)
+{
+	if (dir == 0)
+		return true;
+	if (!notesEncEdit_)
+	{
+		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 13);
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
+	if (notesCursor_ <= 1) // keyboard / seq-notes: change the selected step
+		notesSelStep_ = (uint8_t)constrain((int)notesSelStep_ + dir, 0, 15);
+	else if (notesCursor_ <= 5) // scale params
+		notesEditScaleParam(notesCursor_ - 2, dir);
+	else // step params (pid 0-7)
+		static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine())->editStepParam(notesSelStep_, notesCursor_ - 6, dir);
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+	return true;
+}
+
+// Encoder click in the Notes view: toggle select vs edit.
+bool OmxModeForm::onEncoderButtonNotes()
+{
+	notesEncEdit_ = !notesEncEdit_;
+	omxDisp.setDirty();
+	return true;
 }
 
 void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
@@ -863,6 +930,56 @@ void OmxModeForm::onDisplayNotes()
 	for (uint8_t i = 0; i < 6; i++)
 		noteKeys[i] = (chord[i] >= 0 && chord[i] <= 127) ? omxUtil.noteNumberToKeyNumber(chord[i]) : -1;
 
+	// --- Encoder pages ---
+	// Page 1 (cursor 1): the seq-style labelled keyboard (step:page + note names).
+	if (notesCursor_ == 1)
+	{
+		String noteStr = "";
+		for (uint8_t i = 0; i < 6; i++)
+			if (chord[i] >= 0 && chord[i] <= 127)
+				noteStr += omxFormGlobal.musicScale->getFullNoteName(chord[i]);
+		String stepLbl = String(notesSelStep_ + 1) + ":" + String(omni->activePage() + 1);
+		const char *labels[2] = {stepLbl.c_str(), noteStr.c_str()};
+		omxDisp.dispSeqKeyboard(noteKeys, true, labels, 2);
+		return;
+	}
+
+	// Scale page (cursor 2-5): Root / Scale / Lock / Group.
+	if (notesCursor_ >= 2 && notesCursor_ <= 5)
+	{
+		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
+		String vals[4];
+		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
+		vals[1] = (scaleConfig.scalePattern < 0) ? String("OFF") : String(MusicScales::getScaleName(scaleConfig.scalePattern));
+		vals[2] = scaleConfig.lockScale ? "ON" : "OFF";
+		vals[3] = scaleConfig.group16 ? "ON" : "OFF";
+		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
+		bool locked[4] = {false, false, false, false};
+		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 2, notesEncEdit_);
+		return;
+	}
+
+	// Step-param pages (cursor 6-13): pid 0-3 (Vel/Nudge/Len/MFX) or 4-7 (Prob/Cond/Func/Accum).
+	if (notesCursor_ >= 6 && notesCursor_ <= 13)
+	{
+		uint8_t base = (notesCursor_ <= 9) ? 0 : 4;
+		const char *labels[4];
+		String vals[4];
+		const char *values[4];
+		bool locked[4];
+		for (uint8_t i = 0; i < 4; i++)
+		{
+			uint8_t pid = base + i;
+			labels[i] = omni->stepParamLabel(pid);
+			vals[i] = omni->stepParamBox(notesSelStep_, pid);
+			values[i] = vals[i].c_str();
+			locked[i] = omni->stepParamLocked(notesSelStep_, pid);
+		}
+		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 6 - base, notesEncEdit_);
+		return;
+	}
+
+	// Page 0: the main keyboard + step strip.
 	omxDisp.dispStepNoteKeyboard(noteKeys, stepState, pageLen, notesSelStep_);
 }
 
@@ -2087,16 +2204,10 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 	if (onEncoderTrackPage(enc.dir()))
 		return;
 
-	// Notes view: the encoder steps through the current page's 16 steps.
+	// Notes view: the encoder navigates its pages (select) / edits values (edit).
 	if (formView_ == FORMVIEW_NOTES)
 	{
-		int dir = enc.dir();
-		if (dir != 0)
-		{
-			notesSelStep_ = (uint8_t)constrain((int)notesSelStep_ + dir, 0, 15);
-			omxDisp.setDirty();
-			omxLeds.setDirty();
-		}
+		onEncoderNotes(enc.dir());
 		return;
 	}
 
@@ -2189,6 +2300,9 @@ void OmxModeForm::onEncoderButtonDown()
 		return;
 
 	if (onEncoderButtonTrackPage())
+		return;
+
+	if (formView_ == FORMVIEW_NOTES && !viewEditActive() && onEncoderButtonNotes())
 		return;
 
 	if (onEncoderButtonStep())

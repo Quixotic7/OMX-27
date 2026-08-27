@@ -222,6 +222,14 @@ private:
 	bool notesF1Used_ = false;         // F1 was used as a modifier this hold (suppresses quick-copy)
 	bool notesF2Used_ = false;         // F2 was used as a modifier this hold (suppresses quick-paste)
 	int8_t notesPaletteMode();         // active palette STEPMODE from held 11/12/13, -1 = none
+	// Encoder-navigated pages (flat cursor): 0 = keyboard, 1 = seq-style notes, 2-5 = scale
+	// (root/scale/lock/group), 6-9 = step params A (vel/nudge/len/mfx), 10-13 = step params B
+	// (prob/cond/func/accum). Click toggles select (turn = move cursor) vs edit (turn = change value).
+	uint8_t notesCursor_ = 0;
+	bool notesEncEdit_ = false;
+	bool onEncoderNotes(int dir);       // encoder turn in the Notes view. consumed?
+	bool onEncoderButtonNotes();        // encoder click in the Notes view. consumed?
+	void notesEditScaleParam(uint8_t param, int dir); // 0 root · 1 scale · 2 lock · 3 group
 	void onKeyUpdateNotes(OMXKeypadEvent e);
 	void updateNotesLEDs();
 	void onDisplayNotes();
