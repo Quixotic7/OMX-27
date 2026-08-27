@@ -740,11 +740,16 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 	}
 
 	// ---- No modifier: clear + piano ----
+	// Key 14: quick tap = clear the step (into the buffer). Hold = keep the step but clear the
+	// P-Lock on the currently-selected step param (on a step-param page). No message — the UI shows it.
 	if (k == 14)
 	{
-		if (down && !held)
+		if (!down)
 		{
-			omni->stepCut(notesSelStep_); // clear into the buffer (F2 pastes it back)
+			if (e.quickClicked())
+				omni->stepCut(notesSelStep_);
+			else if (notesCursor_ >= 6 && notesCursor_ <= 13)
+				omni->clearStepParamLock(notesSelStep_, notesCursor_ - 6);
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
@@ -931,16 +936,23 @@ void OmxModeForm::onDisplayNotes()
 		noteKeys[i] = (chord[i] >= 0 && chord[i] <= 127) ? omxUtil.noteNumberToKeyNumber(chord[i]) : -1;
 
 	// --- Encoder pages ---
-	// Page 1 (cursor 1): the seq-style labelled keyboard (step:page + note names).
+	// Page 1 (cursor 1): the selected step's note names as text (no keyboard).
 	if (notesCursor_ == 1)
 	{
 		String noteStr = "";
+		uint8_t cnt = 0;
 		for (uint8_t i = 0; i < 6; i++)
 			if (chord[i] >= 0 && chord[i] <= 127)
-				noteStr += omxFormGlobal.musicScale->getFullNoteName(chord[i]);
-		String stepLbl = String(notesSelStep_ + 1) + ":" + String(omni->activePage() + 1);
-		const char *labels[2] = {stepLbl.c_str(), noteStr.c_str()};
-		omxDisp.dispSeqKeyboard(noteKeys, true, labels, 2);
+			{
+				if (cnt)
+					noteStr += " ";
+				noteStr += MusicScales::getFullNoteName(chord[i]);
+				cnt++;
+			}
+		if (cnt == 0)
+			noteStr = "---";
+		String stepLbl = "STEP " + String(notesSelStep_ + 1);
+		omxDisp.dispGenericModeLabelDoubleLine(noteStr.c_str(), stepLbl.c_str(), 0, 0);
 		return;
 	}
 
