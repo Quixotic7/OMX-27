@@ -251,6 +251,7 @@ private:
 	uint8_t selectedMachine_;
 
 	Micros ledUpdateTime_;
+	int16_t lastPlayheadStep_ = -1; // selected track's last-rendered playing step (for refresh-on-advance)
 
 	// uint8_t copiedMachineIndex_;
 

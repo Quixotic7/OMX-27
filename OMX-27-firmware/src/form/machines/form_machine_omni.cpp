@@ -2212,7 +2212,7 @@ namespace FormOmni
                     playingStepKey = map(playingStepKey, 0, 16 * kZoomMults[zoomLevel_], 0, 15);
                 }
 
-                strip.setPixelColor(11 + playingStepKey, lastTriggeredStepState_ ? WHITE : RED);
+                strip.setPixelColor(11 + playingStepKey, GREEN); // playhead: steady bright green
             }
         }
         break;

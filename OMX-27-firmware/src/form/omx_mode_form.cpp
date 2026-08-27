@@ -805,8 +805,8 @@ void OmxModeForm::updateStepLEDs()
 		uint32_t col = LEDOFF;
 		if (omni->stepIsOn(i))
 			col = omni->getStepMute(i) ? DKRED : hue;
-		if (omxFormGlobal.isPlaying && i == playhead && blink)
-			col = WHITE; // playhead flashes over the step
+		if (omxFormGlobal.isPlaying && i == playhead)
+			col = GREEN; // playhead: steady bright green over the step
 		if (heldStepMask_ & (1 << i))
 			col = blink ? WHITE : LOWWHITE; // held steps flash (e.g. while editing on a param page)
 		strip.setPixelColor(11 + i, col);
@@ -1494,13 +1494,29 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 
 	if (omxFormGlobal.isPlaying)
 	{
-		uint32_t stepmicros = seqConfig.currentFrameMicros;
+		// Refresh the instant the selected track's step advances, so the playhead (LED + the
+		// under-step display marker) tracks each step exactly instead of jumping in coarse chunks.
+		auto selOmni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		int16_t curStep = (int16_t)selOmni->playingStepIndex();
+		if (curStep != lastPlayheadStep_)
+		{
+			lastPlayheadStep_ = curStep;
+			omxLeds.setDirty();
+			omxDisp.setDirty();
+		}
 
+		// Periodic refresh so blink animations (soloed-track / held-step flash) keep ticking
+		// between step advances.
+		uint32_t stepmicros = seqConfig.currentFrameMicros;
 		if (stepmicros >= ledUpdateTime_)
 		{
-			ledUpdateTime_ = stepmicros + clockConfig.ppqInterval * 12;
+			ledUpdateTime_ = stepmicros + clockConfig.ppqInterval * 3;
 			omxLeds.setDirty();
 		}
+	}
+	else
+	{
+		lastPlayheadStep_ = -1;
 	}
 
 	// Serial.println("LoopUpdate complete");
