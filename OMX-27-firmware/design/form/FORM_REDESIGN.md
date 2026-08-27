@@ -1,9 +1,10 @@
 # FORM — Redesign Proposal (v2 interaction model)
 
-A proposed rework of FORM's interaction model, replacing the confusing **knob-mode
-matrix** with a small set of **views** and **pot banks** (like MI mode). This is a
-*design draft* to iterate on — nothing here is built yet. Companion frames:
-[`form_redesign.json`](form_redesign.json). Current as-built behaviour lives in
+A rework of FORM's interaction model, replacing the confusing **knob-mode matrix** with a
+small set of **views** and **pot banks** (like MI mode). Much of this is now **built** — the
+shell, Mix, and Step views ship, with sections marked _**built**_ describing the actual
+firmware (see §4.0–4.2); the rest is still design to iterate on. Companion frames:
+[`form_redesign.json`](form_redesign.json). Current as-built (v1) behaviour lives in
 [`FORM_DESIGN.md`](FORM_DESIGN.md).
 
 ## 0. FORM is now a single-engine, 8-track sequencer
@@ -131,29 +132,75 @@ same** (§6). The **current edit page is shared** across the editing views (Step
 Transpose / Notes) and selected on the AUX layer. The six views are **Mix · Step ·
 Transpose · Notes · Patterns · MI**.
 
-### 4.1 Mix  _(≈ today's base view)_
-Mix is for **mixing / performance**, not step editing.
-- **Keys 3–10 = the 8 tracks** (per-track `seqColors`; selected WHITE, muted RED, empty
-  dim, fired-this-step INDIGO). **Tap** = select · **double-click** = enter Step view ·
-  **hold** = per-track controls on the low row (below).
-- **Low row (11–26) = the selected track's pattern.** Tapping a step **plays that step's
-  programmed notes** — you're jamming the *sequence* (triggering the steps you wrote), not
-  a chromatic keyboard. It does not open the note editor. (For live chromatic playing, use
-  the **MI view**, §4.6.)
-- **F1 = Mute, F2 = Solo** (modifiers): hold **F1 + tap a track** = mute; hold **F2 + tap a
-  track** = solo. Hold **F1 + tap a step** = toggle that single step's mute.
-- **F3 (hold F1+F2) = track rate:** top row 3–10 = rate options for the selected track;
-  the low row mirrors the per-track controls.
-- **Hold a track → per-track controls on the low row:** **11 = Mute · 12 = Solo · 14–18 =
-  play mode** — 14 forward · 15 reverse · 16 forward-pong · 17 reverse-pong · **18 random-
-  page** ("random-page" plays each *enabled* page of the pattern in random order) · **25 =
-  copy track · 26 = paste track** (the §3.5 buffer). (13 free.)
+### 4.0 The track page & view selector  _(shared page-1 overview — **built** Aug 2026)_
+
+Both **Mix** and **Step** open on the same **page-1 track overview** (`dispSeqTrackPage`), a
+single at-a-glance status screen. Top to bottom / left to right:
+
+- **8 track-state squares** (top-left): a filled 4×4 square = an **unmuted** track, an
+  outline = a **muted** one; the **selected** track carries an underline. Solo overrides:
+  if any track is soloed, every non-soloed track reads as muted.
+- **Transport widget** (top-middle): **play ▸ / stop ▪ / record ●**, the active state filled
+  and the others outlined. (Record is drawn but not yet wired — always shows play/stop.)
+- **View tag** (top, right of transport): **"MIX"** or **"SEQ"** — the name of the current
+  view. This is also the **encoder view selector** (below); while selecting it inverts to a
+  filled box with black text and shows the live view (`MIX / SEQ / TRSP / NOTE / PTRN / MI`).
+- **BPM** (top-right).
+- **Name row** (chunky font): **"TRK n"** — or **"MUTE"** while F1 is held in Mix — plus the
+  **play-mode icon** (fwd / rev / fwd-pong / rev-pong / random) and the **rate** (`1:n`).
+- **4 page icons** (right): filled = enabled page, outline = disabled; the active page is
+  underlined.
+- **16-step row** (bottom): each step is one of — **empty** (outline) · **has-notes** (solid)
+  · **ghost** = on but no notes (inset-top box + two dots) · **muted-ghost** (inset block +
+  top corners + punched dot-row) · **muted-note** (inset 4×4 block). Steps past the page
+  **length** shrink to short boxes; the **playhead** draws a tick beneath the current step.
+
+**Encoder = view selector (page 1).** The encoder has no other job on page 1, so it drives
+view switching:
+- **Click** the encoder → enter the selector (the view tag boxes/inverts). **Turn** →
+  **switch views instantly** (live), wrapping through all six. **Click again** (from
+  anywhere) → leave the selector.
+- **Holding AUX** also makes the selector live — turn the encoder while AUX is held to switch
+  views — in addition to the AUX + 13–18 key selector (§6). Releasing AUX keeps the view you
+  landed on.
+- The selector never steals a normal Step-overview turn (that still pages into the param
+  menu); it only intercepts the encoder while actively selecting.
+
+The under-step playhead marker and the LED playhead both advance on **every step** (the loop
+marks the display+LEDs dirty the instant the selected track's step changes); the **LED
+playhead is a steady bright GREEN**, no blink.
+
+→ `seq-track-page-*.txt` / `mix-track-page-*.txt` frames (`design/form/UI/`).
+
+### 4.1 Mix  _(performance / mixing — **built** Aug 2026)_
+Mix is for **mixing / performance**, not step editing. Opens on the shared track page (§4.0)
+with the **"MIX"** tag.
+- **Keys 3–10 = the 8 tracks** (per-track hue; selected WHITE / SALMON-if-muted, muted RED,
+  fired-this-step INDIGO; soloed tracks flash). **Tap** = select · **hold** = per-track
+  controls on the low row (below). _(Double-click-to-open-Step was dropped; use the view
+  selector.)_
+- **Low row (11–26) = the selected track's pattern.** Tapping a step **auditions that step's
+  programmed notes** (note-on while held) — you're jamming the *sequence*, not a chromatic
+  keyboard. (For live chromatic play, use **MI**, §4.6.)
+- **F1 = Mute:** the page name flips to **"MUTE"**; **F1 + tap a track** = mute (no popup —
+  the track squares show it); **F1 + tap a step** = toggle that step's mute (shown by the
+  muted-step glyphs, §4.0).
+- **F2 = Solo / Fill:** **F2 + tap a track** = solo; **holding F2** also arms momentary
+  **FILL** on all tracks (steps with a Fill condition play). The F2 display is a split view:
+  top row = per-track solo cells, bottom = "Fill".
+- **F3 (hold F1+F2) = LEN | RATE:** shows the selected track's rate on top and its page
+  length as a 16-cell bar; top row 3–10 pick a rate.
+- **Hold a track → per-track controls on the low row:** **11 = Mute · 12 = Solo · 13–17 =
+  play mode** (fwd / rev / fwd-pong / rev-pong / **random**) · **19–26 = 8 track-colour
+  presets** (or hold the track + turn **K5** for a continuous hue). While a track is held the
+  page name boxes and the bottom labels **"MUTE / PLAY MODE"** (same look as Step's F2+track).
 
 → `form_redesign.json` **state 1** + `form_mix.json` (hold-track & rate detail).
 
-### 4.2 Step  _(per-track step editing — 8 hold-modes)_
-Locked to one track. The **top row (keys 3–10) selects one of 8 step-edit modes**; the
-active mode is lit bright, the others dim:
+### 4.2 Step  _(per-track step editing — 8 hold-modes — **built** Aug 2026)_
+Locked to one track; opens on the shared track page (§4.0) with the **"SEQ"** tag. The
+**top row (keys 3–10) selects one of 8 step-edit modes**; the active mode is lit bright, the
+others dim:
 
 | Key | Mode | Edits, per step |
 |---|---|---|
@@ -167,20 +214,33 @@ active mode is lit bright, the others dim:
 | 10 | **MIDI FX** | per-step MIDI-FX routing |
 
 **Editing in the active mode:**
-- **Single-click a step (11–26) = clear it.** The cleared step goes to the copy buffer, so
-  **F2 pastes it back** if you didn't mean it (§3.5). _(Double-click is no longer used —
-  it was axed to remove the click-vs-hold collision.)_
-- **Hold a step (11–26)** → the **top row keys 1–10 become the value palette** for the
-  current mode; tap to set that step's value. **Press AUX while holding = reset that step
-  to the mode's default** (AUX has no other job while a step is held). Turning a pot-bank
-  knob while holding still lays a CC P-Lock (§3).
-- **Fine values via encoder:** the 10 keys are *coarse*. For a precise value (and for
-  **microtiming**, which has no key palette), select that parameter in the **track menu**
-  and **turn the encoder while holding the step**.
-- **Hold a mode key (3–10)** → **keys 11–20 become the value palette for the mode's
-  DEFAULT** value (what steps use until given an explicit value); tap one to set it.
-- **F1 / F2 = copy / paste the selected step** (§3.5). The full chord editor is the
-  **Notes view** (AUX + 16).
+- **Quick-tap a step (11–26) = toggle it.** An empty step is **created** (stamped with the
+  last chord entered, default middle C); a step with content is **cleared** (into the copy
+  buffer, so **F2/paste undoes it**, §3.5). _(No double-click — it was axed to remove the
+  click-vs-hold collision.)_
+- **Hold a step (11–26)** → the **top row becomes the value palette** for the current mode
+  (keys **1–10**, or **5–10** for MIDI-FX); tap to set the held step(s)' value. Several steps
+  can be held at once and edited together. **Press AUX while holding = reset that step to the
+  mode's default** (AUX has no other job while a step is held). Turning a pot-bank knob while
+  holding still lays a CC P-Lock (§3). A short (~150 ms) delay keeps quick taps from flashing
+  the hold UI.
+- **Fine values via encoder:** the palette keys are *coarse*. For a precise value (and for
+  **microtiming**, which has no key palette), navigate to that param page with the encoder and
+  **turn the encoder while holding the step** (param pages 1–2 are P-Lockable: Vel/Nudge/Len/
+  MFX and Prob/Cond/Func/Accum; the encoder click clears a lock).
+- **Hold a mode key (3–10)** → the value palette sets the mode's **DEFAULT** (what steps use
+  until given an explicit value).
+- **F1 + step = copy / paste the step; F2 + step = cut / paste** (§3.5). The full chord editor
+  is the **Notes view**.
+
+**Modifiers (steps not held — a held step freezes F1/F2 into the palette):**
+- **F1 + top row 3–6 = the 4 pages:** single-click selects the edit page; **double-click
+  solos** that page; **hold one page + press another** enables that **range/loop**. (This is
+  where page select/solo/loop live in Step view — not on the AUX layer.)
+- **F2 + top row 3–10 = select the track;** holding one exposes its Mix hold-track controls
+  (mute/solo/play-mode/colour) on the low row, with the name boxed + **"MUTE / PLAY MODE"**.
+- **F3 + top row 3–10 = rate;** **F3 + a low-row step = set the active page's length** (1–16;
+  steps beyond go dark — per-page length gives polymeter).
 
 **The value palette (keys 1–10) per mode:**
 - **Note** — chord entry works exactly like today's note editor: while holding the step,
@@ -202,8 +262,9 @@ active mode is lit bright, the others dim:
 - **MIDI FX** — **Off + 5 FX slots** (same MIDI-FX as elsewhere on the OMX). Per-step, so
   different steps can route through different FX slots (and it's P-lockable — true weirdness).
 
-**Pages** are on the **AUX layer** (keys 6–9 — select / solo / loop-range, §6);
-**F3 (F1+F2) = structure layer** sets **page length** (tap steps, §5).
+**Pages** in Step view are on **F1 + top row 3–6** (select / solo / loop-range, above);
+**page length** is **F3 + a low-row step**. _(The original plan put pages on the AUX layer;
+in the build they live under F1 so the AUX layer stays view-switch + transport only.)_
 
 → `form_redesign.json` **states 2, 3, 4** + `form_step.json` (Math + Velocity palettes).
 
@@ -368,7 +429,8 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 | Step has notes | LTBLUE | `#a8a8ff` |
 | Step empty (in length) | DKBLUE | `#00004d` |
 | Step has a P-Lock | MAGENTA | `#ff00ff` |
-| Playhead (firing / silent) | WHITE / RED | `#ffffff` / `#ff0000` |
+| Playhead (LED, both views) | **GREEN, steady** (no blink) | `#00ff00` |
+| Muted step (LED) | DKRED | `#4d0000` |
 | Beyond page length | off | `#000000` |
 | Step modes (Note/Vel/Len/Repeat/Chance/Math/Func/MFX), active bright / dim | ORANGE YELLOW GREEN CYAN BLUE PURPLE MAGENTA ROSE | `#ff8000 #ffff00 #00ff00 #00ffff #0000ff #7f00ff #ff00ff #ff0080` |
 | Value palette: available / current-value / root | dim-blue / LTYELLOW / periwinkle | `#000090` / `#ffff80` / `#a2a2ff` |
