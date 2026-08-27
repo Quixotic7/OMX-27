@@ -512,19 +512,28 @@ bool OmxModeForm::onEncoderNotes(int dir)
 		return true;
 	if (!notesEncEdit_)
 	{
-		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 13);
+		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 19);
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 		return true;
 	}
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	if (notesCursor_ == 0) // keyboard: change the selected step
 		notesSelStep_ = (uint8_t)constrain((int)notesSelStep_ + dir, 0, 15);
-	else if (notesCursor_ == 1) // seq notes page: toggle the names/numbers switch
+	else if (notesCursor_ <= 6) // seq notes page, note slots 0-5: edit that note's value
+	{
+		int8_t chord[6];
+		omni->getStepNotes(notesSelStep_, chord);
+		uint8_t slot = notesCursor_ - 1;
+		chord[slot] = (int8_t)constrain(chord[slot] + dir, -1, 127);
+		omni->stepSetNotes(notesSelStep_, chord);
+	}
+	else if (notesCursor_ == 7) // the names/numbers switch
 		omxFormGlobal.useNoteNumbers = (dir > 0);
-	else if (notesCursor_ <= 5) // scale params
-		notesEditScaleParam(notesCursor_ - 2, dir);
+	else if (notesCursor_ <= 11) // scale params
+		notesEditScaleParam(notesCursor_ - 8, dir);
 	else // step params (pid 0-7)
-		static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine())->editStepParam(notesSelStep_, notesCursor_ - 6, dir);
+		omni->editStepParam(notesSelStep_, notesCursor_ - 12, dir);
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 	return true;
@@ -750,8 +759,8 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 		{
 			if (e.quickClicked())
 				omni->stepCut(notesSelStep_);
-			else if (notesCursor_ >= 6 && notesCursor_ <= 13)
-				omni->clearStepParamLock(notesSelStep_, notesCursor_ - 6);
+			else if (notesCursor_ >= 12 && notesCursor_ <= 19)
+				omni->clearStepParamLock(notesSelStep_, notesCursor_ - 12);
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
@@ -938,9 +947,9 @@ void OmxModeForm::onDisplayNotes()
 		noteKeys[i] = (chord[i] >= 0 && chord[i] <= 127) ? omxUtil.noteNumberToKeyNumber(chord[i]) : -1;
 
 	// --- Encoder pages ---
-	// Page 1 (cursor 1): the exact Seq notes page (STEPNOTES) — up to 6 notes with the
-	// names/numbers switch. Edit mode boxes + toggles the switch.
-	if (notesCursor_ == 1)
+	// Page 1 (cursor 1-7): the exact Seq STEPNOTES page — 6 selectable note slots + the
+	// names/numbers switch (cursor 7 = switch). encoderSelect is true in select mode.
+	if (notesCursor_ >= 1 && notesCursor_ <= 7)
 	{
 		const char *headers[1] = {omxFormGlobal.useNoteNumbers ? "Note Numbers" : "Notes"};
 		String slots[6];
@@ -955,12 +964,12 @@ void OmxModeForm::onDisplayNotes()
 			else
 				labels6[i] = "-";
 		}
-		omxDisp.dispNoteSlots(labels6, headers[0], 6, notesEncEdit_);
+		omxDisp.dispNoteSlots(labels6, headers[0], notesCursor_ - 1, !notesEncEdit_);
 		return;
 	}
 
-	// Scale page (cursor 2-5): Root / Scale / Lock / Group.
-	if (notesCursor_ >= 2 && notesCursor_ <= 5)
+	// Scale page (cursor 8-11): Root / Scale / Lock / Group.
+	if (notesCursor_ >= 8 && notesCursor_ <= 11)
 	{
 		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
 		String vals[4];
@@ -972,14 +981,14 @@ void OmxModeForm::onDisplayNotes()
 		vals[3] = scaleConfig.group16 ? "1" : "0";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 2, notesEncEdit_);
+		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 8, notesEncEdit_);
 		return;
 	}
 
-	// Step-param pages (cursor 6-13): pid 0-3 (Vel/Nudge/Len/MFX) or 4-7 (Prob/Cond/Func/Accum).
-	if (notesCursor_ >= 6 && notesCursor_ <= 13)
+	// Step-param pages (cursor 12-19): pid 0-3 (Vel/Nudge/Len/MFX) or 4-7 (Prob/Cond/Func/Accum).
+	if (notesCursor_ >= 12 && notesCursor_ <= 19)
 	{
-		uint8_t base = (notesCursor_ <= 9) ? 0 : 4;
+		uint8_t base = (notesCursor_ <= 15) ? 0 : 4;
 		const char *labels[4];
 		String vals[4];
 		const char *values[4];
@@ -992,7 +1001,7 @@ void OmxModeForm::onDisplayNotes()
 			values[i] = vals[i].c_str();
 			locked[i] = omni->stepParamLocked(notesSelStep_, pid);
 		}
-		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 6 - base, notesEncEdit_);
+		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 12 - base, notesEncEdit_);
 		return;
 	}
 
