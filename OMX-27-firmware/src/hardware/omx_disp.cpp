@@ -1001,6 +1001,35 @@ void OmxDisp::dispStepOverview(const char *modeName, const uint8_t *stepState, u
 	drawStepRow(23, stepState, pageLen, playhead);
 }
 
+void OmxDisp::dispNotesJump(const uint8_t *stepState, uint8_t pageLen, int8_t focus, uint8_t enabledPages, uint8_t activePage)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// "JUMP", chunky, left-aligned.
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_TENFAT);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	u8g2_display.setCursor(2, 16);
+	u8g2_display.print("JUMP");
+
+	// 4 page icons on the right — same x/y as the track page (dispSeqTrackPage).
+	for (uint8_t p = 0; p < 4; p++)
+	{
+		int x = 98 + p * 8;
+		drawPageIcon(x, 8, (enabledPages & (1 << p)) != 0, WHITE);
+		if (p == activePage)
+			display.fillRect(x, 18, 6, 1, WHITE);
+	}
+
+	drawStepRow(23, stepState, pageLen, focus);
+}
+
 void OmxDisp::dispTrackLength(const char *rateStr, uint8_t activeCount)
 {
 	display.fillRect(0, 0, 128, 32, BLACK);

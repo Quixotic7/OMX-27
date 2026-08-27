@@ -213,8 +213,9 @@ private:
 	// Param-palette holds (no F-key): hold 11 = velocity, 12 = length, 11+12 = math, 13 = chance;
 	// top row 1-10 sets the value. A quick tap of 11/12 navigates prev/next instead.
 	bool notesPaletteEngaged_ = false; // a palette hold (11/12/13, no F-key) is active
-	uint32_t notesHoldStartMs_ = 0;    // when it began (for the popup delay)
-	bool notesHoldUIShown_ = false;    // the palette popup has engaged (past the delay or edited)
+	bool notesModalHeld_ = false;      // any modal key (1/2/11/12/13) is held (drives the popup delay)
+	uint32_t notesHoldStartMs_ = 0;    // when the modal hold began (for the popup delay)
+	bool notesHoldUIShown_ = false;    // the hold popup has engaged (past the delay or edited)
 	bool notesSuppressPrev_ = false;   // key 11 was used as a palette hold (suppress its nav)
 	bool notesSuppressNext_ = false;   // key 12 was used as a palette hold (suppress its nav)
 	bool notesF1Used_ = false;         // F1 was used as a modifier this hold (suppresses quick-copy)

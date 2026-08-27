@@ -473,16 +473,21 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 	bool held = e.held();
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
+	// Track any modal-hold key (F1/F2 or a palette hold) so the popup can wait out a quick tap.
+	bool modalNow = midiSettings.keyState[1] || midiSettings.keyState[2] ||
+					midiSettings.keyState[11] || midiSettings.keyState[12] || midiSettings.keyState[13];
+	if (modalNow && !notesModalHeld_)
+	{
+		notesHoldStartMs_ = millis();
+		notesHoldUIShown_ = false;
+	}
+	notesModalHeld_ = modalNow;
+
 	// Engage a param-palette hold when 11/12/13 is pressed with no F-key held (see notesPaletteMode).
 	if ((k == 11 || k == 12 || k == 13) && down && !held &&
 		!midiSettings.keyState[1] && !midiSettings.keyState[2] &&
 		omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX)
 	{
-		if (!notesPaletteEngaged_)
-		{
-			notesHoldStartMs_ = millis();
-			notesHoldUIShown_ = false;
-		}
 		notesPaletteEngaged_ = true;
 		if (k == 11)
 			notesSuppressPrev_ = false;
@@ -580,6 +585,7 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 			omxDisp.displayMessage("P" + String(page + 1) + " LEN " + String(pageLen));
 		}
 		notesF1Used_ = notesF2Used_ = true;
+		notesHoldUIShown_ = true;
 		omxLeds.setDirty();
 		return;
 	}
@@ -619,12 +625,14 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 				omxLeds.setDirty();
 			}
 			notesF1Used_ = true;
+			notesHoldUIShown_ = true;
 			return;
 		}
 		if (down && !held && k >= 11 && k < 27)
 		{
 			notesSelStep_ = k - 11; // jump to step
 			notesF1Used_ = true;
+			notesHoldUIShown_ = true;
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
@@ -646,6 +654,7 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 			selectMachine(k - 3);
 			heldTrackKey_ = k - 3;
 			notesF2Used_ = true;
+			notesHoldUIShown_ = true;
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
@@ -803,28 +812,32 @@ void OmxModeForm::onDisplayNotes()
 		}
 	}
 
+	// F1/F2/F3 hold menus, only after the popup delay (so a quick tap doesn't flash them).
 	uint8_t sm = omxFormGlobal.shortcutMode;
-	// F3: rate + page length.
-	if (sm == FORMSHORTCUT_F3)
+	if (notesHoldUIShown_)
 	{
-		char rbuf[16];
-		snprintf(rbuf, sizeof(rbuf), "1:%u  LEN %u", (unsigned)kSeqRates[omni->getSeq().rate], (unsigned)pageLen);
-		omxDisp.dispStepOverview(rbuf, stepState, pageLen, notesSelStep_);
-		return;
-	}
-	// Hold F1: jump-to-step strip (pages on the top row).
-	if (sm == FORMSHORTCUT_F1)
-	{
-		omxDisp.dispStepOverview("JUMP / PAGES", stepState, pageLen, notesSelStep_);
-		return;
-	}
-	// Hold F2: track select.
-	if (sm == FORMSHORTCUT_F2)
-	{
-		char tbuf[16];
-		snprintf(tbuf, sizeof(tbuf), "TRACK %u", (unsigned)(selectedMachine_ + 1));
-		omxDisp.dispStepOverview(tbuf, stepState, pageLen, notesSelStep_);
-		return;
+		// F3: the exact same LEN | RATE screen as holding F3 on the Seq page.
+		if (sm == FORMSHORTCUT_F3)
+		{
+			char rbuf[12];
+			snprintf(rbuf, sizeof(rbuf), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
+			omxDisp.dispTrackLength(rbuf, omni->getPageLen(omni->activePage()));
+			return;
+		}
+		// Hold F1: "JUMP" + the page-1 page icons on the right; the low row is the jump selector.
+		if (sm == FORMSHORTCUT_F1)
+		{
+			omxDisp.dispNotesJump(stepState, pageLen, notesSelStep_, omni->getEnabledPages(), omni->activePage());
+			return;
+		}
+		// Hold F2: track select.
+		if (sm == FORMSHORTCUT_F2)
+		{
+			char tbuf[16];
+			snprintf(tbuf, sizeof(tbuf), "TRACK %u", (unsigned)(selectedMachine_ + 1));
+			omxDisp.dispStepOverview(tbuf, stepState, pageLen, notesSelStep_);
+			return;
+		}
 	}
 
 	int8_t chord[6];
@@ -1990,8 +2003,9 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 		stepHoldUIShown_ = true;
 		omxDisp.setDirty();
 	}
-	// Same delay for the Notes-view param-palette popup (velocity / length / math / chance).
-	if (notesPaletteEngaged_ && !notesHoldUIShown_ && (millis() - notesHoldStartMs_) >= 150)
+	// Same delay for every Notes-view hold popup (palette + F1/F2/F3 menus) so a quick tap of a
+	// modal key doesn't flash it.
+	if (formView_ == FORMVIEW_NOTES && notesModalHeld_ && !notesHoldUIShown_ && (millis() - notesHoldStartMs_) >= 150)
 	{
 		notesHoldUIShown_ = true;
 		omxDisp.setDirty();
