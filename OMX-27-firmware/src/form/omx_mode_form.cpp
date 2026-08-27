@@ -49,6 +49,7 @@ OmxModeForm::OmxModeForm()
 		machines_[i]->setContext(this);
 		machines_[i]->setNoteOnFptr(&OmxModeForm::seqNoteOnForwarder);
 		machines_[i]->setNoteOffFptr(&OmxModeForm::seqNoteOffForwarder);
+		static_cast<FormOmni::FormMachineOmni *>(machines_[i])->setChannel(i); // tracks default to MIDI ch 1-8
 		trackHue_[i] = i * (256 / kNumMachines); // spread 8 hues around the wheel
 	}
 
@@ -2127,6 +2128,22 @@ void OmxModeForm::onPotChanged(int potIndex, int prevValue, int newValue, int an
 		return;
 	}
 
+	// Step view: hold a step + turn a pot = P-Lock — lock that pot slot's CC to the pot value on
+	// every held step. Sent when the step fires (see triggerStep). Directly maps 0-127 (no pickup).
+	if (formView_ == FORMVIEW_STEP && heldStepMask_ != 0 && potIndex >= 0 && potIndex < 5)
+	{
+		auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		int8_t v = (int8_t)constrain(newValue, 0, 127);
+		for (uint8_t s = 0; s < 16; s++)
+			if (heldStepMask_ & (1 << s))
+				omni->setStepPotLock(s, (uint8_t)potIndex, v);
+		omxDisp.displayMessage("CC" + String(omni->potLockCC(potIndex)) + " " + String(v));
+		stepEdited_ = true; // a P-Lock edit suppresses the quick-click clear on release
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return;
+	}
+
 	auto selMachine = getSelectedMachine();
 
 	if(selMachine->doesConsumePots())
@@ -2861,8 +2878,10 @@ void OmxModeForm::onDisplayUpdate()
 	if (encoderConfig.enc_edit)
 		return;
 
-	if (omxDisp.canShowDisplay() == false)
-		return;
+	// Render every loop (like Euclidean) so the GFX buffer — cleared each loop in the .ino — is
+	// always repopulated. The old canShowDisplay() gate left it blank between the 60ms OLED
+	// flushes, which the screen-mirror then captured as blank frames (flicker). The physical OLED
+	// flush stays throttled in showDisplay(); this only refills the in-memory buffer.
 
 	// v2 shell: container-rendered views
 	if (formView_ == FORMVIEW_STEP)
@@ -3475,11 +3494,9 @@ int OmxModeForm::loadFromDisk(int startingAddress, Storage *storage)
 
 		if (machine != nullptr)
 		{
-			// uint8_t newMachType = machine->getType();
-
-			// Serial.println("Machine at " + String(i) + " is " + String(newMachType));
-			// Serial.println("Machine.getMachineIndex() = " + String(machine->getMachineIndex()));
-
+			// changeMachineAtIndex re-created the machine, so re-apply the default channel (track
+			// index -> MIDI ch 1-8). A valid on-disk load below overrides it with the saved channel.
+			static_cast<FormOmni::FormMachineOmni *>(machine)->setChannel(i);
 			startingAddress = machine->loadFromDisk(startingAddress, storage);
 		}
 		else

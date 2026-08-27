@@ -220,6 +220,23 @@ namespace FormOmni
         bool stepParamLocked(uint8_t key16, uint8_t pid);
         void clearStepParamLock(uint8_t key16, uint8_t pid); // clears the lock and resets to default
 
+        void setChannel(uint8_t ch) { seq_.channel = ch & 0x0F; } // 0-15 -> MIDI ch 1-16
+
+        // Per-step CC P-Lock: lock pot-slot `slot` (0-4) to `value` (0-127) on this step; -1 =
+        // unlocked. When the step fires it sends CC potLockCC(slot) with this value.
+        void setStepPotLock(uint8_t key16, uint8_t slot, int8_t value)
+        {
+            if (slot >= 5) return;
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            s->potVals[slot] = value;
+            if (value >= 0) s->trig = 1; // ensure the step fires so its locked CC is sent
+        }
+        int8_t getStepPotLock(uint8_t key16, uint8_t slot)
+        {
+            return (slot < 5) ? getTrack()->steps[key16toStep(key16)].potVals[slot] : (int8_t)-1;
+        }
+        uint8_t potLockCC(uint8_t slot); // the CC number a pot slot maps to (current pot bank)
+
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }
         void setSeq(const OmniSeq &s)

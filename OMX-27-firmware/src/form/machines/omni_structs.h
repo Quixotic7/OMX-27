@@ -208,7 +208,7 @@ namespace FormOmni
                 notes[i] = -1;
             for (uint8_t i = 0; i < 5; i++)
                 potVals[i] = -1;
-            vel = 127;
+            vel = 100;
             nudge = 0;
             len = 3;
             func = 0;
@@ -360,7 +360,7 @@ namespace FormOmni
 
         void initParamDefaults()
         {
-            paramDefaults[0] = 127; // vel
+            paramDefaults[0] = 100; // vel
             paramDefaults[1] = 0;   // nudge
             paramDefaults[2] = 3;   // len (0.75)
             paramDefaults[3] = 1;   // mfx (track)

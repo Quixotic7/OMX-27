@@ -465,6 +465,11 @@ namespace FormOmni
         return &getTrack()->steps[selStep_];
     }
 
+    uint8_t FormMachineOmni::potLockCC(uint8_t slot)
+    {
+        return (slot < NUM_CC_POTS) ? pots[seq_.potBank][slot] : 0;
+    }
+
     uint8_t FormMachineOmni::key16toStep(uint8_t key16)
     {
         uint8_t zoomMult = kZoomMults[zoomLevel_];
@@ -3013,7 +3018,7 @@ namespace FormOmni
     // Bump whenever the OmniSeq layout changes so old saves are skipped rather than
     // blitted into a mismatched struct. (The global EEPROM_VERSION also gates loads,
     // but this makes an OmniSeq change safe on its own.)
-    static const uint8_t kOmniSaveVersion = 7; // v7: per-page length + enabledPages
+    static const uint8_t kOmniSaveVersion = 8; // v8: default MIDI ch 1-8 + default velocity 100
 
     int FormMachineOmni::saveToDisk(int startingAddress, Storage *storage)
 	{

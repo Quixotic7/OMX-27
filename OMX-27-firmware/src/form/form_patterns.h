@@ -11,4 +11,11 @@
 struct FormPattern
 {
     FormOmni::OmniSeq tracks[FORM_NUM_TRACKS];
+
+    FormPattern()
+    {
+        // Tracks default to MIDI channels 1-8 (track index + 1).
+        for (uint8_t i = 0; i < FORM_NUM_TRACKS; i++)
+            tracks[i].channel = i & 0x0F;
+    }
 };
