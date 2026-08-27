@@ -376,13 +376,28 @@ void OmxModeForm::updateAuxViewLEDs()
 	strip.setPixelColor(4, omxFormGlobal.recReplace ? ORANGE : LOWWHITE);
 }
 
+static const char *kSwitchStyleNames[4] = {"FINISH LOOP", "NEXT BAR", "INSTANT", "CHAINED"};
+
 void OmxModeForm::updatePatternsLEDs()
 {
+	bool blink = omxLeds.getBlinkState();
+	// Top row 3-6: the switch style (active bright).
+	for (uint8_t s = 0; s < 4; s++)
+		strip.setPixelColor(3 + s, (s == switchStyle_) ? WHITE : LOWWHITE);
+	// Low row 11-26: pattern slots. current = WHITE, queued blinks, chain members CYAN, rest DKCYAN.
 	for (uint8_t i = 0; i < 16; i++)
 	{
 		uint32_t col = LEDOFF;
 		if (i < FORM_NUM_PATTERNS)
+		{
 			col = (i == activePattern_) ? WHITE : DKCYAN;
+			if (switchStyle_ == 3)
+				for (uint8_t c = 0; c < chainLen_; c++)
+					if (chain_[c] == i && i != activePattern_)
+						col = CYAN;
+			if ((int8_t)i == queuedPattern_)
+				col = blink ? WHITE : LEDOFF;
+		}
 		strip.setPixelColor(11 + i, col);
 	}
 }
@@ -390,18 +405,56 @@ void OmxModeForm::updatePatternsLEDs()
 void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
 {
 	uint8_t k = e.key();
-	if (!e.held() && e.down() && k >= 11 && k < 27)
+	if (e.held() || !e.down())
+		return;
+	// Top row 3-6: pick the switch style.
+	if (k >= 3 && k <= 6)
+	{
+		switchStyle_ = k - 3;
+		if (switchStyle_ != 3)
+			chainLen_ = 0; // leaving Chained clears the chain
+		omxDisp.displayMessage(kSwitchStyleNames[switchStyle_]);
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return;
+	}
+	// Low row 11-26: pattern slots.
+	if (k >= 11 && k < 27)
 	{
 		uint8_t idx = k - 11;
-		if (idx < FORM_NUM_PATTERNS)
+		if (idx >= FORM_NUM_PATTERNS)
+			return;
+		if (switchStyle_ == 3) // Chained: append to the chain (start it on the first tap)
+		{
+			if (chainLen_ < 16)
+				chain_[chainLen_++] = idx;
+			if (chainLen_ == 1)
+			{
+				chainPos_ = 0;
+				switchPattern(idx);
+			}
+		}
+		else if (switchStyle_ == 2 || !omxFormGlobal.isPlaying) // Instant (or stopped -> immediate)
+		{
 			switchPattern(idx);
+		}
+		else // Finish Loop / Next Bar: queue for the boundary
+		{
+			queuedPattern_ = idx;
+		}
+		omxDisp.setDirty();
+		omxLeds.setDirty();
 	}
 }
 
 void OmxModeForm::onDisplayPatterns()
 {
 	tempString = "P" + String(activePattern_ + 1) + "/" + String((int)FORM_NUM_PATTERNS);
-	omxDisp.dispGenericModeLabelDoubleLine("PATTERNS", tempString.c_str(), 0, 0);
+	if (queuedPattern_ >= 0)
+		tempString += " >P" + String(queuedPattern_ + 1);
+	else if (switchStyle_ == 3 && chainLen_ > 0)
+		tempString += " CH" + String(chainLen_);
+	omxDisp.dispGenericModeLabelDoubleLine(kSwitchStyleNames[switchStyle_], tempString.c_str(), 0, 0);
 }
 
 // MI view — the standalone MI-mode keyboard, brought in for live playing over the running
@@ -2361,13 +2414,35 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 		// under-step display marker) tracks each step exactly instead of jumping in coarse chunks.
 		auto selOmni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 		int16_t curStep = (int16_t)selOmni->playingStepIndex();
+		bool loopWrapped = false;
 		if (curStep != lastPlayheadStep_)
 		{
-			if (curStep < lastPlayheadStep_)
-				recClearedMask_ = 0; // playhead wrapped -> new record pass (replace mode)
+			loopWrapped = (curStep < lastPlayheadStep_); // selected track's loop end
+			if (loopWrapped)
+				recClearedMask_ = 0; // new record pass (replace mode)
 			lastPlayheadStep_ = curStep;
 			omxLeds.setDirty();
 			omxDisp.setDirty();
+		}
+
+		// Pattern switch styles: commit a queued switch at the boundary the style asks for.
+		bool barBoundary = (seqConfig.currentClockTick < lastBarTick_); // currentClockTick wrapped (1 bar)
+		lastBarTick_ = seqConfig.currentClockTick;
+		if (queuedPattern_ >= 0 &&
+			((switchStyle_ == 1 && barBoundary) || (switchStyle_ == 0 && loopWrapped)))
+		{
+			switchPattern((uint8_t)queuedPattern_);
+			queuedPattern_ = -1;
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		// Chained: advance to the next pattern in the chain at each loop end.
+		if (switchStyle_ == 3 && chainLen_ > 1 && loopWrapped)
+		{
+			chainPos_ = (chainPos_ + 1) % chainLen_;
+			switchPattern(chain_[chainPos_]);
+			omxDisp.setDirty();
+			omxLeds.setDirty();
 		}
 
 		// Periodic refresh so blink animations (soloed-track / held-step flash) keep ticking

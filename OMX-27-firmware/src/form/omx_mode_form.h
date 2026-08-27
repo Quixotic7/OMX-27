@@ -204,6 +204,14 @@ private:
 	bool onEncoderButtonTrackPage();  // encoder click: enter/exit the view selector. consumed?
 	void updateAuxViewLEDs(); // paint the view selector (keys 13-18) on the AUX overlay
 	// Container-rendered views:
+	// Patterns view: switch style (top row 3-6) governs WHEN a tapped slot takes over.
+	// 0 Finish Loop (at the selected track's loop end) · 1 Next Bar · 2 Instant · 3 Chained.
+	uint8_t switchStyle_ = 2;      // default Instant
+	int8_t queuedPattern_ = -1;    // pattern queued to switch at the boundary (-1 = none)
+	uint16_t lastBarTick_ = 0;     // for detecting the bar boundary (currentClockTick wrap)
+	uint8_t chain_[16] = {0};      // Chained mode: the pattern sequence
+	uint8_t chainLen_ = 0;
+	uint8_t chainPos_ = 0;
 	void updatePatternsLEDs();
 	void onKeyUpdatePatterns(OMXKeypadEvent e);
 	void onDisplayPatterns();
