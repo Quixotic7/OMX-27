@@ -499,12 +499,22 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 25. **SysEx remote control** → the firmware accepts injected key/encoder/pot events
     (`NL_CMD_INPUT` 0x51) and mirrors its screen, for host-driven QA (host tools in `tools/`).
 
+26. **Live recording** (§7) → **built**: AUX+3 arm (transport widget shows the record icon),
+    AUX+4 overdub/replace; a note played on the Notes keyboard while armed+playing quantizes into
+    the selected track's nearest playing step at the track default velocity. Count-in and MI-view
+    recording deferred.
+27. **Pot banks + CC meter** (§2) → **built**: a plain knob turn sends `CC = pots[track.potBank]
+    [slot]` on the track's channel (per-track bank, all 5 knobs); a 5-segment top-row CC meter shows
+    the live knob values on the track page.
+
 ### Still open
 - **RAM ceilings / per-platform trims** — real pattern / page / track counts per build
   (V3 fullest; Teensy 3.1 / 4 tighter). Decide the trims once we measure.
-- **Pattern extras** — default switch-style; **chaining / song mode** (builds on "Chained").
-- **Live recording** (§7), **MI view** (§4.6), and **Transpose** (§4.3) — not built yet.
-- **P-Lock step tint (MAGENTA)** and the **CC meter + page indicator** OLED strips — not drawn yet.
+- **Pattern extras** — switch styles (Finish Loop / Next Bar / Instant / Chained); **chaining /
+  song mode**.
+- **MI view** (§4.6), **Transpose** (§4.3), **count-in** (§7) — not built yet.
+- **P-Lock step tint (MAGENTA)**, the **4-line page indicator**, and the **CC meter on non-track
+  views** — not drawn yet.
 
 ---
 
