@@ -447,136 +447,224 @@ void OmxModeForm::notesSetChordFromHeld()
 	omni->stepSetNotes(notesSelStep_, notes);
 }
 
+// Which param palette a Notes-view hold selects: 11 = velocity, 12 = length, 11+12 = math,
+// 13 = chance. -1 = none held.
+int8_t OmxModeForm::notesPaletteMode()
+{
+	if (midiSettings.keyState[13])
+		return STEPMODE_CHANCE;
+	bool h11 = midiSettings.keyState[11], h12 = midiSettings.keyState[12];
+	if (h11 && h12)
+		return STEPMODE_MATH;
+	if (h11)
+		return STEPMODE_VEL;
+	if (h12)
+		return STEPMODE_LENGTH;
+	return -1;
+}
+
 void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 {
 	uint8_t k = e.key();
 	if (k == 0)
 		return; // AUX handled by the top-level layer
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
-		return; // the AUX layer owns the keys while held
 
 	bool down = e.down();
 	bool held = e.held();
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
-	bool f3 = midiSettings.keyState[1] && midiSettings.keyState[2]; // both F-keys = jump mode
 
-	// Hold key 13 = velocity palette on keys 1-10 (like holding a step in Seq's Velocity mode).
-	if (k == 13)
+	// Engage a param-palette hold when 11/12/13 is pressed with no F-key held (see notesPaletteMode).
+	if ((k == 11 || k == 12 || k == 13) && down && !held &&
+		!midiSettings.keyState[1] && !midiSettings.keyState[2] &&
+		omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX)
 	{
-		if (!held)
+		if (!notesPaletteEngaged_)
 		{
-			omxDisp.setDirty(); // engage / release redraws
-			omxLeds.setDirty();
+			notesHoldStartMs_ = millis();
+			notesHoldUIShown_ = false;
 		}
-		return;
+		notesPaletteEngaged_ = true;
+		if (k == 11)
+			notesSuppressPrev_ = false;
+		if (k == 12)
+			notesSuppressNext_ = false;
+		if (midiSettings.keyState[11] && midiSettings.keyState[12]) // both held = math, no nav
+			notesSuppressPrev_ = notesSuppressNext_ = true;
 	}
-	if (midiSettings.keyState[13])
+	// Safety: never stay engaged once none of 11/12/13 is held (also unfreezes the shortcut mode).
+	if (notesPaletteEngaged_ && !midiSettings.keyState[11] && !midiSettings.keyState[12] && !midiSettings.keyState[13])
+		notesPaletteEngaged_ = false;
+
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
+		return; // the AUX layer owns the keys while held
+
+	// ---- Param-palette hold (11 vel / 12 len / 11+12 math / 13 chance): top row 1-10 = value ----
+	if (notesPaletteEngaged_)
 	{
-		if (k >= 1 && k <= 10 && down && !held)
+		int8_t pmode = notesPaletteMode();
+		if (pmode >= 0 && k >= 1 && k <= 10 && down && !held)
 		{
-			omni->setStepPalette(notesSelStep_, STEPMODE_VEL, k - 1);
+			omni->setStepPalette(notesSelStep_, (uint8_t)pmode, k - 1);
+			notesHoldUIShown_ = true; // an edit shows the popup immediately
+			if (midiSettings.keyState[11])
+				notesSuppressPrev_ = true;
+			if (midiSettings.keyState[12])
+				notesSuppressNext_ = true;
 			omxDisp.setDirty();
 			omxLeds.setDirty();
+			return;
 		}
-		return; // while 13 held, keys 1-10 = velocity; everything else is inert
-	}
-
-	// Keys 11/12: a quick tap = prev/next step; holding either turns keys 1-10 into the full
-	// step-length palette (a length edit during the hold suppresses the nav on release).
-	if (k == 11 || k == 12)
-	{
-		if (down && !held)
+		if (k == 11 || k == 12 || k == 13)
 		{
-			notesLenHoldKey_ = (int8_t)k;
-			notesLenEdited_ = false;
-		}
-		else if (!down && notesLenHoldKey_ == (int8_t)k)
-		{
-			if (!notesLenEdited_)
+			if (!down) // release: a clean quick tap of 11/12 navigates
 			{
-				if (k == 11 && notesSelStep_ > 0)
+				if (k == 11 && !notesSuppressPrev_ && e.quickClicked() && notesSelStep_ > 0)
 					notesSelStep_--;
-				else if (k == 12 && notesSelStep_ < 15)
+				else if (k == 12 && !notesSuppressNext_ && e.quickClicked() && notesSelStep_ < 15)
 					notesSelStep_++;
+				if (!midiSettings.keyState[11] && !midiSettings.keyState[12] && !midiSettings.keyState[13])
+					notesPaletteEngaged_ = false;
+				omxDisp.setDirty();
+				omxLeds.setDirty();
 			}
-			notesLenHoldKey_ = -1;
+			return;
 		}
-		omxDisp.setDirty();
-		omxLeds.setDirty();
-		return;
-	}
-	if (notesLenHoldKey_ >= 0)
-	{
-		if (k >= 1 && k <= 10 && down && !held)
-		{
-			omni->setStepPalette(notesSelStep_, STEPMODE_LENGTH, k - 1);
-			notesLenEdited_ = true;
-			omxDisp.setDirty();
-			omxLeds.setDirty();
-		}
-		return; // while 11/12 held, keys 1-10 = length; everything else is inert
+		return; // any other key is inert during a palette hold
 	}
 
-	// Keys 1/2 = copy/paste the current step — but only as a clean solo tap, so 1+2 (F3) doesn't
-	// fire them. Copy/paste commit on release.
+	// ---- Keys 1/2: quick tap = copy/paste step; held = F1/F2 modifier (handled via shortcutMode) ----
 	if (k == 1)
 	{
 		if (down && !held)
-			notesF1Tap_ = !midiSettings.keyState[2];
-		else if (!down)
+			notesF1Used_ = midiSettings.keyState[2]; // 2 already held -> this is F3, not a copy
+		else if (!down && !notesF1Used_ && e.quickClicked())
 		{
-			if (notesF1Tap_ && !midiSettings.keyState[2])
-			{
-				omni->stepCopy(notesSelStep_);
-				omxDisp.displayMessage("COPY");
-			}
-			notesF1Tap_ = false;
+			omni->stepCopy(notesSelStep_);
+			omxDisp.displayMessage("COPY");
 		}
-		if (midiSettings.keyState[2])
-			notesF2Tap_ = false; // the pair became F3
 		return;
 	}
 	if (k == 2)
 	{
 		if (down && !held)
-			notesF2Tap_ = !midiSettings.keyState[1];
-		else if (!down)
+			notesF2Used_ = midiSettings.keyState[1];
+		else if (!down && !notesF2Used_ && e.quickClicked())
 		{
-			if (notesF2Tap_ && !midiSettings.keyState[1])
-			{
-				omni->stepPaste(notesSelStep_);
-				omxDisp.displayMessage("PASTE");
-			}
-			notesF2Tap_ = false;
+			omni->stepPaste(notesSelStep_);
+			omxDisp.displayMessage("PASTE");
 		}
-		if (midiSettings.keyState[1])
-			notesF1Tap_ = false;
 		return;
 	}
 
-	// F3 (1+2 held): low row 11-26 = jump-to-step selector; the piano is hidden.
-	if (f3)
+	uint8_t sm = omxFormGlobal.shortcutMode;
+
+	// Release of an F2-selected track key clears the hold, even if F2 was released first.
+	if (!down && k >= 3 && k <= 10 && heldTrackKey_ == (int8_t)(k - 3))
 	{
+		heldTrackKey_ = -1;
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return;
+	}
+
+	// ---- F3 (hold F1+F2): rate (top 3-10) + page length (low 11-26), same as Seq ----
+	if (sm == FORMSHORTCUT_F3)
+	{
+		if (down && !held && k >= 3 && k <= 10)
+			omni->setRateShortcut(k - 3);
+		else if (down && !held && k >= 11 && k < 27)
+		{
+			uint8_t page = omni->activePage();
+			uint8_t pageLen = (k - 11) + 1;
+			omni->setPageLen(page, pageLen);
+			omxDisp.displayMessage("P" + String(page + 1) + " LEN " + String(pageLen));
+		}
+		notesF1Used_ = notesF2Used_ = true;
+		omxLeds.setDirty();
+		return;
+	}
+
+	// ---- Hold F1: pages (top 3-6, select/solo/loop) + jump-to-step (low 11-26) ----
+	if (sm == FORMSHORTCUT_F1)
+	{
+		if (k >= 3 && k <= 6)
+		{
+			uint8_t p = k - 3;
+			if (e.down() && !e.held())
+			{
+				if (heldPageMask_ != 0 && !(heldPageMask_ & (1 << p)))
+				{
+					uint8_t a = 0;
+					for (uint8_t i = 0; i < 4; i++) if (heldPageMask_ & (1 << i)) { a = i; break; }
+					uint8_t lo = a < p ? a : p, hi = a < p ? p : a, mask = 0;
+					for (uint8_t i = lo; i <= hi; i++) mask |= (1 << i);
+					omni->setEnabledPages(mask);
+					omni->setActivePage(a);
+					pageGestureDone_ = true;
+				}
+				heldPageMask_ |= (1 << p);
+				omxDisp.setDirty();
+				omxLeds.setDirty();
+			}
+			else if (!e.down() && (heldPageMask_ & (1 << p)))
+			{
+				if (!pageGestureDone_)
+				{
+					if (e.clicks() == 2) { omni->setEnabledPages(1 << p); omni->setActivePage(p); }
+					else if (e.quickClicked()) omni->setActivePage(p);
+				}
+				heldPageMask_ &= ~(1 << p);
+				if (heldPageMask_ == 0)
+					pageGestureDone_ = false;
+				omxLeds.setDirty();
+			}
+			notesF1Used_ = true;
+			return;
+		}
 		if (down && !held && k >= 11 && k < 27)
 		{
-			notesSelStep_ = k - 11;
+			notesSelStep_ = k - 11; // jump to step
+			notesF1Used_ = true;
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
 		return;
 	}
 
-	// Key 14 = clear the current step (into the buffer, so F2 pastes it back).
+	// ---- Hold F2 + top row (3-10): select the track ----
+	if (sm == FORMSHORTCUT_F2)
+	{
+		if (!down && k >= 3 && k <= 10 && heldTrackKey_ == (int8_t)(k - 3))
+		{
+			heldTrackKey_ = -1;
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+			return;
+		}
+		if (down && !held && k >= 3 && k <= 10)
+		{
+			selectMachine(k - 3);
+			heldTrackKey_ = k - 3;
+			notesF2Used_ = true;
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		return;
+	}
+
+	// ---- No modifier: clear + piano ----
 	if (k == 14)
 	{
 		if (down && !held)
 		{
-			omni->stepCut(notesSelStep_);
+			omni->stepCut(notesSelStep_); // clear into the buffer (F2 pastes it back)
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
 		return;
 	}
+	if (k == 11 || k == 12 || k == 13)
+		return; // stray release after a palette hold disengaged
 
 	// Piano keys (3-10 sharps, 15-26 naturals).
 	int8_t base = kNotesKeyBase[k];
@@ -606,24 +694,44 @@ void OmxModeForm::updateNotesLEDs()
 	for (uint8_t i = 1; i < 27; i++)
 		strip.setPixelColor(i, LEDOFF);
 
-	// Hold 13 = velocity palette; hold 11/12 = full step-length palette. Both on keys 1-10, the
-	// current level bright, with the held key lit.
-	if (midiSettings.keyState[13] || notesLenHoldKey_ >= 0)
+	// Param-palette hold (11 vel / 12 len / 11+12 math / 13 chance): top row 1-10 = value palette,
+	// current level bright, held key(s) lit. Gated on the same delay as the OLED so a quick nav
+	// tap doesn't flash it.
+	if (notesPaletteEngaged_ && notesHoldUIShown_)
 	{
-		bool vel = midiSettings.keyState[13];
-		int16_t sel = omni->stepPaletteSelected(notesSelStep_, vel ? STEPMODE_VEL : STEPMODE_LENGTH);
+		int8_t pmode = notesPaletteMode();
+		int16_t sel = (pmode >= 0) ? omni->stepPaletteSelected(notesSelStep_, (uint8_t)pmode) : -1;
 		for (uint8_t p = 0; p < 10; p++)
 			strip.setPixelColor(1 + p, ((int)p == sel) ? (uint32_t)LTYELLOW : (uint32_t)DKBLUE);
-		strip.setPixelColor(vel ? 13 : (uint8_t)notesLenHoldKey_, WHITE); // the held key
+		if (midiSettings.keyState[11]) strip.setPixelColor(11, WHITE);
+		if (midiSettings.keyState[12]) strip.setPixelColor(12, WHITE);
+		if (midiSettings.keyState[13]) strip.setPixelColor(13, WHITE);
 		return;
 	}
 
-	strip.setPixelColor(1, DKCYAN);  // copy
-	strip.setPixelColor(2, DKGREEN); // paste
+	uint8_t sm = omxFormGlobal.shortcutMode;
 
-	// F3 (1+2 held): low row = jump-to-step selector.
-	if (midiSettings.keyState[1] && midiSettings.keyState[2])
+	// F3 (F1+F2): top 3-10 = rate options, low row = page-length bar.
+	if (sm == FORMSHORTCUT_F3)
 	{
+		int8_t rsel = omni->rateShortcutSel();
+		for (uint8_t p = 0; p < 8; p++)
+			strip.setPixelColor(3 + p, ((int)p == rsel) ? (uint32_t)CYAN : (uint32_t)DKCYAN);
+		uint8_t plen = omni->getPageLen(omni->activePage());
+		for (uint8_t i = 0; i < 16; i++)
+			strip.setPixelColor(11 + i, (i < plen) ? ((i == plen - 1) ? (uint32_t)GREEN : (uint32_t)LOWWHITE) : (uint32_t)LEDOFF);
+		return;
+	}
+
+	// Hold F1: top 3-6 = pages (selected GREEN / enabled BLUE / muted dim), low row = jump selector.
+	if (sm == FORMSHORTCUT_F1)
+	{
+		uint8_t enabled = omni->getEnabledPages(), active = omni->activePage();
+		for (uint8_t p = 0; p < 4; p++)
+		{
+			uint32_t c = (p == active) ? (uint32_t)GREEN : ((enabled & (1 << p)) ? (uint32_t)BLUE : (uint32_t)VLOWWHITE);
+			strip.setPixelColor(3 + p, c);
+		}
 		for (uint8_t i = 0; i < 16; i++)
 		{
 			uint32_t c = omni->stepHasNotes(i) ? (uint32_t)LTBLUE : (uint32_t)DKBLUE;
@@ -631,9 +739,25 @@ void OmxModeForm::updateNotesLEDs()
 				c = blink ? (uint32_t)WHITE : (uint32_t)LTBLUE;
 			strip.setPixelColor(11 + i, c);
 		}
+		strip.setPixelColor(1, WHITE); // F1 held
 		return;
 	}
 
+	// Hold F2: top 3-10 = tracks (selected WHITE, muted RED, else hue).
+	if (sm == FORMSHORTCUT_F2)
+	{
+		for (uint8_t t = 0; t < kNumMachines; t++)
+		{
+			uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[t] << 8, 255, 255));
+			uint32_t c = (t == selectedMachine_) ? (uint32_t)WHITE : (machines_[t]->getMute() ? (uint32_t)RED : hue);
+			strip.setPixelColor(3 + t, c);
+		}
+		strip.setPixelColor(2, WHITE); // F2 held
+		return;
+	}
+
+	strip.setPixelColor(1, DKCYAN);  // copy
+	strip.setPixelColor(2, DKGREEN); // paste
 	strip.setPixelColor(11, DKBLUE); // prev step
 	strip.setPixelColor(12, DKBLUE); // next step
 	strip.setPixelColor(14, DKRED);  // clear step
@@ -667,24 +791,39 @@ void OmxModeForm::onDisplayNotes()
 	}
 	uint8_t pageLen = omni->getPageLen(omni->activePage());
 
-	// Hold 13 = velocity, hold 11/12 = length: show that value + strip.
-	if (midiSettings.keyState[13])
+	// Param-palette hold (vel / length / math / chance): the value + strip, after the popup delay.
+	if (notesPaletteEngaged_ && notesHoldUIShown_)
 	{
-		String v = omni->stepValueString(notesSelStep_, STEPMODE_VEL);
-		omxDisp.dispStepOverview(v.c_str(), stepState, pageLen, notesSelStep_);
-		return;
-	}
-	if (notesLenHoldKey_ >= 0)
-	{
-		String v = omni->stepValueString(notesSelStep_, STEPMODE_LENGTH);
-		omxDisp.dispStepOverview(v.c_str(), stepState, pageLen, notesSelStep_);
-		return;
+		int8_t pmode = notesPaletteMode();
+		if (pmode >= 0)
+		{
+			String v = omni->stepValueString(notesSelStep_, (uint8_t)pmode);
+			omxDisp.dispStepOverview(v.c_str(), stepState, pageLen, notesSelStep_);
+			return;
+		}
 	}
 
-	// F3: jump-to-step strip.
-	if (midiSettings.keyState[1] && midiSettings.keyState[2])
+	uint8_t sm = omxFormGlobal.shortcutMode;
+	// F3: rate + page length.
+	if (sm == FORMSHORTCUT_F3)
 	{
-		omxDisp.dispStepOverview("JUMP TO STEP", stepState, pageLen, notesSelStep_);
+		char rbuf[16];
+		snprintf(rbuf, sizeof(rbuf), "1:%u  LEN %u", (unsigned)kSeqRates[omni->getSeq().rate], (unsigned)pageLen);
+		omxDisp.dispStepOverview(rbuf, stepState, pageLen, notesSelStep_);
+		return;
+	}
+	// Hold F1: jump-to-step strip (pages on the top row).
+	if (sm == FORMSHORTCUT_F1)
+	{
+		omxDisp.dispStepOverview("JUMP / PAGES", stepState, pageLen, notesSelStep_);
+		return;
+	}
+	// Hold F2: track select.
+	if (sm == FORMSHORTCUT_F2)
+	{
+		char tbuf[16];
+		snprintf(tbuf, sizeof(tbuf), "TRACK %u", (unsigned)(selectedMachine_ + 1));
+		omxDisp.dispStepOverview(tbuf, stepState, pageLen, notesSelStep_);
 		return;
 	}
 
@@ -1647,6 +1786,13 @@ void OmxModeForm::updateShortcutMode()
 		omxFormGlobal.shortcutMode = FORMSHORTCUT_NONE;
 		return;
 	}
+	// Notes view: same during a param-palette hold (11/12/13 held without an F-key) — keys 1-10
+	// are the value palette, so keys 1/2 must not flip to F1/F2.
+	if (formView_ == FORMVIEW_NOTES && notesPaletteEngaged_)
+	{
+		omxFormGlobal.shortcutMode = FORMSHORTCUT_NONE;
+		return;
+	}
 
 	uint8_t prevMode = omxFormGlobal.shortcutMode;
 
@@ -1842,6 +1988,12 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 	if (heldStepMask_ != 0 && !stepHoldUIShown_ && (millis() - stepHoldStartMs_) >= 150)
 	{
 		stepHoldUIShown_ = true;
+		omxDisp.setDirty();
+	}
+	// Same delay for the Notes-view param-palette popup (velocity / length / math / chance).
+	if (notesPaletteEngaged_ && !notesHoldUIShown_ && (millis() - notesHoldStartMs_) >= 150)
+	{
+		notesHoldUIShown_ = true;
 		omxDisp.setDirty();
 	}
 

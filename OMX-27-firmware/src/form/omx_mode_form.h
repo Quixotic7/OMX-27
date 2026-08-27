@@ -210,10 +210,16 @@ private:
 	void onDisplayMI();
 	// ---- Notes view (container-rendered chord editor with in-editor step nav) ----
 	uint8_t notesSelStep_ = 0;   // step being edited (0-15, active-page-relative)
-	bool notesF1Tap_ = false;    // key1 pressed as a clean tap (copy), not as an F3 modifier
-	bool notesF2Tap_ = false;    // key2 pressed as a clean tap (paste), not as an F3 modifier
-	int8_t notesLenHoldKey_ = -1; // 11/12 held → keys 1-10 set step length; -1 = not holding
-	bool notesLenEdited_ = false; // a length value was set during this 11/12 hold (suppresses nav)
+	// Param-palette holds (no F-key): hold 11 = velocity, 12 = length, 11+12 = math, 13 = chance;
+	// top row 1-10 sets the value. A quick tap of 11/12 navigates prev/next instead.
+	bool notesPaletteEngaged_ = false; // a palette hold (11/12/13, no F-key) is active
+	uint32_t notesHoldStartMs_ = 0;    // when it began (for the popup delay)
+	bool notesHoldUIShown_ = false;    // the palette popup has engaged (past the delay or edited)
+	bool notesSuppressPrev_ = false;   // key 11 was used as a palette hold (suppress its nav)
+	bool notesSuppressNext_ = false;   // key 12 was used as a palette hold (suppress its nav)
+	bool notesF1Used_ = false;         // F1 was used as a modifier this hold (suppresses quick-copy)
+	bool notesF2Used_ = false;         // F2 was used as a modifier this hold (suppresses quick-paste)
+	int8_t notesPaletteMode();         // active palette STEPMODE from held 11/12/13, -1 = none
 	void onKeyUpdateNotes(OMXKeypadEvent e);
 	void updateNotesLEDs();
 	void onDisplayNotes();
