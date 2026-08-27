@@ -208,6 +208,14 @@ private:
 	void onKeyUpdatePatterns(OMXKeypadEvent e);
 	void onDisplayPatterns();
 	void onDisplayMI();
+	// ---- Notes view (container-rendered chord editor with in-editor step nav) ----
+	uint8_t notesSelStep_ = 0;   // step being edited (0-15, active-page-relative)
+	bool notesF1Tap_ = false;    // key1 pressed as a clean tap (copy), not as an F3 modifier
+	bool notesF2Tap_ = false;    // key2 pressed as a clean tap (paste), not as an F3 modifier
+	void onKeyUpdateNotes(OMXKeypadEvent e);
+	void updateNotesLEDs();
+	void onDisplayNotes();
+	void notesSetChordFromHeld(); // build the selected step's chord from the held piano keys
 	// ---- Step view (container-rendered v2 editor) ----
 	uint8_t stepEditMode_ = STEPMODE_NOTE; // which of the 8 modes is active (top row 3-10)
 	uint16_t heldStepMask_ = 0;            // bitmask of step keys (0-15) held right now

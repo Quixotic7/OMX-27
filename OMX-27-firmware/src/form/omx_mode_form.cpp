@@ -393,6 +393,242 @@ void OmxModeForm::onDisplayMI()
 	omxDisp.dispGenericModeLabelDoubleLine("MI VIEW", "(todo)", 0, 0);
 }
 
+// ---- Notes view (container-rendered chord editor with in-editor step nav) ----
+//
+// A real F4-start piano: keys 3-10 = sharps (F#4..A#5), 15-26 = naturals (F4..C6). The other
+// keys are repurposed: 1/2 = copy/paste step (F1/F2), 11/12 = prev/next step, 14 = clear,
+// 13 = unused. Holding both 1+2 (F3) turns the low row into a jump-to-step selector.
+// -1 = not a note key; runtime note = base + octave*12.
+static const int8_t kNotesKeyBase[27] = {
+	-1,             // 0 AUX
+	-1, -1,         // 1,2 copy/paste
+	66, 68, 70,     // 3 F#4, 4 G#4, 5 A#4
+	73, 75,         // 6 C#5, 7 D#5
+	78, 80, 82,     // 8 F#5, 9 G#5, 10 A#5
+	-1, -1, -1, -1, // 11 prev, 12 next, 13 unused, 14 clear
+	65, 67, 69, 71, // 15 F4, 16 G4, 17 A4, 18 B4
+	72, 74, 76,     // 19 C5, 20 D5, 21 E5
+	77, 79, 81, 83, // 22 F5, 23 G5, 24 A5, 25 B5
+	84};            // 26 C6
+
+// Build the selected step's chord from every Notes-view piano key currently held (sorted,
+// deduped, up to 6). A single held key writes a single note; holding several writes a chord.
+void OmxModeForm::notesSetChordFromHeld()
+{
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	int8_t notes[6];
+	uint8_t cnt = 0;
+	for (uint8_t k = 3; k < 27; k++)
+	{
+		if (!midiSettings.keyState[k])
+			continue;
+		int8_t base = kNotesKeyBase[k];
+		if (base < 0)
+			continue;
+		int16_t n = base + midiSettings.octave * 12;
+		if (n < 0 || n > 127)
+			continue;
+		bool dup = false; // insertion sort, dedup
+		uint8_t pos = cnt;
+		for (uint8_t j = 0; j < cnt; j++)
+		{
+			if (notes[j] == n) { dup = true; break; }
+			if (n < notes[j]) { pos = j; break; }
+		}
+		if (dup || cnt >= 6)
+			continue;
+		for (uint8_t j = cnt; j > pos; j--)
+			notes[j] = notes[j - 1];
+		notes[pos] = (int8_t)n;
+		cnt++;
+	}
+	for (uint8_t i = cnt; i < 6; i++)
+		notes[i] = -1;
+	omni->stepSetNotes(notesSelStep_, notes);
+}
+
+void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
+{
+	uint8_t k = e.key();
+	if (k == 0)
+		return; // AUX handled by the top-level layer
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
+		return; // the AUX layer owns the keys while held
+
+	bool down = e.down();
+	bool held = e.held();
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	bool f3 = midiSettings.keyState[1] && midiSettings.keyState[2]; // both F-keys = jump mode
+
+	// Keys 1/2 = copy/paste the current step — but only as a clean solo tap, so 1+2 (F3) doesn't
+	// fire them. Copy/paste commit on release.
+	if (k == 1)
+	{
+		if (down && !held)
+			notesF1Tap_ = !midiSettings.keyState[2];
+		else if (!down)
+		{
+			if (notesF1Tap_ && !midiSettings.keyState[2])
+			{
+				omni->stepCopy(notesSelStep_);
+				omxDisp.displayMessage("COPY");
+			}
+			notesF1Tap_ = false;
+		}
+		if (midiSettings.keyState[2])
+			notesF2Tap_ = false; // the pair became F3
+		return;
+	}
+	if (k == 2)
+	{
+		if (down && !held)
+			notesF2Tap_ = !midiSettings.keyState[1];
+		else if (!down)
+		{
+			if (notesF2Tap_ && !midiSettings.keyState[1])
+			{
+				omni->stepPaste(notesSelStep_);
+				omxDisp.displayMessage("PASTE");
+			}
+			notesF2Tap_ = false;
+		}
+		if (midiSettings.keyState[1])
+			notesF1Tap_ = false;
+		return;
+	}
+
+	// F3 (1+2 held): low row 11-26 = jump-to-step selector; the piano is hidden.
+	if (f3)
+	{
+		if (down && !held && k >= 11 && k < 27)
+		{
+			notesSelStep_ = k - 11;
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		return;
+	}
+
+	// Step navigation + clear.
+	if (k == 11 || k == 12)
+	{
+		if (down && !held)
+		{
+			if (k == 11 && notesSelStep_ > 0)
+				notesSelStep_--;
+			else if (k == 12 && notesSelStep_ < 15)
+				notesSelStep_++;
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		return;
+	}
+	if (k == 13)
+		return; // unused
+	if (k == 14)
+	{
+		if (down && !held)
+		{
+			omni->stepCut(notesSelStep_); // clear into the buffer (F2 pastes it back)
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		return;
+	}
+
+	// Piano keys (3-10 sharps, 15-26 naturals).
+	int8_t base = kNotesKeyBase[k];
+	if (base < 0)
+		return;
+	int16_t note = base + midiSettings.octave * 12;
+	if (down && !held)
+	{
+		notesSetChordFromHeld();
+		if (!omxFormGlobal.isPlaying && note >= 0 && note <= 127)
+			omni->previewNote((int8_t)note, true); // audition while stopped
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+	}
+	else if (!down)
+	{
+		if (!omxFormGlobal.isPlaying && note >= 0 && note <= 127)
+			omni->previewNote((int8_t)note, false);
+	}
+}
+
+void OmxModeForm::updateNotesLEDs()
+{
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	bool blink = omxLeds.getBlinkState();
+
+	for (uint8_t i = 1; i < 27; i++)
+		strip.setPixelColor(i, LEDOFF);
+
+	strip.setPixelColor(1, DKCYAN);  // copy
+	strip.setPixelColor(2, DKGREEN); // paste
+
+	// F3 (1+2 held): low row = jump-to-step selector.
+	if (midiSettings.keyState[1] && midiSettings.keyState[2])
+	{
+		for (uint8_t i = 0; i < 16; i++)
+		{
+			uint32_t c = omni->stepHasNotes(i) ? (uint32_t)LTBLUE : (uint32_t)DKBLUE;
+			if (i == notesSelStep_)
+				c = blink ? (uint32_t)WHITE : (uint32_t)LTBLUE;
+			strip.setPixelColor(11 + i, c);
+		}
+		return;
+	}
+
+	strip.setPixelColor(11, DKBLUE); // prev step
+	strip.setPixelColor(12, DKBLUE); // next step
+	strip.setPixelColor(14, DKRED);  // clear step
+
+	// Piano: naturals dim blue (roots periwinkle), sharps darker; the current step's chord
+	// notes light up LTYELLOW.
+	int8_t chord[6];
+	omni->getStepNotes(notesSelStep_, chord);
+	for (uint8_t k = 3; k < 27; k++)
+	{
+		int8_t base = kNotesKeyBase[k];
+		if (base < 0)
+			continue;
+		int16_t note = base + midiSettings.octave * 12;
+		uint32_t c = (note % 12 == 0) ? (uint32_t)0xA2A2FF : (k <= 10 ? (uint32_t)DKBLUE : (uint32_t)0x000090);
+		for (uint8_t n = 0; n < 6; n++)
+			if (chord[n] == note) { c = (uint32_t)LTYELLOW; break; }
+		strip.setPixelColor(k, c);
+	}
+}
+
+void OmxModeForm::onDisplayNotes()
+{
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+
+	uint8_t stepState[16];
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		bool m = omni->getStepMute(i);
+		stepState[i] = omni->stepHasNotes(i) ? (m ? 4 : 1) : (omni->stepIsOn(i) ? (m ? 3 : 2) : 0);
+	}
+	uint8_t pageLen = omni->getPageLen(omni->activePage());
+
+	// F3 jump-to-step: a titled step strip instead of the keyboard.
+	if (midiSettings.keyState[1] && midiSettings.keyState[2])
+	{
+		omxDisp.dispStepOverview("JUMP TO STEP", stepState, pageLen, notesSelStep_);
+		return;
+	}
+
+	int8_t chord[6];
+	omni->getStepNotes(notesSelStep_, chord);
+	int8_t noteKeys[6];
+	for (uint8_t i = 0; i < 6; i++)
+		noteKeys[i] = (chord[i] >= 0 && chord[i] <= 127) ? omxUtil.noteNumberToKeyNumber(chord[i]) : -1;
+
+	omxDisp.dispStepNoteKeyboard(noteKeys, stepState, pageLen, notesSelStep_);
+}
+
 // ---- Step view (container-rendered v2 editor) ----
 
 static const char *kStepModeNames[STEPMODE_COUNT] = {
@@ -1600,6 +1836,19 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 	if (onEncoderTrackPage(enc.dir()))
 		return;
 
+	// Notes view: the encoder steps through the current page's 16 steps.
+	if (formView_ == FORMVIEW_NOTES)
+	{
+		int dir = enc.dir();
+		if (dir != 0)
+		{
+			notesSelStep_ = (uint8_t)constrain((int)notesSelStep_ + dir, 0, 15);
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		return;
+	}
+
 	if (onEncoderStep(enc))
 		return;
 
@@ -1898,6 +2147,12 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			onKeyUpdatePatterns(e);
 		return;
 	}
+	if (formView_ == FORMVIEW_NOTES)
+	{
+		if (!keyConsumed)
+			onKeyUpdateNotes(e);
+		return;
+	}
 	if (formView_ == FORMVIEW_MI)
 	{
 		return; // stub: swallow keys
@@ -2135,6 +2390,11 @@ void OmxModeForm::updateLEDs()
 		updatePatternsLEDs();
 		return;
 	}
+	if (formView_ == FORMVIEW_NOTES)
+	{
+		updateNotesLEDs();
+		return;
+	}
 	if (formView_ == FORMVIEW_MI)
 	{
 		return; // stub: LEDs cleared
@@ -2222,6 +2482,11 @@ void OmxModeForm::onDisplayUpdate()
 	if (formView_ == FORMVIEW_PATTERNS)
 	{
 		onDisplayPatterns();
+		return;
+	}
+	if (formView_ == FORMVIEW_NOTES)
+	{
+		onDisplayNotes();
 		return;
 	}
 	if (formView_ == FORMVIEW_MI)
