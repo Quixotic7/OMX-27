@@ -196,10 +196,12 @@ private:
 	// Page-1 (track page) encoder view selector: click the encoder to enter edit mode (the view
 	// tag boxes/inverts), turn to browse pendingView_, click again to commit. See isTrackPage().
 	bool viewSelectEdit_ = false;
-	void setFormView(uint8_t view);
-	bool isTrackPage(); // true when the MIX/SEQ page-1 track overview owns the encoder
-	bool onEncoderTrackPage(int dir); // encoder turn on the track page (view browse). consumed?
-	bool onEncoderButtonTrackPage();  // encoder click on the track page (enter/commit). consumed?
+	// silent = live switch from the selector: no popup, keep the selector open.
+	void setFormView(uint8_t view, bool silent = false);
+	bool isTrackPage();      // true when the MIX/SEQ page-1 track overview owns the encoder
+	bool viewEditActive();   // view selector is live (encoder latch OR AUX held)
+	bool onEncoderTrackPage(int dir); // encoder turn: live-switch views while editing. consumed?
+	bool onEncoderButtonTrackPage();  // encoder click: enter/exit the view selector. consumed?
 	void updateAuxViewLEDs(); // paint the view selector (keys 13-18) on the AUX overlay
 	// Container-rendered views:
 	void updatePatternsLEDs();

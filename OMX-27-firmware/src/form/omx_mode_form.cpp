@@ -262,11 +262,12 @@ void OmxModeForm::clearPattern(uint8_t index)
 }
 
 // ---- v2 shell: view router ----
-void OmxModeForm::setFormView(uint8_t view)
+void OmxModeForm::setFormView(uint8_t view, bool silent)
 {
 	if (view >= FORMVIEW_COUNT)
 		return;
 	formView_ = view;
+	pendingView_ = view; // keep the AUX-release commit from reverting a live switch
 	heldTrackKey_ = -1;
 
 	// Editor views map to an OMNI UI mode, applied to every track so the view stays
@@ -286,9 +287,12 @@ void OmxModeForm::setFormView(uint8_t view)
 			static_cast<FormOmni::FormMachineOmni *>(machines_[i])->setUiMode(uiMode);
 	}
 
-	viewSelectEdit_ = false; // committing a view leaves the page-1 selector
-	static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI"};
-	omxDisp.displayMessage(kViewNames[view]);
+	if (!silent)
+	{
+		viewSelectEdit_ = false; // an explicit commit leaves the page-1 selector
+		static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI"};
+		omxDisp.displayMessage(kViewNames[view]);
+	}
 	omxLeds.setDirty();
 	omxDisp.setDirty();
 }
@@ -308,44 +312,41 @@ bool OmxModeForm::isTrackPage()
 	return false;
 }
 
-// Encoder turn on the track page: while editing, browse the pending view (wrapping). The display
-// stays on the current track page, so the boxed tag previews where a click would take you.
+// The view selector is live when the encoder latch is on, or while AUX is held (AUX is the
+// alternate way in). While live, the encoder switches views instead of its normal function.
+bool OmxModeForm::viewEditActive()
+{
+	return viewSelectEdit_ || midiSettings.midiAUX;
+}
+
+// Encoder turn while the selector is live: switch views instantly (wrapping), across all views.
 bool OmxModeForm::onEncoderTrackPage(int dir)
 {
-	// Only intercept while actively editing — otherwise the turn must fall through to the normal
-	// behavior (e.g. the SEQ overview navigating into its param pages).
-	if (!viewSelectEdit_ || !isTrackPage())
-		return false;
+	if (!viewEditActive())
+		return false; // not selecting: let the turn do its normal job (e.g. SEQ param nav)
 	if (dir == 0)
 		return true;
-	int v = ((int)pendingView_ + dir) % (int)FORMVIEW_COUNT;
+	int v = ((int)formView_ + dir) % (int)FORMVIEW_COUNT;
 	if (v < 0)
 		v += FORMVIEW_COUNT;
-	pendingView_ = (uint8_t)v;
-	omxDisp.setDirty();
+	setFormView((uint8_t)v, true); // silent live switch — keep the selector open
 	return true;
 }
 
-// Encoder click on the track page: enter the view selector, or commit the browsed view.
+// Encoder click: enter the view selector from the track page, or exit it (from any view).
 bool OmxModeForm::onEncoderButtonTrackPage()
 {
+	if (viewSelectEdit_)
+	{
+		viewSelectEdit_ = false; // exit the latch, wherever a live switch left us
+		omxDisp.setDirty();
+		return true;
+	}
 	if (!isTrackPage())
 		return false;
-	if (!viewSelectEdit_)
-	{
-		viewSelectEdit_ = true;
-		pendingView_ = formView_;
-		omxDisp.setDirty();
-	}
-	else if (pendingView_ != formView_)
-	{
-		setFormView(pendingView_); // also clears viewSelectEdit_
-	}
-	else
-	{
-		viewSelectEdit_ = false; // same view: just leave edit mode
-		omxDisp.setDirty();
-	}
+	viewSelectEdit_ = true;
+	pendingView_ = formView_;
+	omxDisp.setDirty();
 	return true;
 }
 
@@ -1169,9 +1170,8 @@ void OmxModeForm::onDisplaySeqTrackPage()
 	// View tag (the page-1 view selector). While editing, it shows the browsed pendingView_ and
 	// boxes/inverts; otherwise it names the current view. MIX = "MIX", STEP = "SEQ".
 	static const char *kViewTags[FORMVIEW_COUNT] = {"MIX", "SEQ", "TRSP", "NOTE", "PTRN", "MI"};
-	uint8_t tagView = viewSelectEdit_ ? pendingView_ : formView_;
-	const char *viewLabel = kViewTags[tagView];
-	bool viewLabelSel = viewSelectEdit_;
+	const char *viewLabel = kViewTags[formView_]; // live switch: the tag is always the current view
+	bool viewLabelSel = viewEditActive();          // boxed while the selector is live
 	uint8_t transport = omxFormGlobal.isPlaying ? 1 : 0; // record state not wired yet
 	omxDisp.dispSeqTrackPage(title, trackMuted, selectedMachine_, rateStr,
 							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
