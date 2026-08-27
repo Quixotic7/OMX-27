@@ -82,6 +82,68 @@ OmxModeConfig omxModeConfig;
 
 OmxModeInterface *activeOmxMode;
 
+// SysEx remote-control injection (NL_CMD_INPUT 0x51). Called synchronously from the SysEx
+// handler at the end of loop(), after all physical input has been processed this frame — safe,
+// no reentrancy. sysexData[4]=0x51, [5]=subcmd, [6..]=args. Mirrors the physical dispatch in
+// loop() (incl. midiSettings.keyState[] bookkeeping) so modes behave identically to real input.
+//   0x00 KEY:  [6]=key(0-26) [7]=down [8]=held [9]=quickClicked [10]=clicks
+//   0x01 ENC:  [6]=dir(0=CCW,1=none,2=CW) [7]=count [8]=speedup
+//   0x02 EBTN: [6]=action(0=down,1=up,2=upLong)
+//   0x03 POT:  [6]=pot(0-4) [7]=value(0-127)
+void omxInjectInput(const uint8_t *d, unsigned n)
+{
+	if (activeOmxMode == nullptr || n < 6)
+		return;
+	switch (d[5])
+	{
+	case 0x00: // KEY
+		if (n >= 11 && d[6] <= 26)
+		{
+			uint8_t key = d[6];
+			bool down = d[7] != 0, held = d[8] != 0, quick = d[9] != 0;
+			if (down)
+				midiSettings.keyState[key] = true;
+			OMXKeypadEvent e(key, d[10], held, down, quick);
+			activeOmxMode->onKeyUpdate(e);
+			if (!down)
+				midiSettings.keyState[key] = false;
+			if (held)
+				activeOmxMode->onKeyHeldUpdate(e);
+		}
+		break;
+	case 0x01: // ENCODER turn
+		if (n >= 8)
+		{
+			int16_t dir = (d[6] == 0) ? -1 : (d[6] == 2 ? 1 : 0);
+			int16_t speedup = (n >= 9) ? (int16_t)d[8] : 0;
+			for (uint8_t i = 0; i < d[7]; i++)
+				activeOmxMode->onEncoderChanged(Encoder::makeUpdate(dir, speedup));
+		}
+		break;
+	case 0x02: // ENCODER button
+		if (n >= 7)
+		{
+			if (d[6] == 0)
+				activeOmxMode->onEncoderButtonDown();
+			else if (d[6] == 1)
+				activeOmxMode->onEncoderButtonUp();
+			else if (d[6] == 2)
+				activeOmxMode->onEncoderButtonUpLong();
+		}
+		break;
+	case 0x03: // POT
+		if (n >= 8 && d[6] < 5)
+		{
+			uint8_t k = d[6], val = d[7] & 0x7F;
+			int prev = potSettings.analogValues[k];
+			potSettings.analogValues[k] = val;
+			potSettings.hiResPotVal[k] = (uint16_t)val << 7;
+			activeOmxMode->onPotChanged(k, prev, val, abs((int)val - prev));
+		}
+		break;
+	}
+}
+
 OmxScreensaver omxScreensaver;
 
 MusicScales globalScale;
@@ -1080,7 +1142,9 @@ void setup()
 	dac.begin(DAC_ADDR, &Wire1);
 
 	// Initialize WebUSB for connection notification, etc
- 	usb_web.setLandingPage(&landingPage);
+	// TEMP: landing page disabled so the browser doesn't auto-open the web editor on
+	// reconnect. Re-enable by uncommenting the setLandingPage line below.
+ 	// usb_web.setLandingPage(&landingPage);
 	usb_web.begin();
 
 #else
