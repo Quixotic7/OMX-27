@@ -460,6 +460,27 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	bool f3 = midiSettings.keyState[1] && midiSettings.keyState[2]; // both F-keys = jump mode
 
+	// Hold key 13 = velocity palette on keys 1-10 (like holding a step in Seq's Velocity mode).
+	if (k == 13)
+	{
+		if (!held)
+		{
+			omxDisp.setDirty(); // engage / release redraws
+			omxLeds.setDirty();
+		}
+		return;
+	}
+	if (midiSettings.keyState[13])
+	{
+		if (k >= 1 && k <= 10 && down && !held)
+		{
+			omni->setStepPalette(notesSelStep_, STEPMODE_VEL, k - 1);
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		return; // while 13 held, keys 1-10 = velocity; everything else is inert
+	}
+
 	// Keys 1/2 = copy/paste the current step — but only as a clean solo tap, so 1+2 (F3) doesn't
 	// fire them. Copy/paste commit on release.
 	if (k == 1)
@@ -497,12 +518,16 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 		return;
 	}
 
-	// F3 (1+2 held): low row 11-26 = jump-to-step selector; the piano is hidden.
+	// F3 (1+2 held): low row 11-26 = jump-to-step selector; top row 3-10 = step-length palette
+	// for the selected step (8 of the 10 length values). The piano is hidden.
 	if (f3)
 	{
-		if (down && !held && k >= 11 && k < 27)
+		if (down && !held)
 		{
-			notesSelStep_ = k - 11;
+			if (k >= 11 && k < 27)
+				notesSelStep_ = k - 11;
+			else if (k >= 3 && k <= 10)
+				omni->setStepPalette(notesSelStep_, STEPMODE_LENGTH, k - 3);
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
@@ -564,12 +589,25 @@ void OmxModeForm::updateNotesLEDs()
 	for (uint8_t i = 1; i < 27; i++)
 		strip.setPixelColor(i, LEDOFF);
 
+	// Hold 13 = velocity palette on keys 1-10 (current level bright).
+	if (midiSettings.keyState[13])
+	{
+		int16_t sel = omni->stepPaletteSelected(notesSelStep_, STEPMODE_VEL);
+		for (uint8_t p = 0; p < 10; p++)
+			strip.setPixelColor(1 + p, (p == sel) ? (uint32_t)LTYELLOW : (uint32_t)DKBLUE);
+		strip.setPixelColor(13, WHITE); // the held key
+		return;
+	}
+
 	strip.setPixelColor(1, DKCYAN);  // copy
 	strip.setPixelColor(2, DKGREEN); // paste
 
-	// F3 (1+2 held): low row = jump-to-step selector.
+	// F3 (1+2 held): top row 3-10 = length palette, low row = jump-to-step selector.
 	if (midiSettings.keyState[1] && midiSettings.keyState[2])
 	{
+		int16_t lsel = omni->stepPaletteSelected(notesSelStep_, STEPMODE_LENGTH);
+		for (uint8_t p = 0; p < 8; p++)
+			strip.setPixelColor(3 + p, ((int)p == lsel) ? (uint32_t)LTYELLOW : (uint32_t)DKCYAN);
 		for (uint8_t i = 0; i < 16; i++)
 		{
 			uint32_t c = omni->stepHasNotes(i) ? (uint32_t)LTBLUE : (uint32_t)DKBLUE;
@@ -613,10 +651,19 @@ void OmxModeForm::onDisplayNotes()
 	}
 	uint8_t pageLen = omni->getPageLen(omni->activePage());
 
-	// F3 jump-to-step: a titled step strip instead of the keyboard.
+	// Hold 13 = velocity: show the selected step's velocity value + strip.
+	if (midiSettings.keyState[13])
+	{
+		String v = omni->stepValueString(notesSelStep_, STEPMODE_VEL);
+		omxDisp.dispStepOverview(v.c_str(), stepState, pageLen, notesSelStep_);
+		return;
+	}
+
+	// F3: jump-to-step (low row) + step length (top row) — show the length value + strip.
 	if (midiSettings.keyState[1] && midiSettings.keyState[2])
 	{
-		omxDisp.dispStepOverview("JUMP TO STEP", stepState, pageLen, notesSelStep_);
+		String v = omni->stepValueString(notesSelStep_, STEPMODE_LENGTH);
+		omxDisp.dispStepOverview(v.c_str(), stepState, pageLen, notesSelStep_);
 		return;
 	}
 
