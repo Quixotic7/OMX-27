@@ -212,6 +212,8 @@ private:
 	uint8_t notesSelStep_ = 0;   // step being edited (0-15, active-page-relative)
 	bool notesF1Tap_ = false;    // key1 pressed as a clean tap (copy), not as an F3 modifier
 	bool notesF2Tap_ = false;    // key2 pressed as a clean tap (paste), not as an F3 modifier
+	int8_t notesLenHoldKey_ = -1; // 11/12 held → keys 1-10 set step length; -1 = not holding
+	bool notesLenEdited_ = false; // a length value was set during this 11/12 hold (suppresses nav)
 	void onKeyUpdateNotes(OMXKeypadEvent e);
 	void updateNotesLEDs();
 	void onDisplayNotes();
