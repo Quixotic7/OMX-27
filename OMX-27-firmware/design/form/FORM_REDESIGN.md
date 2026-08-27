@@ -328,7 +328,7 @@ trimmed per build to fit (see §10). We won't know the real ceilings until we tr
 
 → `form_patterns.json`.
 
-### 4.6 MI  _(live-play keyboard)_
+### 4.6 MI  _(live-play keyboard — **built** Aug 2026)_
 The same **keyboard layout as the standalone MI OMX mode**, brought in as a view purely
 for **live playing** — jam over the running sequencer without touching the pattern.
 
@@ -506,13 +506,15 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 27. **Pot banks + CC meter** (§2) → **built**: a plain knob turn sends `CC = pots[track.potBank]
     [slot]` on the track's channel (per-track bank, all 5 knobs); a 5-segment top-row CC meter shows
     the live knob values on the track page.
+28. **MI view** (§4.6) → **built**: keys 1-26 play scale-aware notes on the selected track's
+    channel (octave AUX+11/12); records when armed (§7); does not touch the pattern.
 
 ### Still open
 - **RAM ceilings / per-platform trims** — real pattern / page / track counts per build
   (V3 fullest; Teensy 3.1 / 4 tighter). Decide the trims once we measure.
 - **Pattern extras** — switch styles (Finish Loop / Next Bar / Instant / Chained); **chaining /
   song mode**.
-- **MI view** (§4.6), **Transpose** (§4.3), **count-in** (§7) — not built yet.
+- **Transpose** (§4.3), **count-in** (§7) — not built yet.
 - **P-Lock step tint (MAGENTA)**, the **4-line page indicator**, and the **CC meter on non-track
   views** — not drawn yet.
 
