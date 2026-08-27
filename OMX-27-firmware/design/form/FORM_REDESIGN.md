@@ -85,20 +85,21 @@ track's parameter menu" (§2) refers to.
 
 ---
 
-## 3. P-Locks (per-step CC locks)
+## 3. P-Locks (per-step CC locks) — _**built** Aug 2026_
 
-- **Gesture:** hold a step key (11–26), then **turn a knob**. That knob-slot's value is
-  **locked** on that step.
+- **Gesture (Step view):** hold a step key (11–26), then **turn a knob (K1–K5)**. That
+  knob-slot's CC is **locked** on every held step, set directly to the knob's value (no
+  pickup). The gesture also arms the step's trig so a CC-only (note-less) step still fires.
 - **Resolution at playback:** when the step fires, each locked knob-slot sends
-  `CC = pots[trackBank][slot]` with the locked value. The *slot* is locked, the *CC
-  number* follows the track's current pot bank:
-  - Bank 1 maps K1→CC26 ⇒ a lock on K1 sends **CC26**.
-  - Switch the track to Bank 2 (K1→CC33) ⇒ the same lock now sends **CC33**.
-- A step carrying any P-Lock is tinted **MAGENTA `#ff00ff`** in the step row so locks are
-  visible. While the step is held, the OLED lists the locked slots/values (resolved to
-  their current CC #s).
-- Finally makes the long-dead `Step::potVals[5]` model do something
-  (`DESIGN_NOTES.md §4b`).
+  `CC = pots[trackBank][slot]` with the locked value on the track's channel. The *slot* is
+  locked, the *CC number* follows the track's current pot bank.
+- The OLED confirms `CC<n> <value>` while you turn. A step carrying any P-Lock is tinted
+  **MAGENTA `#ff00ff`** in the step row _(planned; not yet drawn)_.
+- Drives the `Step::potVals[5]` model via `setStepPotLock()` → sent in `triggerStep`.
+
+> Note: the keyboard's **Velocity / Length / Chance / Math** are set with the **key palettes**
+> (hold 11 / 12 / 13 / 11+12 in Notes; the step-hold palette in Seq), so the pots are free for
+> CC P-Locks. The old machine path that edited Vel/Len with the pots is retired.
 
 ---
 
@@ -275,32 +276,38 @@ in the build they live under F1 so the AUX layer stays view-switch + transport o
 
 → `form_redesign.json` **state 7**.
 
-### 4.4 Notes  _(chord/note entry — reworked for in-editor step nav)_
-Enter via the **AUX view selector (AUX + 16)** — the double-click-a-step shortcut is gone
-with the Step-view double-click. The view lets you **step through and edit without leaving
-the editor**:
+### 4.4 Notes  _(chord/note entry with in-editor step nav — **built** Aug 2026)_
+Enter via the **AUX view selector (AUX + 16)** or the page-1 encoder view tag. There is always
+one **selected step**; the keys play/edit it, the encoder pages through richer editors.
 
-- **Keyboard starts at F4 (key 15).** The playable piano is now **keys 3–10 (sharps) +
-  15–26 (naturals)** = F4→C6 (~1.5 octaves). The sharps 3–10 line up as the black keys
-  for the naturals 15–26, so it reads as a real keyboard. (Octave shift = AUX + 11/12.)
-- **Keys 1 / 2 = F1 / F2 = copy step / paste step.**
-- **Keys 11 / 12 = prev / next step**, **one step per click** (no auto-repeat).
-  **Key 13 = (unused for now)** · **Key 14 = clear step**.
-- **F3 (hold F1+F2) = jump-to-step:** while held, the low row (11–26) becomes a 16-step
-  selector for the current page — the current step flashes; tap a key to jump there.
-- **Live audition:** when transport is **stopped**, pressing/holding the piano keys
-  **sends MIDI note-on while held** (note-off on release) so you hear what you're
-  entering. (While playing, key presses edit the step without extra audition.)
-- **Encoder still changes the step** too (unchanged).
-- **Step-change feedback:** no persistent cursor. On any step change (11/12, F3-jump, or
-  encoder) the new step's stored notes **flash briefly, then settle** — a quick preview
-  of what's on the step you landed on.
-- **Change page** while here: via the **AUX layer** (keys 6–9), like everywhere else (§6).
-- **OLED:** above the keyboard render, a strip of **16 small boxes** (one **filled** =
-  the step being edited) and, to its right, the **page number** (1–4). (Plus the global
-  CC meter + page indicator, §2.)
+- **Keyboard starts at F4 (key 15).** The playable piano is **keys 3–10 (sharps) + 15–26
+  (naturals)** = F4→C6. Held keys build the selected step's **chord** (a single press replaces).
+  Scale-aware colours like MI mode (root periwinkle / in-scale dim blue / off-scale dark), with
+  a chromatic fallback when no scale is set. **Live audition** while transport is stopped
+  (note-on on key-hold, note-off on release). (Octave = AUX + 11/12.)
+- **Keys 1 / 2 = quick-tap copy / paste step; hold = the F1 / F2 modifiers** (below).
+- **Keys 11 / 12 = quick-tap prev / next step; hold = a param palette** (below).
+- **Key 13 = hold for the Chance palette.** **Key 14 = quick-tap clear step (into the buffer);
+  hold = clear the P-Lock on the encoder-selected step param.**
 
-→ `form_redesign.json` **state 6** (and `form_notes.json` for the detail).
+**Hold-key param palettes** (top row 1–10 sets the value; a ~150 ms delay keeps a quick tap
+from flashing the popup — same as the Seq step-hold):
+- **Hold 11 = Velocity · hold 12 = Length · hold 11+12 = Math · hold 13 = Chance.**
+
+**F1 / F2 / F3 modifiers** (mirror the Seq view):
+- **Hold F1** → **jump-to-step** on the low row (11–26) + **pages** on the top row (3–6:
+  select / double-solo / hold-range). OLED shows "JUMP" + the page-1 page icons.
+- **Hold F2 + top row 3–10** → select the track.
+- **F3 (F1+F2)** → **rate** (top 3–10) + **page length** (low row) — the exact Seq LEN|RATE screen.
+
+**Encoder = pages** (flat cursor, click toggles **select** ↔ **edit**, like the rest of the UI):
+`0` keyboard · `1–6` the six note slots + `7` the names/numbers switch (the same **STEPNOTES**
+page the Seq view shows) · `8–11` **Scale** (Root / Scale / Lock / Group — global) · `12–15`
+step params A (Vel / Nudge / Len / MFX) · `16–19` step params B (Prob / Cond / Func / Accum).
+Edit-mode turn changes the selected step (keyboard), the six note values (STEPNOTES), or the
+param on the selected step. Keys (piano / nav / palettes / F-mods) work the same on every page.
+
+→ `form_notes.json` (and the Seq STEPNOTES page it reuses).
 
 ### 4.5 Patterns
 A **pattern** is a snapshot of the whole sequencer — all 8 tracks' step data plus their
@@ -480,12 +487,24 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
     6/8/16/32/64. **Microtiming** is menu+encoder only (no keys) → enables quantize-off (§7).
 19. **MIDI FX** = **Off + 5 slots**, per-step and P-lockable (§4.2).
 20. **Count-in** = 1 bar when starting from stopped; menu toggle (§7).
+21. **Per-track MIDI channel** → defaults to the **track index + 1 (channels 1–8)**, changeable
+    in the track menu (SEQMIDI page). Applied at construction, in `FormPattern()`, and
+    re-applied in `loadFromDisk` (which re-creates the machines); a saved channel overrides.
+22. **Default step velocity** → **100** (was 127).
+23. **CC P-Lock** → **hold step + turn a pot** in the Step view (§3), direct-set; pots are no
+    longer used for Vel/Len (those are key palettes).
+24. **Display refresh** → FORM renders the OLED buffer **every loop like Euclidean** (dropped the
+    `canShowDisplay()` gate) so the per-loop-cleared buffer is always populated; the physical
+    flush stays throttled to ~60 ms. Fixes the SysEx screen-mirror capturing blank frames.
+25. **SysEx remote control** → the firmware accepts injected key/encoder/pot events
+    (`NL_CMD_INPUT` 0x51) and mirrors its screen, for host-driven QA (host tools in `tools/`).
 
 ### Still open
 - **RAM ceilings / per-platform trims** — real pattern / page / track counts per build
   (V3 fullest; Teensy 3.1 / 4 tighter). Decide the trims once we measure.
 - **Pattern extras** — default switch-style; **chaining / song mode** (builds on "Chained").
-- **P-Lock color MAGENTA** — confirm.
+- **Live recording** (§7), **MI view** (§4.6), and **Transpose** (§4.3) — not built yet.
+- **P-Lock step tint (MAGENTA)** and the **CC meter + page indicator** OLED strips — not drawn yet.
 
 ---
 
