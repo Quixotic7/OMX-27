@@ -286,10 +286,67 @@ void OmxModeForm::setFormView(uint8_t view)
 			static_cast<FormOmni::FormMachineOmni *>(machines_[i])->setUiMode(uiMode);
 	}
 
+	viewSelectEdit_ = false; // committing a view leaves the page-1 selector
 	static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI"};
 	omxDisp.displayMessage(kViewNames[view]);
 	omxLeds.setDirty();
 	omxDisp.setDirty();
+}
+
+// The MIX/SEQ page-1 track overview owns the encoder (for the view selector) only when no
+// modifier is held, no track/step is held, and — in SEQ — we're on the overview (page 0).
+bool OmxModeForm::isTrackPage()
+{
+	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
+		return false;
+	if (heldTrackKey_ >= 0)
+		return false;
+	if (formView_ == FORMVIEW_MIX)
+		return true;
+	if (formView_ == FORMVIEW_STEP)
+		return stepMenuPage_ == 0 && heldStepMask_ == 0;
+	return false;
+}
+
+// Encoder turn on the track page: while editing, browse the pending view (wrapping). The display
+// stays on the current track page, so the boxed tag previews where a click would take you.
+bool OmxModeForm::onEncoderTrackPage(int dir)
+{
+	// Only intercept while actively editing — otherwise the turn must fall through to the normal
+	// behavior (e.g. the SEQ overview navigating into its param pages).
+	if (!viewSelectEdit_ || !isTrackPage())
+		return false;
+	if (dir == 0)
+		return true;
+	int v = ((int)pendingView_ + dir) % (int)FORMVIEW_COUNT;
+	if (v < 0)
+		v += FORMVIEW_COUNT;
+	pendingView_ = (uint8_t)v;
+	omxDisp.setDirty();
+	return true;
+}
+
+// Encoder click on the track page: enter the view selector, or commit the browsed view.
+bool OmxModeForm::onEncoderButtonTrackPage()
+{
+	if (!isTrackPage())
+		return false;
+	if (!viewSelectEdit_)
+	{
+		viewSelectEdit_ = true;
+		pendingView_ = formView_;
+		omxDisp.setDirty();
+	}
+	else if (pendingView_ != formView_)
+	{
+		setFormView(pendingView_); // also clears viewSelectEdit_
+	}
+	else
+	{
+		viewSelectEdit_ = false; // same view: just leave edit mode
+		omxDisp.setDirty();
+	}
+	return true;
 }
 
 // While AUX is held, keys 13-18 are the view selector: the selected (pending) view is
@@ -1109,12 +1166,18 @@ void OmxModeForm::onDisplaySeqTrackPage()
 		overlayLabel = "MUTE / PLAY MODE";
 	}
 
-	const char *viewLabel = (formView_ == FORMVIEW_MIX) ? "MIX" : nullptr;
+	// View tag (the page-1 view selector). While editing, it shows the browsed pendingView_ and
+	// boxes/inverts; otherwise it names the current view. MIX = "MIX", STEP = "SEQ".
+	static const char *kViewTags[FORMVIEW_COUNT] = {"MIX", "SEQ", "TRSP", "NOTE", "PTRN", "MI"};
+	uint8_t tagView = viewSelectEdit_ ? pendingView_ : formView_;
+	const char *viewLabel = kViewTags[tagView];
+	bool viewLabelSel = viewSelectEdit_;
 	uint8_t transport = omxFormGlobal.isPlaying ? 1 : 0; // record state not wired yet
 	omxDisp.dispSeqTrackPage(title, trackMuted, selectedMachine_, rateStr,
 							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
 							 omni->getEnabledPages(), omni->activePage(), stepState, playhead,
-							 modOverlay, overlayLabel, omni->getPageLen(omni->activePage()), transport, viewLabel);
+							 modOverlay, overlayLabel, omni->getPageLen(omni->activePage()), transport,
+							 viewLabel, viewLabelSel);
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
@@ -1534,6 +1597,9 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 	if (auxMacroManager_.onEncoderChanged(enc))
 		return;
 
+	if (onEncoderTrackPage(enc.dir()))
+		return;
+
 	if (onEncoderStep(enc))
 		return;
 
@@ -1620,6 +1686,9 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 void OmxModeForm::onEncoderButtonDown()
 {
 	if (auxMacroManager_.onEncoderButtonDown())
+		return;
+
+	if (onEncoderButtonTrackPage())
 		return;
 
 	if (onEncoderButtonStep())
@@ -1732,6 +1801,7 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			midiSettings.midiAUX = e.down();
 			if (e.down() && !wasAux)
 			{
+				viewSelectEdit_ = false;    // AUX is the alternate view selector; drop the encoder one
 				pendingView_ = formView_; // start browsing from the current view
 			}
 			// v2 shell: on AUX release, commit the view you browsed to while holding AUX.

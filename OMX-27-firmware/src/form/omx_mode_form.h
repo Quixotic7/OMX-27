@@ -193,7 +193,13 @@ private:
 	// While AUX is held, tapping a view key selects a pending view (preview + message);
 	// the switch is committed on AUX release so the AUX overlay stays up while you browse.
 	uint8_t pendingView_ = FORMVIEW_MIX;
+	// Page-1 (track page) encoder view selector: click the encoder to enter edit mode (the view
+	// tag boxes/inverts), turn to browse pendingView_, click again to commit. See isTrackPage().
+	bool viewSelectEdit_ = false;
 	void setFormView(uint8_t view);
+	bool isTrackPage(); // true when the MIX/SEQ page-1 track overview owns the encoder
+	bool onEncoderTrackPage(int dir); // encoder turn on the track page (view browse). consumed?
+	bool onEncoderButtonTrackPage();  // encoder click on the track page (enter/commit). consumed?
 	void updateAuxViewLEDs(); // paint the view selector (keys 13-18) on the AUX overlay
 	// Container-rendered views:
 	void updatePatternsLEDs();

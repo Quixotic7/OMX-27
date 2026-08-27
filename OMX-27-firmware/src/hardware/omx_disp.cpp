@@ -691,7 +691,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
 							   uint8_t activePage, const uint8_t *stepState, int8_t playhead,
 							   uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport,
-							   const char *viewLabel)
+							   const char *viewLabel, bool viewLabelSel)
 {
 	if (isMessageActive())
 	{
@@ -723,16 +723,30 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	if (transport == 2) display.fillCircle(69, 3, 2, WHITE);
 	else				display.drawCircle(69, 3, 2, WHITE);
 
-	// --- View tag (e.g. "MIX"): underlined label in the top area, right of the transport widget.
+	// --- View tag (e.g. "MIX"): the page-1 view selector, top area right of the transport widget.
+	// Default = white text + underline; selected (encoder editing) = filled box + black text.
 	if (viewLabel)
 	{
 		u8g2_display.setFont(FONT_LABELS);
-		u8g2_display.setForegroundColor(WHITE);
-		u8g2_display.setBackgroundColor(BLACK);
-		u8g2_display.setCursor(78, 6);
-		u8g2_display.print(viewLabel);
 		uint16_t vw = u8g2_display.getUTF8Width(viewLabel);
-		display.fillRect(78, 7, vw, 1, WHITE);
+		if (viewLabelSel)
+		{
+			display.fillRect(77, 0, vw + 3, 8, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+			u8g2_display.setCursor(78, 6);
+			u8g2_display.print(viewLabel);
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+			u8g2_display.setCursor(78, 6);
+			u8g2_display.print(viewLabel);
+			display.fillRect(78, 7, vw, 1, WHITE);
+		}
 	}
 
 	// --- BPM, top-right.
