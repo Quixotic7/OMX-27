@@ -699,30 +699,31 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		return;
 	}
 	display.fillRect(0, 0, 128, 32, BLACK);
-	drawCCMeter(); // top-row knob meter (drawn first; widgets sit at y>=1)
+	drawCCMeter(); // top-row knob meter at y=0 (widgets sit at y>=2 for a 1px gap)
 	u8g2_display.setFontMode(1);
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
 
 	// --- 8 track-state squares (top-left): filled = unmuted, outline = muted, selected underlined.
+	// Everything below the CC meter sits 1px down (y>=2) to give the top meter breathing room.
 	for (uint8_t t = 0; t < 8; t++)
 	{
 		int x = 1 + t * 6;
 		if (!trackMuted[t])
-			display.fillRect(x, 1, 4, 4, WHITE);
+			display.fillRect(x, 2, 4, 4, WHITE);
 		else
-			display.drawRect(x, 1, 4, 4, WHITE);
+			display.drawRect(x, 2, 4, 4, WHITE);
 		if (t == selTrack)
-			display.fillRect(x, 6, 4, 1, WHITE); // selected underline
+			display.fillRect(x, 7, 4, 1, WHITE); // selected underline
 	}
 
 	// --- Transport widget (top-middle): play ▶ / stop ■ / record ●, active one filled.
-	if (transport == 1) display.fillTriangle(54, 1, 54, 5, 57, 3, WHITE);
-	else				display.drawTriangle(54, 1, 54, 5, 57, 3, WHITE);
-	if (transport == 0) display.fillRect(60, 1, 5, 5, WHITE);
-	else				display.drawRect(60, 1, 5, 5, WHITE);
-	if (transport == 2) display.fillCircle(69, 3, 2, WHITE);
-	else				display.drawCircle(69, 3, 2, WHITE);
+	if (transport == 1) display.fillTriangle(54, 2, 54, 6, 57, 4, WHITE);
+	else				display.drawTriangle(54, 2, 54, 6, 57, 4, WHITE);
+	if (transport == 0) display.fillRect(60, 2, 5, 5, WHITE);
+	else				display.drawRect(60, 2, 5, 5, WHITE);
+	if (transport == 2) display.fillCircle(69, 4, 2, WHITE);
+	else				display.drawCircle(69, 4, 2, WHITE);
 
 	// --- View tag (e.g. "MIX"): the page-1 view selector, top area right of the transport widget.
 	// Default = white text + underline; selected (encoder editing) = filled box + black text.
@@ -732,10 +733,10 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		uint16_t vw = u8g2_display.getUTF8Width(viewLabel);
 		if (viewLabelSel)
 		{
-			display.fillRect(77, 0, vw + 3, 8, WHITE);
+			display.fillRect(77, 1, vw + 3, 8, WHITE);
 			u8g2_display.setForegroundColor(BLACK);
 			u8g2_display.setBackgroundColor(WHITE);
-			u8g2_display.setCursor(78, 6);
+			u8g2_display.setCursor(78, 7);
 			u8g2_display.print(viewLabel);
 			u8g2_display.setForegroundColor(WHITE);
 			u8g2_display.setBackgroundColor(BLACK);
@@ -744,9 +745,9 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		{
 			u8g2_display.setForegroundColor(WHITE);
 			u8g2_display.setBackgroundColor(BLACK);
-			u8g2_display.setCursor(78, 6);
+			u8g2_display.setCursor(78, 7);
 			u8g2_display.print(viewLabel);
-			display.fillRect(78, 7, vw, 1, WHITE);
+			display.fillRect(78, 8, vw, 1, WHITE);
 		}
 	}
 
@@ -755,7 +756,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	char bpmStr[8];
 	snprintf(bpmStr, sizeof(bpmStr), "%u", (unsigned)bpm);
 	uint16_t bw = u8g2_display.getUTF8Width(bpmStr);
-	u8g2_display.setCursor(127 - bw, 6);
+	u8g2_display.setCursor(127 - bw, 7);
 	u8g2_display.print(bpmStr);
 
 	// --- Name row: "TRK n" (chunky) + play-mode icon + rate. Icon/rate are at FIXED positions
@@ -764,7 +765,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	uint16_t nameW = u8g2_display.getUTF8Width(trackName);
 	if (modOverlay == 2)
 	{
-		display.fillRect(0, 7, nameW + 4, 14, WHITE);
+		display.fillRect(0, 8, nameW + 4, 14, WHITE);
 		u8g2_display.setForegroundColor(BLACK);
 		u8g2_display.setBackgroundColor(WHITE);
 	}
@@ -773,14 +774,14 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		u8g2_display.setForegroundColor(WHITE);
 		u8g2_display.setBackgroundColor(BLACK);
 	}
-	u8g2_display.setCursor(2, 19);
+	u8g2_display.setCursor(2, 20);
 	u8g2_display.print(trackName);
 
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
-	drawPlayIcon(playMode, 54, 10); // 17x9 icon, fixed x
+	drawPlayIcon(playMode, 54, 11); // 17x9 icon, fixed x
 	u8g2_display.setFont(FONT_LABELS);
-	u8g2_display.setCursor(74, 18);
+	u8g2_display.setCursor(74, 19);
 	u8g2_display.print(rateStr);
 
 	// --- 4 page icons (right): filled = enabled, outline = muted, active underlined. F1 boxes +
@@ -790,13 +791,13 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		bool pageInv = (modOverlay == 1);
 		uint16_t pgFg = pageInv ? BLACK : WHITE;
 		if (pageInv)
-			display.fillRect(96, 6, 32, 15, WHITE); // section box
+			display.fillRect(96, 7, 32, 15, WHITE); // section box
 		for (uint8_t p = 0; p < 4; p++)
 		{
 			int x = 98 + p * 8;
-			drawPageIcon(x, 8, (enabledPages & (1 << p)) != 0, pgFg);
+			drawPageIcon(x, 9, (enabledPages & (1 << p)) != 0, pgFg);
 			if (p == activePage)
-				display.fillRect(x, 18, 6, 1, pgFg);
+				display.fillRect(x, 19, 6, 1, pgFg);
 		}
 	}
 
