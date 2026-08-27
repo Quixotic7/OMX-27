@@ -269,6 +269,12 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	formView_ = view;
 	pendingView_ = view; // keep the AUX-release commit from reverting a live switch
 	heldTrackKey_ = -1;
+	// Clear Notes-view hold state so a view switch mid-hold can't leave it stuck.
+	notesPaletteEngaged_ = false;
+	notesHoldMask_ = 0;
+	notesModalHeld_ = false;
+	notesHoldUIShown_ = false;
+	notesF1Used_ = notesF2Used_ = false;
 
 	// Editor views map to an OMNI UI mode, applied to every track so the view stays
 	// consistent when you switch tracks. Patterns / MI are rendered by the container.
@@ -451,9 +457,9 @@ void OmxModeForm::notesSetChordFromHeld()
 // 13 = chance. -1 = none held.
 int8_t OmxModeForm::notesPaletteMode()
 {
-	if (midiSettings.keyState[13])
+	bool h11 = notesHoldMask_ & 1, h12 = notesHoldMask_ & 2, h13 = notesHoldMask_ & 4;
+	if (h13)
 		return STEPMODE_CHANCE;
-	bool h11 = midiSettings.keyState[11], h12 = midiSettings.keyState[12];
 	if (h11 && h12)
 		return STEPMODE_MATH;
 	if (h11)
@@ -473,9 +479,20 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 	bool held = e.held();
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
+	// keyState[k] is still true on this key's own release event, so track the palette keys (11/12/13)
+	// with an explicit mask and read F1/F2 with a release-aware check.
+	if (k >= 11 && k <= 13)
+	{
+		if (down && !held)
+			notesHoldMask_ |= (1 << (k - 11));
+		else if (!down)
+			notesHoldMask_ &= ~(1 << (k - 11));
+	}
+	bool f1h = midiSettings.keyState[1] && !(k == 1 && !down);
+	bool f2h = midiSettings.keyState[2] && !(k == 2 && !down);
+
 	// Track any modal-hold key (F1/F2 or a palette hold) so the popup can wait out a quick tap.
-	bool modalNow = midiSettings.keyState[1] || midiSettings.keyState[2] ||
-					midiSettings.keyState[11] || midiSettings.keyState[12] || midiSettings.keyState[13];
+	bool modalNow = (notesHoldMask_ != 0) || f1h || f2h;
 	if (modalNow && !notesModalHeld_)
 	{
 		notesHoldStartMs_ = millis();
@@ -484,21 +501,15 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 	notesModalHeld_ = modalNow;
 
 	// Engage a param-palette hold when 11/12/13 is pressed with no F-key held (see notesPaletteMode).
-	if ((k == 11 || k == 12 || k == 13) && down && !held &&
-		!midiSettings.keyState[1] && !midiSettings.keyState[2] &&
+	if ((k == 11 || k == 12 || k == 13) && down && !held && !f1h && !f2h &&
 		omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX)
 	{
+		if (!notesPaletteEngaged_)
+			notesSuppressPrev_ = notesSuppressNext_ = false;
 		notesPaletteEngaged_ = true;
-		if (k == 11)
-			notesSuppressPrev_ = false;
-		if (k == 12)
-			notesSuppressNext_ = false;
-		if (midiSettings.keyState[11] && midiSettings.keyState[12]) // both held = math, no nav
+		if ((notesHoldMask_ & 3) == 3) // both 11+12 held = math, no nav
 			notesSuppressPrev_ = notesSuppressNext_ = true;
 	}
-	// Safety: never stay engaged once none of 11/12/13 is held (also unfreezes the shortcut mode).
-	if (notesPaletteEngaged_ && !midiSettings.keyState[11] && !midiSettings.keyState[12] && !midiSettings.keyState[13])
-		notesPaletteEngaged_ = false;
 
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
 		return; // the AUX layer owns the keys while held
@@ -511,9 +522,9 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 		{
 			omni->setStepPalette(notesSelStep_, (uint8_t)pmode, k - 1);
 			notesHoldUIShown_ = true; // an edit shows the popup immediately
-			if (midiSettings.keyState[11])
+			if (notesHoldMask_ & 1)
 				notesSuppressPrev_ = true;
-			if (midiSettings.keyState[12])
+			if (notesHoldMask_ & 2)
 				notesSuppressNext_ = true;
 			omxDisp.setDirty();
 			omxLeds.setDirty();
@@ -527,7 +538,7 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 					notesSelStep_--;
 				else if (k == 12 && !notesSuppressNext_ && e.quickClicked() && notesSelStep_ < 15)
 					notesSelStep_++;
-				if (!midiSettings.keyState[11] && !midiSettings.keyState[12] && !midiSettings.keyState[13])
+				if (notesHoldMask_ == 0)
 					notesPaletteEngaged_ = false;
 				omxDisp.setDirty();
 				omxLeds.setDirty();
@@ -771,20 +782,26 @@ void OmxModeForm::updateNotesLEDs()
 	strip.setPixelColor(12, DKBLUE); // next step
 	strip.setPixelColor(14, DKRED);  // clear step
 
-	// Piano: naturals dim blue (roots periwinkle), sharps darker; the current step's chord
-	// notes light up LTYELLOW.
+	// Piano: scale-aware colours like MI mode (root periwinkle / in-scale dim blue / off-scale
+	// dark), with a chromatic fallback when no scale is set. The current step's chord = LTYELLOW.
+	bool haveScale = (scaleConfig.scalePattern >= 0);
 	int8_t chord[6];
 	omni->getStepNotes(notesSelStep_, chord);
-	for (uint8_t k = 3; k < 27; k++)
+	for (uint8_t key = 3; key < 27; key++)
 	{
-		int8_t base = kNotesKeyBase[k];
+		int8_t base = kNotesKeyBase[key];
 		if (base < 0)
 			continue;
 		int16_t note = base + midiSettings.octave * 12;
-		uint32_t c = (note % 12 == 0) ? (uint32_t)0xA2A2FF : (k <= 10 ? (uint32_t)DKBLUE : (uint32_t)0x000090);
+		uint8_t pc = (uint8_t)(((note % 12) + 12) % 12);
+		uint32_t c;
+		if (haveScale)
+			c = (uint32_t)omxFormGlobal.musicScale->getScaleColor(pc);
+		else
+			c = (pc == 0) ? (uint32_t)0xA2A2FF : (key <= 10 ? (uint32_t)DKBLUE : (uint32_t)0x000090);
 		for (uint8_t n = 0; n < 6; n++)
 			if (chord[n] == note) { c = (uint32_t)LTYELLOW; break; }
-		strip.setPixelColor(k, c);
+		strip.setPixelColor(key, c);
 	}
 }
 
