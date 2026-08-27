@@ -934,7 +934,7 @@ namespace FormOmni
         ng.channel = seq_.channel + 1;
         ng.noteNumber = note;
         ng.prevNoteNumber = note;
-        ng.velocity = on ? 100 : 0;
+        ng.velocity = on ? (uint8_t)getTrack()->paramDefaults[0] : 0; // track default velocity
         ng.sendMidi = (bool)seq_.sendMidi;
         ng.sendCV = (bool)seq_.sendCV;
         ng.unknownLength = true; // send/stop directly — do NOT schedule a pending note-off

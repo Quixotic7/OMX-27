@@ -278,6 +278,8 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	notesF1Used_ = notesF2Used_ = false;
 	notesCursor_ = 0; // open on the keyboard page, select mode
 	notesEncEdit_ = false;
+	miCursor_ = 0; // MI opens on the keyboard, select mode
+	miEncEdit_ = false;
 
 	// Editor views map to an OMNI UI mode, applied to every track so the view stays
 	// consistent when you switch tracks. Patterns / MI are rendered by the container.
@@ -442,10 +444,76 @@ void OmxModeForm::updateMILEDs()
 			strip.setPixelColor(k, WHITE);
 }
 
+// Encoder turn in the MI view: select mode moves the menu cursor; edit mode changes the value.
+bool OmxModeForm::onEncoderMI(int dir)
+{
+	if (dir == 0)
+		return true;
+	if (!miEncEdit_)
+	{
+		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 8);
+		omxDisp.setDirty();
+		return true;
+	}
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	if (miCursor_ >= 1 && miCursor_ <= 4) // scale params
+		notesEditScaleParam(miCursor_ - 1, dir);
+	else if (miCursor_ == 5) // channel
+		omni->setChannel((uint8_t)constrain((int)omni->getChannel() + dir, 0, 15));
+	else if (miCursor_ == 6) // default velocity
+		omni->editParamDefault(0, dir);
+	else if (miCursor_ == 7) // pot bank
+		omni->setPotBank((uint8_t)constrain((int)omni->getPotBank() + dir, 0, NUM_CC_BANKS - 1));
+	else if (miCursor_ == 8) // octave
+		midiSettings.octave = constrain(midiSettings.octave + dir, -5, 4);
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+	return true;
+}
+
+bool OmxModeForm::onEncoderButtonMI()
+{
+	miEncEdit_ = !miEncEdit_;
+	omxDisp.setDirty();
+	return true;
+}
+
 void OmxModeForm::onDisplayMI()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
-	tempString = "TRK " + String(selectedMachine_ + 1) + "  CH" + String(omni->getSeq().channel + 1);
+
+	// Scale page (cursor 1-4): Root / Scale / Lock / Group.
+	if (miCursor_ >= 1 && miCursor_ <= 4)
+	{
+		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
+		String vals[4];
+		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
+		vals[1] = (scaleConfig.scalePattern < 0) ? String("-") : String((int)scaleConfig.scalePattern);
+		vals[2] = scaleConfig.lockScale ? "1" : "0";
+		vals[3] = scaleConfig.group16 ? "1" : "0";
+		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
+		bool locked[4] = {false, false, false, false};
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 1, miEncEdit_);
+		return;
+	}
+
+	// Track page (cursor 5-8): Channel / Velocity / Pot Bank / Octave (per selected track).
+	if (miCursor_ >= 5 && miCursor_ <= 8)
+	{
+		const char *labels[4] = {"CHAN", "VEL", "BANK", "OCT"};
+		String vals[4];
+		vals[0] = String(omni->getChannel() + 1);
+		vals[1] = omni->paramDefaultBox(0);
+		vals[2] = String(omni->getPotBank() + 1);
+		vals[3] = String((int)midiSettings.octave);
+		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
+		bool locked[4] = {false, false, false, false};
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 5, miEncEdit_);
+		return;
+	}
+
+	// Page 0: the keyboard label — track # + channel.
+	tempString = "TRK " + String(selectedMachine_ + 1) + "  CH" + String(omni->getChannel() + 1);
 	omxDisp.dispGenericModeLabelDoubleLine("MI", tempString.c_str(), 0, 0);
 }
 
@@ -2325,6 +2393,12 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 		onEncoderNotes(enc.dir());
 		return;
 	}
+	// MI view: the encoder navigates its menu (scale / track settings).
+	if (formView_ == FORMVIEW_MI)
+	{
+		onEncoderMI(enc.dir());
+		return;
+	}
 
 	if (onEncoderStep(enc))
 		return;
@@ -2418,6 +2492,9 @@ void OmxModeForm::onEncoderButtonDown()
 		return;
 
 	if (formView_ == FORMVIEW_NOTES && !viewEditActive() && onEncoderButtonNotes())
+		return;
+
+	if (formView_ == FORMVIEW_MI && !viewEditActive() && onEncoderButtonMI())
 		return;
 
 	if (onEncoderButtonStep())

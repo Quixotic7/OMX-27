@@ -221,6 +221,9 @@ namespace FormOmni
         void clearStepParamLock(uint8_t key16, uint8_t pid); // clears the lock and resets to default
 
         void setChannel(uint8_t ch) { seq_.channel = ch & 0x0F; } // 0-15 -> MIDI ch 1-16
+        void setPotBank(uint8_t b) { seq_.potBank = b % NUM_CC_BANKS; }
+        uint8_t getPotBank() { return seq_.potBank; }
+        uint8_t getChannel() { return seq_.channel; }
 
         // Per-step CC P-Lock: lock pot-slot `slot` (0-4) to `value` (0-127) on this step; -1 =
         // unlocked. When the step fires it sends CC potLockCC(slot) with this value.

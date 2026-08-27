@@ -207,10 +207,16 @@ private:
 	void updatePatternsLEDs();
 	void onKeyUpdatePatterns(OMXKeypadEvent e);
 	void onDisplayPatterns();
-	// MI view — a live-play keyboard over the running sequencer (§4.6).
+	// MI view — a live-play keyboard over the running sequencer (§4.6). The encoder navigates a
+	// small menu: 0 = keyboard · 1-4 = Scale (root/scale/lock/group) · 5-8 = Track (chan/vel/
+	// bank/oct). Click toggles select (turn = move) vs edit (turn = change value).
+	uint8_t miCursor_ = 0;
+	bool miEncEdit_ = false;
 	void onKeyUpdateMI(OMXKeypadEvent e);
 	void updateMILEDs();
 	void onDisplayMI();
+	bool onEncoderMI(int dir);      // encoder turn in the MI view. consumed?
+	bool onEncoderButtonMI();       // encoder click in the MI view. consumed?
 	// ---- Notes view (container-rendered chord editor with in-editor step nav) ----
 	uint8_t notesSelStep_ = 0;   // step being edited (0-15, active-page-relative)
 	// Param-palette holds (no F-key): hold 11 = velocity, 12 = length, 11+12 = math, 13 = chance;
