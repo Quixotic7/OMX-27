@@ -247,6 +247,10 @@ private:
 	// Live recording: quantize a played note into the selected track's nearest playing step.
 	uint64_t recClearedMask_ = 0; // steps cleared this record pass (replace mode); reset on loop wrap
 	void recordPlayedNote(int8_t note);
+	// CC meter is transient: show it only briefly after a knob moves.
+	uint32_t lastPotMs_ = 0;
+	bool ccMeterWasActive_ = false;
+	bool ccMeterActive() { return lastPotMs_ != 0 && (millis() - lastPotMs_) < 1000; }
 	// ---- Step view (container-rendered v2 editor) ----
 	uint8_t stepEditMode_ = STEPMODE_NOTE; // which of the 8 modes is active (top row 3-10)
 	uint16_t heldStepMask_ = 0;            // bitmask of step keys (0-15) held right now

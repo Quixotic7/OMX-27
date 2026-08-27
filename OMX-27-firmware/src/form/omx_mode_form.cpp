@@ -1939,7 +1939,7 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
 							 omni->getEnabledPages(), omni->activePage(), stepState, playhead,
 							 modOverlay, overlayLabel, omni->getPageLen(omni->activePage()), transport,
-							 viewLabel, viewLabelSel, !keyboardMode);
+							 viewLabel, viewLabelSel, !keyboardMode, ccMeterActive());
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
@@ -2261,6 +2261,8 @@ void OmxModeForm::selectMidiFx(uint8_t mfxIndex, bool dispMsg)
 
 void OmxModeForm::onPotChanged(int potIndex, int prevValue, int newValue, int analogDelta)
 {
+	lastPotMs_ = millis(); // show the transient CC meter for a moment
+
 	if (auxMacroManager_.onPotChanged(potIndex, prevValue, newValue, analogDelta))
 		return;
 
@@ -2318,6 +2320,12 @@ void OmxModeForm::onClockTick()
 void OmxModeForm::loopUpdate(Micros elapsedTime)
 {
 	// Serial.println("LoopUpdate");
+
+	// Keep repainting while the transient CC meter is up (and once as it expires) so it clears.
+	bool ccActive = ccMeterActive();
+	if (ccActive || ccMeterWasActive_)
+		omxDisp.setDirty();
+	ccMeterWasActive_ = ccActive;
 
 	// Engage the hold-step UI once the hold passes a short delay (prevents quick-click flashes).
 	if (heldStepMask_ != 0 && !stepHoldUIShown_ && (millis() - stepHoldStartMs_) >= 150)

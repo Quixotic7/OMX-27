@@ -691,7 +691,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
 							   uint8_t activePage, const uint8_t *stepState, int8_t playhead,
 							   uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport,
-							   const char *viewLabel, bool viewLabelSel, bool showPagesSteps)
+							   const char *viewLabel, bool viewLabelSel, bool showPagesSteps, bool showCCMeter)
 {
 	if (isMessageActive())
 	{
@@ -699,7 +699,8 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		return;
 	}
 	display.fillRect(0, 0, 128, 32, BLACK);
-	drawCCMeter(); // top-row knob meter at y=0 (widgets sit at y>=2 for a 1px gap)
+	if (showCCMeter)
+		drawCCMeter(); // transient top-row knob meter at y=0 (widgets sit at y>=2 for a 1px gap)
 	u8g2_display.setFontMode(1);
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
