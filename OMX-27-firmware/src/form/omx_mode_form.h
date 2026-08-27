@@ -269,7 +269,9 @@ private:
 	bool onEncoderStep(Encoder::Update enc);   // returns true if the Step view consumed the encoder
 	bool onEncoderButtonStep();                // returns true if consumed
 	void onDisplayStepMenu();                  // render a param page (held step values / defaults)
-	void onDisplaySeqTrackPage();              // render the page-1 track overview (+ F1/F2 overlay)
+	// Render the page-1 track overview (+ F1/F2 overlay). keyboardMode (MI view) hides the page
+	// icons + step row and suppresses the F1/F2 overlays.
+	void onDisplaySeqTrackPage(bool keyboardMode = false);
 	void stepApplyToHeld(uint8_t paletteIndex); // set the palette value on every held step
 	void updateStepLEDs();
 	void onDisplayStep();

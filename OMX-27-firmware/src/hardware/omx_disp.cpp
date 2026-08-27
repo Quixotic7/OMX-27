@@ -691,7 +691,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
 							   uint8_t activePage, const uint8_t *stepState, int8_t playhead,
 							   uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport,
-							   const char *viewLabel, bool viewLabelSel)
+							   const char *viewLabel, bool viewLabelSel, bool showPagesSteps)
 {
 	if (isMessageActive())
 	{
@@ -784,18 +784,24 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	u8g2_display.print(rateStr);
 
 	// --- 4 page icons (right): filled = enabled, outline = muted, active underlined. F1 boxes +
-	// inverts the whole page section (it's what F1 controls).
-	bool pageInv = (modOverlay == 1);
-	uint16_t pgFg = pageInv ? BLACK : WHITE;
-	if (pageInv)
-		display.fillRect(96, 6, 32, 15, WHITE); // section box
-	for (uint8_t p = 0; p < 4; p++)
+	// inverts the whole page section (it's what F1 controls). Hidden in the MI keyboard view.
+	if (showPagesSteps)
 	{
-		int x = 98 + p * 8;
-		drawPageIcon(x, 8, (enabledPages & (1 << p)) != 0, pgFg);
-		if (p == activePage)
-			display.fillRect(x, 18, 6, 1, pgFg);
+		bool pageInv = (modOverlay == 1);
+		uint16_t pgFg = pageInv ? BLACK : WHITE;
+		if (pageInv)
+			display.fillRect(96, 6, 32, 15, WHITE); // section box
+		for (uint8_t p = 0; p < 4; p++)
+		{
+			int x = 98 + p * 8;
+			drawPageIcon(x, 8, (enabledPages & (1 << p)) != 0, pgFg);
+			if (p == activePage)
+				display.fillRect(x, 18, 6, 1, pgFg);
+		}
 	}
+
+	if (!showPagesSteps)
+		return; // MI keyboard view: no page icons, no step row
 
 	// --- Bottom: while holding F1/F2 with a label, a box over the step area names the modifier;
 	// otherwise the 16 step boxes (a boxed name with no label keeps the step row, e.g. Mix MUTE).

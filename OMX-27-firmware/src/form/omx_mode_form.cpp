@@ -512,9 +512,9 @@ void OmxModeForm::onDisplayMI()
 		return;
 	}
 
-	// Page 0: the keyboard label — track # + channel.
-	tempString = "TRK " + String(selectedMachine_ + 1) + "  CH" + String(omni->getChannel() + 1);
-	omxDisp.dispGenericModeLabelDoubleLine("MI", tempString.c_str(), 0, 0);
+	// Page 0: the shared track overview (tagged "MI"), but as a keyboard view — no page icons,
+	// no step row.
+	onDisplaySeqTrackPage(true);
 }
 
 // ---- Notes view (container-rendered chord editor with in-editor step nav) ----
@@ -1865,7 +1865,7 @@ void OmxModeForm::onDisplayStep()
 }
 
 // Render the page-1 track overview, with an F1/F2 hold overlay when a modifier is held.
-void OmxModeForm::onDisplaySeqTrackPage()
+void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	int16_t pageStart = (int16_t)omni->activePage() * 16;
@@ -1924,6 +1924,13 @@ void OmxModeForm::onDisplaySeqTrackPage()
 
 	// View tag (the page-1 view selector). While editing, it shows the browsed pendingView_ and
 	// boxes/inverts; otherwise it names the current view. MIX = "MIX", STEP = "SEQ".
+	if (keyboardMode)
+	{
+		// MI keyboard view: no F1/F2 overlays (keys 1/2 are notes here, not modifiers).
+		modOverlay = 0;
+		overlayLabel = nullptr;
+	}
+
 	static const char *kViewTags[FORMVIEW_COUNT] = {"MIX", "SEQ", "TRSP", "NOTE", "PTRN", "MI"};
 	const char *viewLabel = kViewTags[formView_]; // live switch: the tag is always the current view
 	bool viewLabelSel = viewEditActive();          // boxed while the selector is live
@@ -1932,7 +1939,7 @@ void OmxModeForm::onDisplaySeqTrackPage()
 							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
 							 omni->getEnabledPages(), omni->activePage(), stepState, playhead,
 							 modOverlay, overlayLabel, omni->getPageLen(omni->activePage()), transport,
-							 viewLabel, viewLabelSel);
+							 viewLabel, viewLabelSel, !keyboardMode);
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
