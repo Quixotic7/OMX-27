@@ -402,9 +402,51 @@ void OmxModeForm::onDisplayPatterns()
 	omxDisp.dispGenericModeLabelDoubleLine("PATTERNS", tempString.c_str(), 0, 0);
 }
 
+// MI view — the standalone MI-mode keyboard, brought in for live playing over the running
+// sequencer (§4.6). Plays the selected track's channel; records when armed (§7). Keys 1-26 map
+// scale-aware via getNoteNumber (octave = AUX + 11/12); note-out via the track's previewNote.
+void OmxModeForm::onKeyUpdateMI(OMXKeypadEvent e)
+{
+	uint8_t k = e.key();
+	if (k == 0 || k >= 27)
+		return; // AUX handled by the top-level layer
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
+		return; // AUX layer owns the keys while held
+
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	int8_t note = omxUtil.getNoteNumber(k, omxFormGlobal.musicScale);
+	if (note < 0 || note > 127)
+		return; // out of range / out-of-scale (locked)
+
+	if (e.down() && !e.held())
+	{
+		omni->previewNote(note, true); // note-on on the track's channel
+		if (omxFormGlobal.recArm && omxFormGlobal.isPlaying)
+			recordPlayedNote(note); // quantize into the selected track (§7)
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+	}
+	else if (!e.down())
+	{
+		omni->previewNote(note, false); // note-off
+		omxLeds.setDirty();
+	}
+}
+
+void OmxModeForm::updateMILEDs()
+{
+	// Scale-aware keyboard (root periwinkle / in-scale dim blue / off-scale dark), pressed = white.
+	omxLeds.drawKeyboardScaleLEDs(omxFormGlobal.musicScale, 0xA2A2FF, 0x000090, LEDOFF);
+	for (uint8_t k = 1; k < 27; k++)
+		if (midiSettings.keyState[k])
+			strip.setPixelColor(k, WHITE);
+}
+
 void OmxModeForm::onDisplayMI()
 {
-	omxDisp.dispGenericModeLabelDoubleLine("MI VIEW", "(todo)", 0, 0);
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	tempString = "TRK " + String(selectedMachine_ + 1) + "  CH" + String(omni->getSeq().channel + 1);
+	omxDisp.dispGenericModeLabelDoubleLine("MI", tempString.c_str(), 0, 0);
 }
 
 // ---- Notes view (container-rendered chord editor with in-editor step nav) ----
@@ -2607,7 +2649,9 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	}
 	if (formView_ == FORMVIEW_MI)
 	{
-		return; // stub: swallow keys
+		if (!keyConsumed)
+			onKeyUpdateMI(e);
+		return;
 	}
 	// Mix view routing.
 	if (formView_ == FORMVIEW_MIX && !keyConsumed)
@@ -2849,7 +2893,8 @@ void OmxModeForm::updateLEDs()
 	}
 	if (formView_ == FORMVIEW_MI)
 	{
-		return; // stub: LEDs cleared
+		updateMILEDs();
+		return;
 	}
 
 	auto selMachine = getSelectedMachine();

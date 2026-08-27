@@ -207,6 +207,9 @@ private:
 	void updatePatternsLEDs();
 	void onKeyUpdatePatterns(OMXKeypadEvent e);
 	void onDisplayPatterns();
+	// MI view — a live-play keyboard over the running sequencer (§4.6).
+	void onKeyUpdateMI(OMXKeypadEvent e);
+	void updateMILEDs();
 	void onDisplayMI();
 	// ---- Notes view (container-rendered chord editor with in-editor step nav) ----
 	uint8_t notesSelStep_ = 0;   // step being edited (0-15, active-page-relative)
