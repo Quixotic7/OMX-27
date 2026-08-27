@@ -3,6 +3,9 @@
 #include "../midi/sysex.h"
 #include "norns_link.h"
 
+// Defined in OMX-27-firmware.ino — injects a synthetic key/encoder/pot event (SysEx remote control).
+extern void omxInjectInput(const uint8_t *d, unsigned n);
+
 // #include "../midi/midi.h"
 // #include "../config.h"
 
@@ -41,6 +44,10 @@ void SysEx::processIncomingSysex(const byte *sysexData, unsigned size)
 		// 0D - c0nfig Device edit - new config just for device opts
 		// 			Serial.println("Got an c0nfig Device Edit");
 		this->updateDeviceSettingsAndStore(sysexData, size);
+		break;
+	case NL_CMD_INPUT:
+		// 51 - remote-control input injection: F0 7D 00 00 51 <sub> <args...> F7
+		omxInjectInput(sysexData, size);
 		break;
 	case NL_CMD_MIRROR_EN:
 		// 58 - norns screen-mirror enable/disable: F0 7D 00 00 58 <0|1> F7
