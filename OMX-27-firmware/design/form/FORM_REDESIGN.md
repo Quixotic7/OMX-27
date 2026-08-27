@@ -508,13 +508,15 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
     the live knob values on the track page.
 28. **MI view** (§4.6) → **built**: keys 1-26 play scale-aware notes on the selected track's
     channel (octave AUX+11/12); records when armed (§7); does not touch the pattern.
+29. **Pattern switch styles** (§4.5) → **built**: top row 3-6 = Finish Loop / Next Bar / Instant /
+    Chained; a tapped slot commits at the chosen boundary (loop end / bar / immediate), Chained
+    builds an auto-advancing chain. The transient CC meter (decision 27) shows only while a knob moves.
 
 ### Still open
 - **RAM ceilings / per-platform trims** — real pattern / page / track counts per build
   (V3 fullest; Teensy 3.1 / 4 tighter). Decide the trims once we measure.
-- **Pattern extras** — switch styles (Finish Loop / Next Bar / Instant / Chained); **chaining /
-  song mode**.
-- **Transpose** (§4.3), **count-in** (§7) — not built yet.
+- **Pattern extras** — full **song mode** (edit/save chains, not just live chaining).
+- **Count-in** (§7) — not built yet. (Transpose view is built; needs a functional MIDI QA pass.)
 - **P-Lock step tint (MAGENTA)**, the **4-line page indicator**, and the **CC meter on non-track
   views** — not drawn yet.
 
