@@ -40,6 +40,10 @@ bool auxBlock = false;
 
 bool useNoteNumbers = false;
 
+// Live recording (§7): armed = keyboard notes quantize into the selected track while playing.
+bool recArm = false;
+bool recReplace = false; // false = overdub (add to step), true = replace (clear step first)
+
 MusicScales *musicScale;
 
 uint8_t shortcutMode;

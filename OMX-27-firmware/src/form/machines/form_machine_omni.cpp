@@ -470,6 +470,39 @@ namespace FormOmni
         return (slot < NUM_CC_POTS) ? pots[seq_.potBank][slot] : 0;
     }
 
+    uint8_t FormMachineOmni::recordStepIndex()
+    {
+        auto track = getTrack();
+        uint16_t total = track->totalLen();
+        if (total == 0)
+            return track->positionToStep(playingStep_);
+        float frac = (ticksPerStep_ > 0) ? (1.0f - (float)ticksTilNextTriggerRate_ / (float)ticksPerStep_) : 0.0f;
+        uint16_t pos = playingStep_;
+        if (frac >= 0.5f)
+            pos = (uint16_t)((playingStep_ + 1) % total);
+        return track->positionToStep(pos);
+    }
+
+    void FormMachineOmni::recordNoteToStep(uint8_t absStep, int8_t note)
+    {
+        if (note < 0 || note > 127 || absStep >= 64)
+            return;
+        auto track = getTrack();
+        Step *s = &track->steps[absStep];
+        bool wasEmpty = !s->hasNotes();
+        for (uint8_t i = 0; i < 6; i++)
+            if (s->notes[i] == note)
+                return; // already there
+        for (uint8_t i = 0; i < 6; i++)
+            if (s->notes[i] < 0)
+            {
+                s->notes[i] = note;
+                if (wasEmpty)
+                    s->vel = (uint8_t)track->paramDefaults[0]; // recorded velocity = track default
+                return;
+            }
+    }
+
     uint8_t FormMachineOmni::key16toStep(uint8_t key16)
     {
         uint8_t zoomMult = kZoomMults[zoomLevel_];
@@ -1621,11 +1654,7 @@ namespace FormOmni
         // Serial.println("onPotChanged: " + String(potIndex) + " " + String(prevValue) + " " + String(newValue));
 
         // v2: K5 no longer selects the UI mode — views live on the AUX layer (AUX+13-18).
-        // (Knobs become pot banks in a later step.)
-        if (potIndex == 4)
-        {
-            return;
-        }
+        // Knobs are the track's pot bank (§2): all 5 send their mapped CC live (below).
 
         if (stepHeld_)
         {
@@ -1684,14 +1713,14 @@ namespace FormOmni
         }
         else
         {
-            if (potIndex == 0)
+            // No step held: the 5 knobs are the track's pot bank — send the mapped CC live on the
+            // track's own channel. The CC number comes from pots[bank][slot] (§2); the P-Lock path
+            // (hold step + pot) locks the same slot per-step (§3).
+            if (seq_.sendMidi && potIndex < NUM_CC_POTS)
             {
-                // v2: fixed 4 pages of 16 (zoom retired) — page 0-3.
-                activePage_ = omxFormGlobal.potPickups[0].UpdatePotGetMappedValue(prevValue, newValue, 0, kFormNumPages - 1);
-                omxFormGlobal.potPickups[0].DisplayValue("Page", activePage_ + 1);
+                MM::sendControlChange(pots[seq_.potBank][potIndex], newValue, seq_.channel + 1);
+                omxDisp.setDirty(); // the top-row CC meter reflects the value; no popup
             }
-            // potIndex == 1 (was Zoom) is retired in v2 — the grid is always 16 steps.
-            // zoomLevel_ stays 0, so kZoomMults[0]=1 / kPageMax[0]=4 everywhere.
         }
 
         

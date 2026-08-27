@@ -367,6 +367,11 @@ void OmxModeForm::updateAuxViewLEDs()
 	{
 		strip.setPixelColor(13 + v, v == pendingView_ ? WHITE : LOWWHITE);
 	}
+	// AUX layer transport/rec: 1 play · 2 reset · 3 rec-arm (red when armed) · 4 rec-mode.
+	strip.setPixelColor(1, omxFormGlobal.isPlaying ? GREEN : LOWWHITE);
+	strip.setPixelColor(2, LOWWHITE);
+	strip.setPixelColor(3, omxFormGlobal.recArm ? RED : DKRED);
+	strip.setPixelColor(4, omxFormGlobal.recReplace ? ORANGE : LOWWHITE);
 }
 
 void OmxModeForm::updatePatternsLEDs()
@@ -454,6 +459,24 @@ void OmxModeForm::notesSetChordFromHeld()
 	for (uint8_t i = cnt; i < 6; i++)
 		notes[i] = -1;
 	omni->stepSetNotes(notesSelStep_, notes);
+}
+
+// Live recording: quantize a played note to the selected track's nearest playing step and add it
+// (overdub), or replace that step's notes the first time it's hit this record pass.
+void OmxModeForm::recordPlayedNote(int8_t note)
+{
+	if (note < 0 || note > 127)
+		return;
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	uint8_t step = omni->recordStepIndex();
+	if (omxFormGlobal.recReplace && step < 64 && !(recClearedMask_ & (1ULL << step)))
+	{
+		omni->clearStepNotesAbs(step);
+		recClearedMask_ |= (1ULL << step);
+	}
+	omni->recordNoteToStep(step, note);
+	omxDisp.setDirty();
+	omxLeds.setDirty();
 }
 
 // Which param palette a Notes-view hold selects: 11 = velocity, 12 = length, 11+12 = math,
@@ -775,17 +798,22 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 	if (base < 0)
 		return;
 	int16_t note = base + midiSettings.octave * 12;
+	bool recording = omxFormGlobal.recArm && omxFormGlobal.isPlaying;
 	if (down && !held)
 	{
-		notesSetChordFromHeld();
-		if (!omxFormGlobal.isPlaying && note >= 0 && note <= 127)
-			omni->previewNote((int8_t)note, true); // audition while stopped
+		if (recording)
+			recordPlayedNote((int8_t)note); // quantize into the nearest playing step
+		else
+			notesSetChordFromHeld(); // edit the selected step (stopped / not armed)
+		// Audible feedback while auditioning (stopped) or recording (armed + playing).
+		if ((!omxFormGlobal.isPlaying || recording) && note >= 0 && note <= 127)
+			omni->previewNote((int8_t)note, true);
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 	}
 	else if (!down)
 	{
-		if (!omxFormGlobal.isPlaying && note >= 0 && note <= 127)
+		if ((!omxFormGlobal.isPlaying || recording) && note >= 0 && note <= 127)
 			omni->previewNote((int8_t)note, false);
 	}
 }
@@ -1789,7 +1817,7 @@ void OmxModeForm::onDisplaySeqTrackPage()
 	static const char *kViewTags[FORMVIEW_COUNT] = {"MIX", "SEQ", "TRSP", "NOTE", "PTRN", "MI"};
 	const char *viewLabel = kViewTags[formView_]; // live switch: the tag is always the current view
 	bool viewLabelSel = viewEditActive();          // boxed while the selector is live
-	uint8_t transport = omxFormGlobal.isPlaying ? 1 : 0; // record state not wired yet
+	uint8_t transport = omxFormGlobal.recArm ? 2 : (omxFormGlobal.isPlaying ? 1 : 0);
 	omxDisp.dispSeqTrackPage(title, trackMuted, selectedMachine_, rateStr,
 							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
 							 omni->getEnabledPages(), omni->activePage(), stepState, playhead,
@@ -2210,6 +2238,8 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 		int16_t curStep = (int16_t)selOmni->playingStepIndex();
 		if (curStep != lastPlayheadStep_)
 		{
+			if (curStep < lastPlayheadStep_)
+				recClearedMask_ = 0; // playhead wrapped -> new record pass (replace mode)
 			lastPlayheadStep_ = curStep;
 			omxLeds.setDirty();
 			omxDisp.setDirty();
@@ -2497,6 +2527,20 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 					resetPlayback();
 					omxDisp.displayMessage("RESET");
 				}
+				keyConsumed = true;
+			}
+			else if (thisKey == 3) // rec arm (latching) — §7
+			{
+				omxFormGlobal.recArm = !omxFormGlobal.recArm;
+				recClearedMask_ = 0; // fresh replace pass
+				omxDisp.displayMessage(omxFormGlobal.recArm ? "REC ARM" : "REC OFF");
+				omxLeds.setDirty();
+				keyConsumed = true;
+			}
+			else if (thisKey == 4) // rec mode: overdub / replace — §7
+			{
+				omxFormGlobal.recReplace = !omxFormGlobal.recReplace;
+				omxDisp.displayMessage(omxFormGlobal.recReplace ? "REPLACE" : "OVERDUB");
 				keyConsumed = true;
 			}
 			else if (thisKey >= 13 && thisKey <= 18) // v2 shell: preview view (commit on AUX release)

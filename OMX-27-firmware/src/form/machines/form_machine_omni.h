@@ -237,6 +237,19 @@ namespace FormOmni
         }
         uint8_t potLockCC(uint8_t slot); // the CC number a pot slot maps to (current pot bank)
 
+        // Live recording: the absolute step (0-63) to record a played note into — the playing
+        // step, quantized to nearest (past the step's midpoint rounds up to the next step).
+        uint8_t recordStepIndex();
+        void recordNoteToStep(uint8_t absStep, int8_t note); // add (dedup); fresh step -> default vel
+        void clearStepNotesAbs(uint8_t absStep)
+        {
+            if (absStep < 64)
+            {
+                Step *s = &getTrack()->steps[absStep];
+                for (uint8_t i = 0; i < 6; i++) s->notes[i] = -1;
+            }
+        }
+
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }
         void setSeq(const OmniSeq &s)

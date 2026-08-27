@@ -699,6 +699,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 		return;
 	}
 	display.fillRect(0, 0, 128, 32, BLACK);
+	drawCCMeter(); // top-row knob meter (drawn first; widgets sit at y>=1)
 	u8g2_display.setFontMode(1);
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
@@ -999,6 +1000,20 @@ void OmxDisp::dispStepOverview(const char *modeName, const uint8_t *stepState, u
 
 	// Step cells (shared renderer).
 	drawStepRow(23, stepState, pageLen, playhead);
+}
+
+void OmxDisp::drawCCMeter()
+{
+	const uint8_t count = NUM_CC_POTS; // 5
+	const uint8_t segW = 128 / count;  // 25
+	for (uint8_t i = 0; i < count; i++)
+	{
+		int v = potSettings.analogValues[i];
+		v = v < 0 ? 0 : (v > 127 ? 127 : v);
+		uint8_t len = (uint8_t)((long)v * (segW - 2) / 127); // leave a 2px gap between segments
+		if (len > 0)
+			display.fillRect(i * segW, 0, len, 1, WHITE);
+	}
 }
 
 void OmxDisp::dispNotesJump(const uint8_t *stepState, uint8_t pageLen, int8_t focus, uint8_t enabledPages, uint8_t activePage)
