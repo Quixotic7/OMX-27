@@ -250,10 +250,16 @@ namespace FormOmni
         // step, quantized to nearest (past the step's midpoint rounds up to the next step).
         uint8_t recordStepIndex();
         void recordNoteToStep(uint8_t absStep, int8_t note); // add (dedup); fresh step -> default vel
-        // Record a played note: quantize to the nearest step and set that step's NUDGE from how far
-        // the note was from the grid, scaled by (100-quantizePct)/100 (100 = hard snap, 0 = keep the
-        // full played micro-timing). Adds the note (dedup, default vel). Returns the abs step, or 255.
-        uint8_t recordNoteOn(int8_t note, uint8_t quantizePct);
+        // Resolve where a note played *now* should record: the nearest step, plus that step's NUDGE
+        // from how far off the grid it was, scaled by (100-quantizePct)/100 (100 = hard snap, 0 =
+        // full micro-timing). Returns the abs step (255 if none) and the nudge via nudgeOut. Writes
+        // nothing — the note is committed on release so the sequencer can't replay it mid-hold.
+        uint8_t recordResolveStep(uint8_t quantizePct, int8_t &nudgeOut);
+        void setStepNudge(uint8_t absStep, int8_t nudge)
+        {
+            if (absStep < 64)
+                getTrack()->steps[absStep].nudge = (int8_t)constrain((int)nudge, -60, 60);
+        }
         // Set a recorded step's LEN from how long the note was actually held (in steps).
         void recordNoteLen(uint8_t absStep, float durationSteps);
         // Post-hoc quantize: pull every step's nudge toward the grid by quantizePct (100 = zero all).

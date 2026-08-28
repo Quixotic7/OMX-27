@@ -263,11 +263,14 @@ private:
 	uint64_t recClearedMask_ = 0; // steps cleared this record pass (replace mode); reset on loop wrap
 	uint8_t recQuantize_ = 0;     // 0 = keep played timing, 100 = hard snap to the grid
 	void recordPlayedNote(int8_t note);
-	void recordNoteReleased(int8_t note); // finish the held note's length
-	// Notes still being held while recording, so their length can be captured on release.
-	struct RecHeld { int8_t note; uint8_t step; uint32_t onMicros; };
+	void recordNoteReleased(int8_t note); // commit the held note (step/nudge/length) on release
+	void flushRecHeld();                  // commit any still-held recording notes (on stop)
+	// Notes being held while recording. The note is committed to its step ON RELEASE (with the
+	// step/nudge resolved at press time), so the sequencer can't replay it and cut the live note.
+	struct RecHeld { int8_t note; uint8_t step; int8_t nudge; uint32_t onMicros; };
 	RecHeld recHeld_[8] = {};
 	uint8_t recHeldCount_ = 0;
+	void commitRecHeld(const RecHeld &h); // write one held note (note/nudge/length) into its step
 	void quantizeSelectedTrack(); // post-hoc: pull the selected track's nudges toward the grid
 	// CC meter is transient: show it only briefly after a knob moves.
 	uint32_t lastPotMs_ = 0;

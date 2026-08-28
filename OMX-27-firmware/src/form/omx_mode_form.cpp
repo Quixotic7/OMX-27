@@ -688,7 +688,8 @@ void OmxModeForm::onDisplayMI()
 	// no step row. Overlay the active-page bars + playhead along the bottom.
 	onDisplaySeqTrackPage(true);
 	uint8_t pageLens[4] = {omni->getPageLen(0), omni->getPageLen(1), omni->getPageLen(2), omni->getPageLen(3)};
-	int8_t playAbs = omxFormGlobal.isPlaying ? (int8_t)omni->playingStepIndex() : -1;
+	// Show the playhead even while stopped — stop is a pause, so keep the position visible.
+	int8_t playAbs = (int8_t)omni->playingStepIndex();
 	omxDisp.drawPageBars(pageLens, omni->getEnabledPages(), playAbs);
 }
 
@@ -754,38 +755,61 @@ void OmxModeForm::recordPlayedNote(int8_t note)
 	if (note < 0 || note > 127)
 		return;
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
-	uint8_t step = omni->recordStepIndex();
-	if (omxFormGlobal.recReplace && step < 64 && !(recClearedMask_ & (1ULL << step)))
+	int8_t nudge;
+	uint8_t step = omni->recordResolveStep(recQuantize_, nudge); // resolve step + nudge at play time
+	if (step >= 64)
+		return;
+	// Replace mode: clear the target step once this pass, so old content stops immediately.
+	if (omxFormGlobal.recReplace && !(recClearedMask_ & (1ULL << step)))
 	{
 		omni->clearStepNotesAbs(step);
 		recClearedMask_ |= (1ULL << step);
 	}
-	uint8_t recStep = omni->recordNoteOn(note, recQuantize_); // add note + set nudge
-	// Track the held note so we can set its length on release.
-	if (recStep < 64 && recHeldCount_ < 8)
-		recHeld_[recHeldCount_++] = {note, recStep, micros()};
+	// Defer the write until release: while the note is held it stays out of the pattern, so the
+	// sequencer won't retrigger it and cut off the live-monitored note. The step/nudge are captured
+	// now (from where the playhead was), the length on release.
+	if (recHeldCount_ < 8)
+		recHeld_[recHeldCount_++] = {note, step, nudge, micros()};
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 }
 
-// Note released while recording: set its step's length from how long it was held.
-void OmxModeForm::recordNoteReleased(int8_t note)
+// Commit one held note to its step: write the note + nudge (resolved at press) and the length.
+void OmxModeForm::commitRecHeld(const RecHeld &h)
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	omni->recordNoteToStep(h.step, h.note); // add note (dedup, default vel if the step was empty)
+	omni->setStepNudge(h.step, h.nudge);
 	float sm = omni->stepMicros();
+	if (sm > 0.0f)
+		omni->recordNoteLen(h.step, (float)(micros() - h.onMicros) / sm);
+}
+
+// Note released while recording: commit it (step/nudge/length) into the pattern.
+void OmxModeForm::recordNoteReleased(int8_t note)
+{
 	for (uint8_t i = 0; i < recHeldCount_; i++)
 	{
 		if (recHeld_[i].note != note)
 			continue;
-		if (sm > 0.0f)
-		{
-			float durSteps = (float)(micros() - recHeld_[i].onMicros) / sm;
-			omni->recordNoteLen(recHeld_[i].step, durSteps);
-		}
+		commitRecHeld(recHeld_[i]);
 		recHeld_[i] = recHeld_[--recHeldCount_]; // remove (swap with last)
 		omxDisp.setDirty();
+		omxLeds.setDirty();
 		return;
 	}
+}
+
+// Commit every still-held recording note (called when playback stops).
+void OmxModeForm::flushRecHeld()
+{
+	if (recHeldCount_ == 0)
+		return;
+	for (uint8_t i = 0; i < recHeldCount_; i++)
+		commitRecHeld(recHeld_[i]);
+	recHeldCount_ = 0;
+	omxDisp.setDirty();
+	omxLeds.setDirty();
 }
 
 // Post-hoc quantize: pull the selected track's recorded timing toward the grid by recQuantize_.
@@ -1134,6 +1158,7 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 	{
 		if ((!omxFormGlobal.isPlaying || recording) && note >= 0 && note <= 127)
 			omni->previewNote((int8_t)note, false);
+		recordNoteReleased((int8_t)note); // commit the recorded note's length (no-op if not tracked)
 	}
 }
 
@@ -3842,6 +3867,17 @@ void OmxModeForm::togglePlayback()
 	for(auto m : machines_)
 	{
 		m->playBackStateChanged(omxFormGlobal.isPlaying);
+	}
+
+	// Stopping ends the recording session: commit any held notes and disarm.
+	if (!omxFormGlobal.isPlaying)
+	{
+		flushRecHeld();
+		if (omxFormGlobal.recArm)
+		{
+			omxFormGlobal.recArm = false;
+			omxLeds.setDirty();
+		}
 	}
 }
 

@@ -506,10 +506,9 @@ namespace FormOmni
             }
     }
 
-    uint8_t FormMachineOmni::recordNoteOn(int8_t note, uint8_t quantizePct)
+    uint8_t FormMachineOmni::recordResolveStep(uint8_t quantizePct, int8_t &nudgeOut)
     {
-        if (note < 0 || note > 127)
-            return 255;
+        nudgeOut = 0;
         auto track = getTrack();
         uint16_t total = track->totalLen();
         if (total == 0)
@@ -525,14 +524,12 @@ namespace FormOmni
             pos = (uint16_t)((playingStep_ + 1) % total); // round up to the next step
             nudgeFrac = -(1.0f - frac);                    // played early -> negative nudge
         }
-        uint8_t absStep = track->positionToStep(pos);
-        recordNoteToStep(absStep, note);
         // Nudge scaled by the quantize strength: 100% => 0 (hard snap), 0% => full played offset.
         if (quantizePct > 100)
             quantizePct = 100;
         int16_t nudge = (int16_t)lroundf(nudgeFrac * 60.0f * (float)(100 - quantizePct) / 100.0f);
-        getTrack()->steps[absStep].nudge = (int8_t)constrain((int)nudge, -60, 60);
-        return absStep;
+        nudgeOut = (int8_t)constrain((int)nudge, -60, 60);
+        return track->positionToStep(pos);
     }
 
     // Map a held-note duration (in steps) to the nearest LEN value (getStepLenMult is the inverse).
@@ -542,11 +539,16 @@ namespace FormOmni
         if (steps <= 0.375f) return 1;  // 0.25
         if (steps <= 0.625f) return 2;  // 0.5
         if (steps <= 0.875f) return 3;  // 0.75
-        // len 4..19 => 1..16 steps (len-3). Clamp to the 16-step max of the palette.
-        int v = (int)lroundf(steps) + 3;
-        if (v < 4) v = 4;
-        if (v > 19) v = 19;
-        return (uint8_t)v;
+        if (steps <= 16.5f)             // len 4..19 => 1..16 steps (len-3)
+        {
+            int v = (int)lroundf(steps) + 3;
+            return (uint8_t)(v < 4 ? 4 : v);
+        }
+        // Long notes snap to the palette's bar values: 16 / 32 / 48 / 64 steps.
+        if (steps <= 24.0f) return 19; // 16 steps (1 bar)
+        if (steps <= 40.0f) return 20; // 32 (2 bar)
+        if (steps <= 56.0f) return 21; // 48 (3 bar)
+        return 22;                     // 64 (4 bar)
     }
 
     void FormMachineOmni::recordNoteLen(uint8_t absStep, float durationSteps)
