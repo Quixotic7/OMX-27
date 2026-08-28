@@ -364,6 +364,9 @@ namespace FormOmni
             }
             noteOns_.clear();
 
+            ratchetDivs_ = 0; // don't leave a ratchet pending across stop
+            ratchetStep_ = nullptr;
+
             didNotesPlayThisStep_ = false;
         }
     }
@@ -1295,7 +1298,7 @@ namespace FormOmni
         return noteNumber;
     }
 
-    void FormMachineOmni::triggerStep(Step *step, StepDynamic *stepDynamic)
+    void FormMachineOmni::triggerStep(Step *step, StepDynamic *stepDynamic, bool ratchetHit)
     {
         if(context_ == nullptr || noteOnFuncPtr == nullptr)
             return;
@@ -1354,10 +1357,11 @@ namespace FormOmni
                     // With nudge, two steps could fire at once,
                     // If a step already triggered a note,
                     // don't trigger same note again to avoid
-                    // overlapping note ons
+                    // overlapping note ons. Ratchet sub-hits are the exception: they intentionally
+                    // re-fire the same note within the step, so skip this de-dup for them.
                     for (auto n : triggeredNotes_)
                     {
-                        if (n.noteNumber == noteNumber)
+                        if (!ratchetHit && n.noteNumber == noteNumber)
                         {
                             noteTriggeredOnSameStep = true;
                             continue;
@@ -1420,8 +1424,9 @@ namespace FormOmni
             }
         }
 
-        // Increment steps tPat position
-        stepDynamic->tPatPos = (stepDynamic->tPatPos + step->accumTPat) % (seq_.transposePattern.len + 1);
+        // Increment steps tPat position (once per step, not on each ratchet sub-hit).
+        if (!ratchetHit)
+            stepDynamic->tPatPos = (stepDynamic->tPatPos + step->accumTPat) % (seq_.transposePattern.len + 1);
     }
 
     // Preview a step's programmed notes on a manual key press (Mix low-row audition).
@@ -1938,10 +1943,26 @@ namespace FormOmni
 
                 triggerStep(currentStep, dynamicStep);
 
+                // Step repeat (ratchet): split the step into (repeat+1) even sub-hits.
+                if (currentStep->repeat > 0 && ticksPerStep_ > 1)
+                {
+                    ratchetStep_ = currentStep;
+                    ratchetDynamic_ = dynamicStep;
+                    ratchetDivs_ = currentStep->repeat + 1;
+                    ratchetHitIndex_ = 1;
+                    ratchetTotalTicks_ = ticksPerStep_;
+                    ratchetElapsed_ = 0;
+                }
+                else
+                {
+                    ratchetDivs_ = 0;
+                }
+
                 lastTriggeredStepState_ = true;
             }
             else
             {
+                ratchetDivs_ = 0; // a non-triggering step clears any pending ratchet
                 lastTriggeredStepState_ = false;
                 didNotesPlayThisStep_ = false;
             }
@@ -2059,6 +2080,19 @@ namespace FormOmni
             if (resetAfterThisTrig)
             {
                 resetPlayback(false);
+            }
+        }
+
+        // Step repeat (ratchet): fire the queued sub-hits at round(k*total/divs) ticks into the
+        // step. Re-triggering the step note-offs the prior hit and note-ons again.
+        if (ratchetDivs_ > 1 && ratchetStep_ != nullptr && ratchetHitIndex_ < ratchetDivs_)
+        {
+            ratchetElapsed_++;
+            int16_t target = (int16_t)(((int32_t)ratchetHitIndex_ * ratchetTotalTicks_) / ratchetDivs_);
+            if (ratchetElapsed_ >= target)
+            {
+                triggerStep(ratchetStep_, ratchetDynamic_, true);
+                ratchetHitIndex_++;
             }
         }
 

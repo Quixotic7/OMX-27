@@ -264,7 +264,9 @@ namespace FormOmni
         void setSeq(const OmniSeq &s)
         {
             seq_ = s;
-            seqDynamic_.Reset(); // loaded pattern starts from a clean playback state
+            seqDynamic_.Reset();  // loaded pattern starts from a clean playback state
+            ratchetDivs_ = 0;     // and no ratchet carried over from the old pattern
+            ratchetStep_ = nullptr;
         }
 
     private:
@@ -375,6 +377,16 @@ namespace FormOmni
 
         int16_t ticksTilNextTriggerRate_ = 0;
 
+        // Step repeat (ratchet): after a step with repeat>0 triggers, re-fire it so the step is
+        // split into `ratchetDivs_` (= repeat+1) even sub-hits. Each sub-hit's tick is recomputed
+        // as round(k * total / divs) so integer rounding doesn't drift the later hits.
+        Step *ratchetStep_ = nullptr;
+        StepDynamic *ratchetDynamic_ = nullptr;
+        uint8_t ratchetDivs_ = 0;      // subdivisions (repeat+1); 0/1 = inactive
+        uint8_t ratchetHitIndex_ = 0;  // next sub-hit to fire (1 .. divs-1)
+        int16_t ratchetTotalTicks_ = 0;
+        int16_t ratchetElapsed_ = 0;
+
         float stepLengthMult_ = 1.0f; // 1 is a 16th note, 0.5 a 32nd note length, recalculated with the rate
 
         std::vector<OmniTriggeredNoteTracker> triggeredNotes_;
@@ -402,7 +414,7 @@ namespace FormOmni
         int8_t processStepFunction(uint8_t functionIndex);
 
         int8_t applyTranspose(int noteNumber, Step *step, StepDynamic *stepDynamic);
-        void triggerStep(Step *step, StepDynamic *stepDynamic);
+        void triggerStep(Step *step, StepDynamic *stepDynamic, bool ratchetHit = false);
 
         // char foo[sizeof(PotPickupUtil)]
     };
