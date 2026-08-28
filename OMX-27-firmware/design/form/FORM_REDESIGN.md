@@ -511,6 +511,11 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 29. **Pattern switch styles** (§4.5) → **built**: top row 3-6 = Finish Loop / Next Bar / Instant /
     Chained; a tapped slot commits at the chosen boundary (loop end / bar / immediate), Chained
     builds an auto-advancing chain. The transient CC meter (decision 27) shows only while a knob moves.
+30. **Patterns view UI** (§4.5) → **built**: TENFAT "Pn" (no "/N" count), the switch-style name
+    top-right, a ">Pq"/"CHn" tag, and a bottom **switch-progress bar** (loop position, or bar
+    position under Next Bar). **Quick-tap F1 = copy** the whole pattern, **quick-tap F2 = paste**
+    (buffer is a lazily heap-allocated FormPattern). **Hold F1 + tap a slot = instant jump**,
+    overriding the switch style in any mode.
 
 ### Still open
 - **RAM ceilings / per-platform trims** — real pattern / page / track counts per build
