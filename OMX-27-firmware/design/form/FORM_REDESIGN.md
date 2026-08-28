@@ -523,7 +523,8 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
 - **RAM ceilings / per-platform trims** — real pattern / page / track counts per build
   (V3 fullest; Teensy 3.1 / 4 tighter). Decide the trims once we measure.
 - **Pattern extras** — full **song mode** (edit/save chains, not just live chaining).
-- **Count-in** (§7) — not built yet. (Transpose view is built; needs a functional MIDI QA pass.)
+- **Count-in** (§7) — dropped: this is a MIDI-only device, so there is no click to count
+  against. (Transpose view is built; needs a functional MIDI QA pass.)
 - **P-Lock step tint (MAGENTA)**, the **4-line page indicator**, and the **CC meter on non-track
   views** — not drawn yet.
 
