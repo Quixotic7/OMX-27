@@ -500,14 +500,20 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
     (`NL_CMD_INPUT` 0x51) and mirrors its screen, for host-driven QA (host tools in `tools/`).
 
 26. **Live recording** (§7) → **built**: AUX+3 arm (transport widget shows the record icon),
-    AUX+4 overdub/replace; a note played on the Notes keyboard while armed+playing quantizes into
-    the selected track's nearest playing step at the track default velocity. Count-in and MI-view
-    recording deferred.
+    AUX+4 overdub/replace. A note played (MI or Notes keyboard) while armed records into the selected
+    track's nearest step — but keeps its **micro-timing** (the step's NUDGE is set from how far off
+    the grid it was played) and its **length** (note-on→note-off sets the step's LEN), so takes feel
+    musical rather than hard-locked. **Start-on-note**: armed + stopped, the first note starts the
+    transport + recording on the downbeat. **QUANTIZE strength** (0-100%, MI menu cursor 9) scales the
+    recorded nudge live (100 = hard snap); **long-press the encoder in MI = quantize now** (pull the
+    selected track's timing toward the grid by that amount). Count-in dropped (MIDI-only device).
 27. **Pot banks + CC meter** (§2) → **built**: a plain knob turn sends `CC = pots[track.potBank]
     [slot]` on the track's channel (per-track bank, all 5 knobs); a 5-segment top-row CC meter shows
     the live knob values on the track page.
 28. **MI view** (§4.6) → **built**: keys 1-26 play scale-aware notes on the selected track's
-    channel (octave AUX+11/12); records when armed (§7); does not touch the pattern.
+    channel (octave AUX+11/12); records when armed (§7, now with nudge/length/quantize); does not
+    touch the pattern. Page 0 shows up to 4 rectangles along the bottom — one per enabled page, width
+    proportional to its length — with a filled playhead cell moving through the playing page.
 29. **Pattern switch styles** (§4.5) → **built**: top row 3-6 = Finish Loop / Next Bar / Instant /
     Chained; a tapped slot commits at the chosen boundary (loop end / bar / immediate), Chained
     builds an auto-advancing chain. The transient CC meter (decision 27) shows only while a knob moves.
