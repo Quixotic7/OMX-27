@@ -262,8 +262,6 @@ namespace FormOmni
         }
         // Set a recorded step's LEN from how long the note was actually held (in steps).
         void recordNoteLen(uint8_t absStep, float durationSteps);
-        // Post-hoc quantize: pull every step's nudge toward the grid by quantizePct (100 = zero all).
-        void quantizeTrackNudges(uint8_t quantizePct);
         float stepMicros() { return stepMicros_; } // micros per step at the current rate
         void clearStepNotesAbs(uint8_t absStep)
         {
@@ -272,6 +270,13 @@ namespace FormOmni
                 Step *s = &getTrack()->steps[absStep];
                 for (uint8_t i = 0; i < 6; i++) s->notes[i] = -1;
             }
+        }
+        // Clear this track's pattern: reset every step to empty (keeps channel / rate / length etc).
+        void clearTrackSteps()
+        {
+            Track *t = getTrack();
+            for (uint8_t s = 0; s < 64; s++)
+                t->steps[s].setToInit();
         }
 
         // v2 pattern data layer: snapshot / restore this track's sequencer data.

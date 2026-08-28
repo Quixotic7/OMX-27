@@ -558,18 +558,6 @@ namespace FormOmni
         getTrack()->steps[absStep].len = lenFromSteps(durationSteps);
     }
 
-    void FormMachineOmni::quantizeTrackNudges(uint8_t quantizePct)
-    {
-        if (quantizePct > 100)
-            quantizePct = 100;
-        auto track = getTrack();
-        for (uint8_t s = 0; s < 64; s++)
-        {
-            int16_t n = (int16_t)lroundf((float)track->steps[s].nudge * (float)(100 - quantizePct) / 100.0f);
-            track->steps[s].nudge = (int8_t)constrain((int)n, -60, 60);
-        }
-    }
-
     uint8_t FormMachineOmni::key16toStep(uint8_t key16)
     {
         uint8_t zoomMult = kZoomMults[zoomLevel_];

@@ -608,9 +608,23 @@ bool OmxModeForm::onEncoderMI(int dir)
 {
 	if (dir == 0)
 		return true;
+	// In the QUANTIZE submenu, the encoder scrubs the amount and previews it live on the track.
+	if (miQuantSub_)
+	{
+		quantWork_ = (uint8_t)constrain((int)quantWork_ + dir * 5, 0, 100);
+		quantMorphPreview();
+		omxDisp.setDirty();
+		return true;
+	}
+	if (miClearSub_)
+	{
+		clearSel_ = (uint8_t)constrain((int)clearSel_ + dir, 0, 1); // move between NO / YES
+		omxDisp.setDirty();
+		return true;
+	}
 	if (!miEncEdit_)
 	{
-		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 9);
+		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 10);
 		omxDisp.setDirty();
 		return true;
 	}
@@ -625,8 +639,6 @@ bool OmxModeForm::onEncoderMI(int dir)
 		omni->setPotBank((uint8_t)constrain((int)omni->getPotBank() + dir, 0, NUM_CC_BANKS - 1));
 	else if (miCursor_ == 8) // octave
 		midiSettings.octave = constrain(midiSettings.octave + dir, -5, 4);
-	else if (miCursor_ == 9) // record quantize strength (0-100%)
-		recQuantize_ = (uint8_t)constrain((int)recQuantize_ + dir * 5, 0, 100);
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 	return true;
@@ -634,6 +646,38 @@ bool OmxModeForm::onEncoderMI(int dir)
 
 bool OmxModeForm::onEncoderButtonMI()
 {
+	// QUANTIZE (cursor 9) opens a submenu on click (like Pot Config): first click enters, next click
+	// applies the previewed amount. Other items toggle select/edit as usual.
+	if (miQuantSub_)
+	{
+		quantExitSubmenu(true); // apply
+		return true;
+	}
+	if (miClearSub_)
+	{
+		// Confirm the Yes/No choice: YES clears the selected track's pattern, NO cancels.
+		if (clearSel_ == 1)
+		{
+			static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine())->clearTrackSteps();
+			omxDisp.displayMessage("CLEARED");
+		}
+		miClearSub_ = false;
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
+	if (miCursor_ == 9)
+	{
+		quantEnterSubmenu();
+		return true;
+	}
+	if (miCursor_ == 10)
+	{
+		miClearSub_ = true; // open the Yes/No confirm submenu (default NO)
+		clearSel_ = 0;
+		omxDisp.setDirty();
+		return true;
+	}
 	miEncEdit_ = !miEncEdit_;
 	omxDisp.setDirty();
 	return true;
@@ -673,14 +717,27 @@ void OmxModeForm::onDisplayMI()
 		return;
 	}
 
-	// Record page (cursor 9): quantize strength. Long-press the encoder = apply it to the track.
-	if (miCursor_ == 9)
+	// QUANTIZE submenu (scrubbing the amount, previewing it live): dedicated display.
+	if (miQuantSub_)
 	{
-		const char *labels[4] = {"QUANT", "APPLY", "", ""};
-		String qv = String(recQuantize_) + "%";
-		const char *values[4] = {qv.c_str(), "HOLD", "", ""};
+		omxDisp.dispGenericModeLabelDoubleLine("QUANTIZE", String(quantWork_).c_str(), 0, 0);
+		return;
+	}
+	// CLEAR confirm submenu — the same Yes/No combo as Clear Storage.
+	if (miClearSub_)
+	{
+		static const char *kYesNo[2] = {"NO", "YES"};
+		omxDisp.dispOptionCombo("Clear Track?", kYesNo, 2, clearSel_, true);
+		return;
+	}
+	// Edit page (cursor 9-10): QUANTIZE amount + CLEAR. Click the encoder to open each one.
+	if (miCursor_ == 9 || miCursor_ == 10)
+	{
+		const char *labels[4] = {"QUANT", "CLEAR", "", ""};
+		String qv = String(recQuantize_);
+		const char *values[4] = {qv.c_str(), "TRK", "", ""};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, 0, miEncEdit_);
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 9, false);
 		return;
 	}
 
@@ -812,12 +869,43 @@ void OmxModeForm::flushRecHeld()
 	omxLeds.setDirty();
 }
 
-// Post-hoc quantize: pull the selected track's recorded timing toward the grid by recQuantize_.
-void OmxModeForm::quantizeSelectedTrack()
+// QUANTIZE submenu (entered by clicking the QUANT menu item). Snapshot the track's nudges so the
+// amount can be scrubbed and previewed live, then applied (click) or cancelled (AUX).
+void OmxModeForm::quantEnterSubmenu()
 {
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
-	omni->quantizeTrackNudges(recQuantize_);
-	omxDisp.displayMessage("QUANTIZE " + String(recQuantize_) + "%");
+	for (uint8_t s = 0; s < 64; s++)
+		quantOrigNudges_[s] = omni->trackPtr()->steps[s].nudge;
+	quantWork_ = recQuantize_;
+	miQuantSub_ = true;
+	quantMorphPreview(); // reflect the current amount immediately
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+}
+
+// Preview: morph each step's nudge from the snapshot toward the grid by quantWork_ (live, so it's
+// audible while playing). 0 = original timing, 100 = fully snapped.
+void OmxModeForm::quantMorphPreview()
+{
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	for (uint8_t s = 0; s < 64; s++)
+	{
+		int16_t n = (int16_t)lroundf((float)quantOrigNudges_[s] * (float)(100 - quantWork_) / 100.0f);
+		omni->setStepNudge(s, (int8_t)n);
+	}
+}
+
+void OmxModeForm::quantExitSubmenu(bool apply)
+{
+	if (apply)
+		recQuantize_ = quantWork_; // keep the morphed nudges + remember the amount for live rec
+	else
+	{
+		auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		for (uint8_t s = 0; s < 64; s++)
+			omni->setStepNudge(s, quantOrigNudges_[s]); // restore
+	}
+	miQuantSub_ = false;
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 }
@@ -2796,12 +2884,7 @@ void OmxModeForm::onEncoderButtonDownLong()
 
 void OmxModeForm::onEncoderButtonUpLong()
 {
-	// MI view: long-press the encoder = "quantize now" — pull the selected track's recorded
-	// timing toward the grid by the QUANTIZE strength (0 = no-op, 100 = fully snap).
-	if (formView_ == FORMVIEW_MI)
-	{
-		quantizeSelectedTrack();
-	}
+	// (Long-press is reserved for returning to the OMX mode switcher — no FORM action here.)
 }
 
 bool OmxModeForm::shouldBlockEncEdit()
@@ -2864,6 +2947,24 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	{
 		if (thisKey == 0)
 		{
+			// MI QUANTIZE submenu: AUX exits without applying (restores the original timing).
+			if (formView_ == FORMVIEW_MI && miQuantSub_)
+			{
+				if (e.down() && !e.held())
+					quantExitSubmenu(false);
+				return;
+			}
+			// MI CLEAR submenu: AUX cancels (no clear).
+			if (formView_ == FORMVIEW_MI && miClearSub_)
+			{
+				if (e.down() && !e.held())
+				{
+					miClearSub_ = false;
+					omxDisp.setDirty();
+					omxLeds.setDirty();
+				}
+				return;
+			}
 			// Step view: AUX while holding step(s) resets their value (no view browsing).
 			if (formView_ == FORMVIEW_STEP && heldStepMask_ != 0)
 			{

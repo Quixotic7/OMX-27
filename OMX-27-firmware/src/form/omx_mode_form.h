@@ -226,6 +226,16 @@ private:
 	// bank/oct). Click toggles select (turn = move) vs edit (turn = change value).
 	uint8_t miCursor_ = 0;
 	bool miEncEdit_ = false;
+	// QUANTIZE submenu (cursor 9): click enters, turn morphs the amount + previews it live on the
+	// track (from a snapshot of the original nudges), click applies, AUX exits (restores original).
+	bool miQuantSub_ = false;
+	uint8_t quantWork_ = 0;         // the amount being scrubbed in the submenu
+	int8_t quantOrigNudges_[64] = {}; // snapshot to morph from / restore on cancel
+	void quantEnterSubmenu();
+	void quantMorphPreview();       // apply quantWork_ to the track from the snapshot (preview)
+	void quantExitSubmenu(bool apply);
+	bool miClearSub_ = false;       // CLEAR (cursor 10) confirm submenu (reuses the Yes/No combo)
+	uint8_t clearSel_ = 0;          // 0 = NO, 1 = YES
 	void onKeyUpdateMI(OMXKeypadEvent e);
 	void updateMILEDs();
 	void onDisplayMI();
@@ -271,7 +281,6 @@ private:
 	RecHeld recHeld_[8] = {};
 	uint8_t recHeldCount_ = 0;
 	void commitRecHeld(const RecHeld &h); // write one held note (note/nudge/length) into its step
-	void quantizeSelectedTrack(); // post-hoc: pull the selected track's nudges toward the grid
 	// CC meter is transient: show it only briefly after a knob moves.
 	uint32_t lastPotMs_ = 0;
 	bool ccMeterWasActive_ = false;
