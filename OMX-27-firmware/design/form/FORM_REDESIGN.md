@@ -515,7 +515,9 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
     top-right, a ">Pq"/"CHn" tag, and a bottom **switch-progress bar** (loop position, or bar
     position under Next Bar). **Quick-tap F1 = copy** the whole pattern, **quick-tap F2 = paste**
     (buffer is a lazily heap-allocated FormPattern). **Hold F1 + tap a slot = instant jump**,
-    overriding the switch style in any mode.
+    overriding the switch style in any mode. **Hold F2 + tap a slot = cut/paste**: a filled slot is
+    cut to the buffer + cleared, an empty slot receives it (move a pattern between slots). The
+    Step-view P-Lock no longer pops a "CC" message — the top CC meter already conveys the value.
 
 ### Still open
 - **RAM ceilings / per-platform trims** — real pattern / page / track counts per build
