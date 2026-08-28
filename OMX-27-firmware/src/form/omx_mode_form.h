@@ -163,6 +163,7 @@ public:
 	void onEncoderButtonUp() override;
 
 	void onEncoderButtonDownLong() override;
+	void onEncoderButtonUpLong() override;
 
 	bool shouldBlockEncEdit() override;
 
@@ -257,9 +258,17 @@ private:
 	void updateNotesLEDs();
 	void onDisplayNotes();
 	void notesSetChordFromHeld(); // build the selected step's chord from the held piano keys
-	// Live recording: quantize a played note into the selected track's nearest playing step.
+	// Live recording: record a played note into the selected track's nearest playing step, keeping
+	// its micro-timing (nudge) and length. recQuantize_ (0-100%) pulls timing toward the grid.
 	uint64_t recClearedMask_ = 0; // steps cleared this record pass (replace mode); reset on loop wrap
+	uint8_t recQuantize_ = 0;     // 0 = keep played timing, 100 = hard snap to the grid
 	void recordPlayedNote(int8_t note);
+	void recordNoteReleased(int8_t note); // finish the held note's length
+	// Notes still being held while recording, so their length can be captured on release.
+	struct RecHeld { int8_t note; uint8_t step; uint32_t onMicros; };
+	RecHeld recHeld_[8] = {};
+	uint8_t recHeldCount_ = 0;
+	void quantizeSelectedTrack(); // post-hoc: pull the selected track's nudges toward the grid
 	// CC meter is transient: show it only briefly after a knob moves.
 	uint32_t lastPotMs_ = 0;
 	bool ccMeterWasActive_ = false;

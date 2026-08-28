@@ -573,15 +573,23 @@ void OmxModeForm::onKeyUpdateMI(OMXKeypadEvent e)
 
 	if (e.down() && !e.held())
 	{
+		// Start-on-note: armed but stopped -> begin playback + recording on the first note played.
+		if (omxFormGlobal.recArm && !omxFormGlobal.isPlaying)
+		{
+			resetPlayback();  // arm a fresh start from the loop beginning
+			togglePlayback(); // start the transport
+			recClearedMask_ = 0;
+		}
 		omni->previewNote(note, true); // note-on on the track's channel
 		if (omxFormGlobal.recArm && omxFormGlobal.isPlaying)
-			recordPlayedNote(note); // quantize into the selected track (§7)
+			recordPlayedNote(note); // record into the selected track, keeping timing + length (§7)
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 	}
 	else if (!e.down())
 	{
 		omni->previewNote(note, false); // note-off
+		recordNoteReleased(note);       // capture the note's length (no-op if not being recorded)
 		omxLeds.setDirty();
 	}
 }
@@ -602,7 +610,7 @@ bool OmxModeForm::onEncoderMI(int dir)
 		return true;
 	if (!miEncEdit_)
 	{
-		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 8);
+		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 9);
 		omxDisp.setDirty();
 		return true;
 	}
@@ -617,6 +625,8 @@ bool OmxModeForm::onEncoderMI(int dir)
 		omni->setPotBank((uint8_t)constrain((int)omni->getPotBank() + dir, 0, NUM_CC_BANKS - 1));
 	else if (miCursor_ == 8) // octave
 		midiSettings.octave = constrain(midiSettings.octave + dir, -5, 4);
+	else if (miCursor_ == 9) // record quantize strength (0-100%)
+		recQuantize_ = (uint8_t)constrain((int)recQuantize_ + dir * 5, 0, 100);
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 	return true;
@@ -663,9 +673,23 @@ void OmxModeForm::onDisplayMI()
 		return;
 	}
 
+	// Record page (cursor 9): quantize strength. Long-press the encoder = apply it to the track.
+	if (miCursor_ == 9)
+	{
+		const char *labels[4] = {"QUANT", "APPLY", "", ""};
+		String qv = String(recQuantize_) + "%";
+		const char *values[4] = {qv.c_str(), "HOLD", "", ""};
+		bool locked[4] = {false, false, false, false};
+		omxDisp.dispStepParams(labels, values, locked, 0, miEncEdit_);
+		return;
+	}
+
 	// Page 0: the shared track overview (tagged "MI"), but as a keyboard view — no page icons,
-	// no step row.
+	// no step row. Overlay the active-page bars + playhead along the bottom.
 	onDisplaySeqTrackPage(true);
+	uint8_t pageLens[4] = {omni->getPageLen(0), omni->getPageLen(1), omni->getPageLen(2), omni->getPageLen(3)};
+	int8_t playAbs = omxFormGlobal.isPlaying ? (int8_t)omni->playingStepIndex() : -1;
+	omxDisp.drawPageBars(pageLens, omni->getEnabledPages(), playAbs);
 }
 
 // ---- Notes view (container-rendered chord editor with in-editor step nav) ----
@@ -722,8 +746,9 @@ void OmxModeForm::notesSetChordFromHeld()
 	omni->stepSetNotes(notesSelStep_, notes);
 }
 
-// Live recording: quantize a played note to the selected track's nearest playing step and add it
-// (overdub), or replace that step's notes the first time it's hit this record pass.
+// Live recording: record a played note to the selected track's nearest playing step, keeping its
+// micro-timing (nudge, scaled by recQuantize_) and — on release — its length. Replace mode clears
+// the step the first time it's hit this pass; overdub just adds the note.
 void OmxModeForm::recordPlayedNote(int8_t note)
 {
 	if (note < 0 || note > 127)
@@ -735,7 +760,40 @@ void OmxModeForm::recordPlayedNote(int8_t note)
 		omni->clearStepNotesAbs(step);
 		recClearedMask_ |= (1ULL << step);
 	}
-	omni->recordNoteToStep(step, note);
+	uint8_t recStep = omni->recordNoteOn(note, recQuantize_); // add note + set nudge
+	// Track the held note so we can set its length on release.
+	if (recStep < 64 && recHeldCount_ < 8)
+		recHeld_[recHeldCount_++] = {note, recStep, micros()};
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+}
+
+// Note released while recording: set its step's length from how long it was held.
+void OmxModeForm::recordNoteReleased(int8_t note)
+{
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	float sm = omni->stepMicros();
+	for (uint8_t i = 0; i < recHeldCount_; i++)
+	{
+		if (recHeld_[i].note != note)
+			continue;
+		if (sm > 0.0f)
+		{
+			float durSteps = (float)(micros() - recHeld_[i].onMicros) / sm;
+			omni->recordNoteLen(recHeld_[i].step, durSteps);
+		}
+		recHeld_[i] = recHeld_[--recHeldCount_]; // remove (swap with last)
+		omxDisp.setDirty();
+		return;
+	}
+}
+
+// Post-hoc quantize: pull the selected track's recorded timing toward the grid by recQuantize_.
+void OmxModeForm::quantizeSelectedTrack()
+{
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	omni->quantizeTrackNudges(recQuantize_);
+	omxDisp.displayMessage("QUANTIZE " + String(recQuantize_) + "%");
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 }
@@ -2709,6 +2767,16 @@ void OmxModeForm::onEncoderButtonUp()
 
 void OmxModeForm::onEncoderButtonDownLong()
 {
+}
+
+void OmxModeForm::onEncoderButtonUpLong()
+{
+	// MI view: long-press the encoder = "quantize now" — pull the selected track's recorded
+	// timing toward the grid by the QUANTIZE strength (0 = no-op, 100 = fully snap).
+	if (formView_ == FORMVIEW_MI)
+	{
+		quantizeSelectedTrack();
+	}
 }
 
 bool OmxModeForm::shouldBlockEncEdit()

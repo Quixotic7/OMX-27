@@ -93,6 +93,12 @@ public:
 	void dispTrackLength(const char *rateStr, uint8_t activeCount);
 	void dispGenericModeLabelSmallText(const char *label, uint8_t numPages, int8_t selectedPage);
 
+	// FORM MI page-0 overlay: up to 4 rectangles along the bottom, one per enabled page, each width
+	// proportional to that page's length (pageLens[4], 1-16). A filled cell marks the playhead —
+	// playAbsStep is the absolute playing step (0-63), or -1 when stopped. Does NOT clear the buffer
+	// (draws over the already-rendered keyboard view).
+	void drawPageBars(const uint8_t *pageLens, uint8_t enabledMask, int8_t playAbsStep);
+
 	// FORM Patterns view: a big "Pn" (TENFAT) on the left, the switch-style name top-right, an
 	// optional tag under it (">Pq" queued / "CHn" chain), and a bottom progress bar (0-1) showing
 	// how far through the loop/bar the playhead is (i.e. when a queued switch will commit).

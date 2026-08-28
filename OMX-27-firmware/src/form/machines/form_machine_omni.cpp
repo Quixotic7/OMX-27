@@ -506,6 +506,68 @@ namespace FormOmni
             }
     }
 
+    uint8_t FormMachineOmni::recordNoteOn(int8_t note, uint8_t quantizePct)
+    {
+        if (note < 0 || note > 127)
+            return 255;
+        auto track = getTrack();
+        uint16_t total = track->totalLen();
+        if (total == 0)
+            return 255;
+        // How far into the current step we are (0 at the step start, ->1 approaching the next).
+        float frac = (ticksPerStep_ > 0) ? (1.0f - (float)ticksTilNextTriggerRate_ / (float)ticksPerStep_) : 0.0f;
+        uint16_t pos = playingStep_;
+        float nudgeFrac; // signed offset from the chosen step, in [-0.5, +0.5] of a step
+        if (frac < 0.5f)
+            nudgeFrac = frac; // played late on the current step -> positive (delay) nudge
+        else
+        {
+            pos = (uint16_t)((playingStep_ + 1) % total); // round up to the next step
+            nudgeFrac = -(1.0f - frac);                    // played early -> negative nudge
+        }
+        uint8_t absStep = track->positionToStep(pos);
+        recordNoteToStep(absStep, note);
+        // Nudge scaled by the quantize strength: 100% => 0 (hard snap), 0% => full played offset.
+        if (quantizePct > 100)
+            quantizePct = 100;
+        int16_t nudge = (int16_t)lroundf(nudgeFrac * 60.0f * (float)(100 - quantizePct) / 100.0f);
+        getTrack()->steps[absStep].nudge = (int8_t)constrain((int)nudge, -60, 60);
+        return absStep;
+    }
+
+    // Map a held-note duration (in steps) to the nearest LEN value (getStepLenMult is the inverse).
+    static uint8_t lenFromSteps(float steps)
+    {
+        if (steps <= 0.1875f) return 0; // 0.125
+        if (steps <= 0.375f) return 1;  // 0.25
+        if (steps <= 0.625f) return 2;  // 0.5
+        if (steps <= 0.875f) return 3;  // 0.75
+        // len 4..19 => 1..16 steps (len-3). Clamp to the 16-step max of the palette.
+        int v = (int)lroundf(steps) + 3;
+        if (v < 4) v = 4;
+        if (v > 19) v = 19;
+        return (uint8_t)v;
+    }
+
+    void FormMachineOmni::recordNoteLen(uint8_t absStep, float durationSteps)
+    {
+        if (absStep >= 64 || durationSteps <= 0.0f)
+            return;
+        getTrack()->steps[absStep].len = lenFromSteps(durationSteps);
+    }
+
+    void FormMachineOmni::quantizeTrackNudges(uint8_t quantizePct)
+    {
+        if (quantizePct > 100)
+            quantizePct = 100;
+        auto track = getTrack();
+        for (uint8_t s = 0; s < 64; s++)
+        {
+            int16_t n = (int16_t)lroundf((float)track->steps[s].nudge * (float)(100 - quantizePct) / 100.0f);
+            track->steps[s].nudge = (int8_t)constrain((int)n, -60, 60);
+        }
+    }
+
     uint8_t FormMachineOmni::key16toStep(uint8_t key16)
     {
         uint8_t zoomMult = kZoomMults[zoomLevel_];

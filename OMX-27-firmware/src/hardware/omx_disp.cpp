@@ -1089,6 +1089,53 @@ void OmxDisp::dispTrackLength(const char *rateStr, uint8_t activeCount)
 	}
 }
 
+void OmxDisp::drawPageBars(const uint8_t *pageLens, uint8_t enabledMask, int8_t playAbsStep)
+{
+	if (isMessageActive())
+		return;
+	// Gather the enabled pages and their total length (for proportional widths).
+	uint8_t pages[4], n = 0;
+	uint16_t totalLen = 0;
+	for (uint8_t p = 0; p < 4; p++)
+		if (enabledMask & (1 << p))
+		{
+			uint8_t pl = pageLens[p] == 0 ? 1 : pageLens[p];
+			pages[n++] = p;
+			totalLen += pl;
+		}
+	if (n == 0 || totalLen == 0)
+		return;
+
+	const int y = 24, h = 7, gap = 2;
+	int avail = 128 - (n - 1) * gap;
+	int8_t playPage = (playAbsStep >= 0) ? (int8_t)(playAbsStep / 16) : -1;
+	uint8_t playOff = (playAbsStep >= 0) ? (uint8_t)(playAbsStep % 16) : 0;
+
+	int x = 0;
+	for (uint8_t i = 0; i < n; i++)
+	{
+		uint8_t p = pages[i];
+		uint8_t pl = pageLens[p] == 0 ? 1 : pageLens[p];
+		int w = (int)lroundf((float)pl / (float)totalLen * (float)avail);
+		if (w < 3)
+			w = 3;
+		display.drawRect(x, y, w, h, WHITE);
+		// Playhead: fill the current step's sub-cell within the page it's on.
+		if (playPage == (int8_t)p && playOff < pl)
+		{
+			float cellW = (float)w / (float)pl;
+			int cx = x + (int)(playOff * cellW);
+			int cw = (int)(cellW + 0.5f);
+			if (cw < 1)
+				cw = 1;
+			if (cx + cw > x + w)
+				cw = x + w - cx;
+			display.fillRect(cx, y, cw, h, WHITE);
+		}
+		x += w + gap;
+	}
+}
+
 void OmxDisp::dispPatternPage(uint8_t pat, const char *styleName, const char *tag, float progress)
 {
 	if (isMessageActive())
