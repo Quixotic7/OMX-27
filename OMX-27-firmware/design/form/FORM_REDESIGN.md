@@ -504,9 +504,12 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
     track's nearest step — but keeps its **micro-timing** (the step's NUDGE is set from how far off
     the grid it was played) and its **length** (note-on→note-off sets the step's LEN), so takes feel
     musical rather than hard-locked. **Start-on-note**: armed + stopped, the first note starts the
-    transport + recording on the downbeat. **QUANTIZE strength** (0-100%, MI menu cursor 9) scales the
-    recorded nudge live (100 = hard snap); **long-press the encoder in MI = quantize now** (pull the
-    selected track's timing toward the grid by that amount). Count-in dropped (MIDI-only device).
+    transport + recording on the downbeat. A held note commits on RELEASE (so the sequencer can't
+    replay it and cut the live note); stopping commits held notes and disarms. **QUANTIZE** (MI menu,
+    click to open a submenu): scrub the amount to morph the selected track's timing toward the grid
+    live (you hear it), click to apply, AUX to exit/restore — the same amount also scales nudge while
+    recording. **CLEAR** (MI menu): empties the selected track's pattern behind a Yes/No confirm (the
+    Clear-Storage combo). Count-in dropped (MIDI-only device).
 27. **Pot banks + CC meter** (§2) → **built**: a plain knob turn sends `CC = pots[track.potBank]
     [slot]` on the track's channel (per-track bank, all 5 knobs); a 5-segment top-row CC meter shows
     the live knob values on the track page.
