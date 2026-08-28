@@ -236,6 +236,8 @@ private:
 	void quantExitSubmenu(bool apply);
 	bool miClearSub_ = false;       // CLEAR (cursor 10) confirm submenu (reuses the Yes/No combo)
 	uint8_t clearSel_ = 0;          // 0 = NO, 1 = YES
+	int8_t clearReturnView_ = -1;   // view to restore when the CLEAR submenu was opened from elsewhere
+	void closeClearSub();           // close the submenu, returning to the view it was opened from
 	void onKeyUpdateMI(OMXKeypadEvent e);
 	void updateMILEDs();
 	void onDisplayMI();

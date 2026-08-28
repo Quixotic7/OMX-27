@@ -672,9 +672,7 @@ bool OmxModeForm::onEncoderButtonMI()
 			static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine())->clearTrackSteps();
 			omxDisp.displayMessage("CLEARED");
 		}
-		miClearSub_ = false;
-		omxDisp.setDirty();
-		omxLeds.setDirty();
+		closeClearSub();
 		return true;
 	}
 	if (miCursor_ == 0)
@@ -692,6 +690,7 @@ bool OmxModeForm::onEncoderButtonMI()
 	{
 		miClearSub_ = true; // open the Yes/No confirm submenu (default NO)
 		clearSel_ = 0;
+		clearReturnView_ = -1; // opened from the MI menu -> stay in MI on exit
 		omxDisp.setDirty();
 		return true;
 	}
@@ -923,6 +922,19 @@ void OmxModeForm::quantExitSubmenu(bool apply)
 			omni->setStepNudge(s, quantOrigNudges_[s]); // restore
 	}
 	miQuantSub_ = false;
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+}
+
+// Close the CLEAR submenu, returning to whatever view it was opened from (if not the MI menu).
+void OmxModeForm::closeClearSub()
+{
+	miClearSub_ = false;
+	if (clearReturnView_ >= 0)
+	{
+		setFormView((uint8_t)clearReturnView_, true);
+		clearReturnView_ = -1;
+	}
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 }
@@ -2972,11 +2984,13 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 				if (e.down() && !e.held())
 				{
 					if (miQuantSub_)
+					{
 						quantExitSubmenu(false);
+						omxDisp.setDirty();
+						omxLeds.setDirty();
+					}
 					else
-						miClearSub_ = false;
-					omxDisp.setDirty();
-					omxLeds.setDirty();
+						closeClearSub(); // returns to the view the submenu was opened from
 				}
 				return;
 			}
@@ -3056,10 +3070,8 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			}
 			else if (thisKey == 3) // rec arm (latching) — §7
 			{
-				omxFormGlobal.recArm = !omxFormGlobal.recArm;
-				recClearedMask_ = 0; // fresh replace pass
-				omxDisp.displayMessage(omxFormGlobal.recArm ? "REC ARM" : "REC OFF");
-				omxLeds.setDirty();
+				// Rec arm acts on release: a quick tap toggles arm, a hold opens the CLEAR
+				// submenu (onKeyHeldUpdate). Nothing happens on the down press.
 				keyConsumed = true;
 			}
 			else if (thisKey == 4) // rec mode: overdub / replace — §7
@@ -3089,6 +3101,15 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 					keyConsumed = true;
 				}
 			}
+		}
+		// Quick-tap AUX + Rec Arm = toggle rec arm (a hold opens the CLEAR submenu).
+		if (!e.down() && thisKey == 3 && e.quickClicked())
+		{
+			omxFormGlobal.recArm = !omxFormGlobal.recArm;
+			recClearedMask_ = 0; // fresh replace pass
+			omxDisp.displayMessage(omxFormGlobal.recArm ? "REC ARM" : "REC OFF");
+			omxLeds.setDirty();
+			keyConsumed = true;
 		}
 	}
 
@@ -3324,9 +3345,11 @@ void OmxModeForm::onKeyHeldUpdate(OMXKeypadEvent e)
 	// macro / MFX / machine handlers that otherwise consume held AUX keys.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX && e.key() == 3 && !miClearSub_)
 	{
-		omxFormGlobal.recArm = !omxFormGlobal.recArm; // undo the arm toggle the down-press did
+		// A hold does not arm (the release toggle is suppressed because it's not a quick click).
+		// Remember the current view so we can return to it, then show the CLEAR submenu (MI view).
+		clearReturnView_ = (formView_ == FORMVIEW_MI) ? (int8_t)-1 : (int8_t)formView_;
 		if (formView_ != FORMVIEW_MI)
-			setFormView(FORMVIEW_MI, true); // the CLEAR submenu lives in the MI view
+			setFormView(FORMVIEW_MI, true);
 		miClearSub_ = true;
 		clearSel_ = 0;
 		omxDisp.setDirty();
