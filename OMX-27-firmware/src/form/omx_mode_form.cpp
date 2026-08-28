@@ -262,6 +262,19 @@ void OmxModeForm::clearPattern(uint8_t index)
 		loadPatternIntoMachines(activePattern_);
 }
 
+bool OmxModeForm::patternHasContent(uint8_t index)
+{
+	if (index >= FORM_NUM_PATTERNS)
+		return false;
+	if (index == activePattern_)
+		snapshotActivePattern(); // fold live edits in before we inspect
+	for (uint8_t t = 0; t < kNumMachines; t++)
+		for (uint8_t s = 0; s < 64; s++)
+			if (patterns_[index].tracks[t].tracks[0].steps[s].hasNotes())
+				return true;
+	return false;
+}
+
 // ---- v2 shell: view router ----
 void OmxModeForm::setFormView(uint8_t view, bool silent)
 {
@@ -465,6 +478,33 @@ void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
 			patF1Used_ = true; // F1 acted as a modifier -> no quick-copy on its release
 			queuedPattern_ = -1;
 			switchPattern(idx);
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+			return;
+		}
+		// Hold F2 + slot = cut/paste: a filled slot is cut into the buffer + cleared, an empty
+		// slot receives the buffer. Lets you move a pattern to another slot.
+		if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
+		{
+			patF2Used_ = true; // F2 acted as a modifier -> no quick-paste on its release
+			if (patternHasContent(idx))
+			{
+				if (patternBuffer_ == nullptr)
+					patternBuffer_ = new FormPattern();
+				if (patternBuffer_ != nullptr)
+				{
+					*patternBuffer_ = patterns_[idx];
+					clearPattern(idx);
+					omxDisp.displayMessage("CUT");
+				}
+			}
+			else if (patternBuffer_ != nullptr)
+			{
+				patterns_[idx] = *patternBuffer_;
+				if (idx == activePattern_)
+					loadPatternIntoMachines(activePattern_);
+				omxDisp.displayMessage("PASTE");
+			}
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 			return;
@@ -2395,7 +2435,8 @@ void OmxModeForm::onPotChanged(int potIndex, int prevValue, int newValue, int an
 		for (uint8_t s = 0; s < 16; s++)
 			if (heldStepMask_ & (1 << s))
 				omni->setStepPotLock(s, (uint8_t)potIndex, v);
-		omxDisp.displayMessage("CC" + String(omni->potLockCC(potIndex)) + " " + String(v));
+		// No popup — the step's P-Lock tint conveys the lock (and pot drift while a step is
+		// merely pressed shouldn't flash a "CC" message).
 		stepEdited_ = true; // a P-Lock edit suppresses the quick-click clear on release
 		omxDisp.setDirty();
 		omxLeds.setDirty();

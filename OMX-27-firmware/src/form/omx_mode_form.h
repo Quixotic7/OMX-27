@@ -186,6 +186,7 @@ public:
 	void switchPattern(uint8_t index);
 	void copyPatternTo(uint8_t from, uint8_t to);
 	void clearPattern(uint8_t index);
+	bool patternHasContent(uint8_t index); // any track has any step with notes (snapshots if active)
 
 private:
 	// ---- v2 shell: view router ----
