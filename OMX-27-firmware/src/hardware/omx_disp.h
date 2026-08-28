@@ -93,6 +93,11 @@ public:
 	void dispTrackLength(const char *rateStr, uint8_t activeCount);
 	void dispGenericModeLabelSmallText(const char *label, uint8_t numPages, int8_t selectedPage);
 
+	// FORM Patterns view: a big "Pn" (TENFAT) on the left, the switch-style name top-right, an
+	// optional tag under it (">Pq" queued / "CHn" chain), and a bottom progress bar (0-1) showing
+	// how far through the loop/bar the playhead is (i.e. when a queued switch will commit).
+	void dispPatternPage(uint8_t pat, const char *styleName, const char *tag, float progress);
+
 	// Displays a header and options below
 	// Good for something like a yes/no box
 	void dispOptionCombo(const char * header, const char *options[], uint8_t optionCount, uint8_t selected, bool encSelActive);

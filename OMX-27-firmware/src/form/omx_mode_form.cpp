@@ -405,7 +405,42 @@ void OmxModeForm::updatePatternsLEDs()
 void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
 {
 	uint8_t k = e.key();
-	if (e.held() || !e.down())
+	bool down = e.down(), held = e.held();
+
+	// ---- Keys 1/2: quick tap = copy/paste the whole pattern; held = F1/F2 modifier ----
+	if (k == 1)
+	{
+		if (down && !held)
+			patF1Used_ = midiSettings.keyState[2]; // 2 already held -> F3, not a copy
+		else if (!down && !patF1Used_ && e.quickClicked())
+		{
+			snapshotActivePattern();
+			if (patternBuffer_ == nullptr)
+				patternBuffer_ = new FormPattern(); // one-time alloc; null-guarded below
+			if (patternBuffer_ != nullptr)
+			{
+				*patternBuffer_ = patterns_[activePattern_];
+				omxDisp.displayMessage("COPY");
+			}
+		}
+		return;
+	}
+	if (k == 2)
+	{
+		if (down && !held)
+			patF2Used_ = midiSettings.keyState[1];
+		else if (!down && !patF2Used_ && e.quickClicked() && patternBuffer_ != nullptr)
+		{
+			patterns_[activePattern_] = *patternBuffer_;
+			loadPatternIntoMachines(activePattern_);
+			omxDisp.displayMessage("PASTE");
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		return;
+	}
+
+	if (held || !down)
 		return;
 	// Top row 3-6: pick the switch style.
 	if (k >= 3 && k <= 6)
@@ -424,6 +459,16 @@ void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
 		uint8_t idx = k - 11;
 		if (idx >= FORM_NUM_PATTERNS)
 			return;
+		// Hold F1 + slot = instant jump, overriding the switch style (works in any mode).
+		if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
+		{
+			patF1Used_ = true; // F1 acted as a modifier -> no quick-copy on its release
+			queuedPattern_ = -1;
+			switchPattern(idx);
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+			return;
+		}
 		if (switchStyle_ == 3) // Chained: append to the chain (start it on the first tap)
 		{
 			if (chainLen_ < 16)
@@ -449,12 +494,25 @@ void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
 
 void OmxModeForm::onDisplayPatterns()
 {
-	tempString = "P" + String(activePattern_ + 1) + "/" + String((int)FORM_NUM_PATTERNS);
+	// Switch-progress bar: Next Bar tracks the bar, the rest track the selected track's loop.
+	float progress = 0.0f;
+	if (omxFormGlobal.isPlaying)
+	{
+		if (switchStyle_ == 1)
+			progress = (float)seqConfig.currentClockTick / 384.0f; // 1 bar = PPQ*4 ticks
+		else
+		{
+			auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+			progress = omni->loopProgress();
+		}
+	}
+	// Optional right-side tag: queued target (">Pn") or chain length ("CHn").
+	char tag[10] = "";
 	if (queuedPattern_ >= 0)
-		tempString += " >P" + String(queuedPattern_ + 1);
+		snprintf(tag, sizeof(tag), ">P%d", queuedPattern_ + 1);
 	else if (switchStyle_ == 3 && chainLen_ > 0)
-		tempString += " CH" + String(chainLen_);
-	omxDisp.dispGenericModeLabelDoubleLine(kSwitchStyleNames[switchStyle_], tempString.c_str(), 0, 0);
+		snprintf(tag, sizeof(tag), "CH%d", chainLen_);
+	omxDisp.dispPatternPage(activePattern_, kSwitchStyleNames[switchStyle_], tag, progress);
 }
 
 // MI view — the standalone MI-mode keyboard, brought in for live playing over the running

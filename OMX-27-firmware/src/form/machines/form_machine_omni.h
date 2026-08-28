@@ -132,6 +132,12 @@ namespace FormOmni
         bool stepHasNotes(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].hasNotes(); }
         bool stepIsOn(uint8_t key16) { return getTrack()->steps[key16toStep(key16)].isOn(); }
         uint8_t playingStepIndex() { return getTrack()->positionToStep(playingStep_); } // absolute step
+        // 0..1 fraction through the track's loop (for the Patterns switch-progress bar).
+        float loopProgress()
+        {
+            uint16_t t = getTrack()->totalLen();
+            return t > 0 ? (float)playingStep_ / (float)t : 0.0f;
+        }
         // Function mode: is the step currently a jump (random J? or a specific jump target)?
         bool stepIsJump(uint8_t key16)
         {

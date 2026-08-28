@@ -1089,6 +1089,51 @@ void OmxDisp::dispTrackLength(const char *rateStr, uint8_t activeCount)
 	}
 }
 
+void OmxDisp::dispPatternPage(uint8_t pat, const char *styleName, const char *tag, float progress)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+
+	// Big pattern number, left (chunky pixel font).
+	char pbuf[6];
+	snprintf(pbuf, sizeof(pbuf), "P%u", (unsigned)(pat + 1));
+	u8g2_display.setFont(FONT_TENFAT);
+	u8g2_display.setCursor(4, 17);
+	u8g2_display.print(pbuf);
+
+	// Switch-style name, right-justified on top.
+	u8g2_display.setFont(FONT_LABELS);
+	uint16_t sw = u8g2_display.getUTF8Width(styleName);
+	u8g2_display.setCursor(126 - sw, 7);
+	u8g2_display.print(styleName);
+
+	// Queued / chain tag, right-justified under the style name.
+	if (tag && tag[0])
+	{
+		uint16_t tw = u8g2_display.getUTF8Width(tag);
+		u8g2_display.setCursor(126 - tw, 18);
+		u8g2_display.print(tag);
+	}
+
+	// Bottom progress bar: outline + a fill proportional to loop/bar progress (0-1).
+	const int by = 25, bh = 6;
+	display.drawRect(0, by, 128, bh, WHITE);
+	int fw = (int)(progress * 126.0f + 0.5f);
+	if (fw < 0)
+		fw = 0;
+	if (fw > 126)
+		fw = 126;
+	if (fw > 0)
+		display.fillRect(1, by + 1, fw, bh - 2, WHITE);
+}
+
 void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool *topFill, uint8_t topCount,
 								   const char *bottomLabel, const bool *bottomFill, uint8_t bottomCount)
 {

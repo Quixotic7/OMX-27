@@ -212,6 +212,10 @@ private:
 	uint8_t chain_[16] = {0};      // Chained mode: the pattern sequence
 	uint8_t chainLen_ = 0;
 	uint8_t chainPos_ = 0;
+	FormPattern *patternBuffer_ = nullptr; // F1 copy / F2 paste buffer (lazily heap-allocated so
+	                                       // the ~pattern-sized block stays out of .bss on Teensy)
+	bool patF1Used_ = false;       // F1 used as a modifier (jump) this hold -> no quick-copy
+	bool patF2Used_ = false;
 	void updatePatternsLEDs();
 	void onKeyUpdatePatterns(OMXKeypadEvent e);
 	void onDisplayPatterns();
