@@ -336,42 +336,25 @@ bool OmxModeForm::isTrackPage()
 	return false;
 }
 
-// The view selector is live when the encoder latch is on, or while AUX is held (AUX is the
-// alternate way in). While live, the encoder switches views instead of its normal function.
+// AUX is a modifier for browsing views via the key shortcuts (13-18); the tag boxes while it's held.
 bool OmxModeForm::viewEditActive()
 {
-	return viewSelectEdit_ || midiSettings.midiAUX;
+	return midiSettings.midiAUX;
 }
 
-// Encoder turn while the selector is live: switch views instantly (wrapping), across all views.
+// The encoder no longer switches views. While AUX is held it's swallowed (no-op) so an accidental
+// turn while browsing views with the keys can't change the track/params; otherwise it's the view's
+// own job (SEQ param nav, MI menu, etc).
 bool OmxModeForm::onEncoderTrackPage(int dir)
 {
-	if (!viewEditActive())
-		return false; // not selecting: let the turn do its normal job (e.g. SEQ param nav)
-	if (dir == 0)
-		return true;
-	int v = ((int)formView_ + dir) % (int)FORMVIEW_COUNT;
-	if (v < 0)
-		v += FORMVIEW_COUNT;
-	setFormView((uint8_t)v, true); // silent live switch — keep the selector open
-	return true;
+	(void)dir;
+	return midiSettings.midiAUX; // consume (no-op) under AUX, else let the view handle the turn
 }
 
-// Encoder click: enter the view selector from the track page, or exit it (from any view).
+// The encoder click no longer enters a view selector — views change only via AUX + key shortcuts.
 bool OmxModeForm::onEncoderButtonTrackPage()
 {
-	if (viewSelectEdit_)
-	{
-		viewSelectEdit_ = false; // exit the latch, wherever a live switch left us
-		omxDisp.setDirty();
-		return true;
-	}
-	if (!isTrackPage())
-		return false;
-	viewSelectEdit_ = true;
-	pendingView_ = formView_;
-	omxDisp.setDirty();
-	return true;
+	return false;
 }
 
 // While AUX is held, keys 13-18 are the view selector: the selected (pending) view is
@@ -622,21 +605,22 @@ bool OmxModeForm::onEncoderMI(int dir)
 		omxDisp.setDirty();
 		return true;
 	}
-	// Page 0 (keyboard): the encoder changes the selected track. The menu is entered by clicking.
+	if (!miEncEdit_)
+	{
+		// Select mode: navigate the cursor (0-10). Page 0 is the keyboard; 1-10 are the params.
+		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 10);
+		omxDisp.setDirty();
+		return true;
+	}
+	// Edit mode:
 	if (miCursor_ == 0)
 	{
+		// Page 0: the encoder changes the selected track (only in edit mode).
 		int t = constrain((int)selectedMachine_ + dir, 0, kNumMachines - 1);
 		if (t != (int)selectedMachine_)
 			selectMachine((uint8_t)t);
 		omxDisp.setDirty();
 		omxLeds.setDirty();
-		return true;
-	}
-	if (!miEncEdit_)
-	{
-		// Menu nav (1-10). Turning left off item 1 drops back to page 0 (the keyboard).
-		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 10);
-		omxDisp.setDirty();
 		return true;
 	}
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
@@ -673,12 +657,6 @@ bool OmxModeForm::onEncoderButtonMI()
 			omxDisp.displayMessage("CLEARED");
 		}
 		closeClearSub();
-		return true;
-	}
-	if (miCursor_ == 0)
-	{
-		miCursor_ = 1; // page 0: click opens the menu (turn now navigates the params)
-		omxDisp.setDirty();
 		return true;
 	}
 	if (miCursor_ == 9)
@@ -2277,8 +2255,9 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 	// boxes/inverts; otherwise it names the current view. MIX = "MIX", STEP = "SEQ".
 	if (keyboardMode)
 	{
-		// MI keyboard view: no F1/F2 overlays (keys 1/2 are notes here, not modifiers).
-		modOverlay = 0;
+		// MI keyboard view: no F1/F2 overlays (keys 1/2 are notes here, not modifiers). In edit mode
+		// (encoder clicked on page 0), box the "TRK n" name to show the encoder now selects the track.
+		modOverlay = (formView_ == FORMVIEW_MI && miEncEdit_ && miCursor_ == 0) ? 2 : 0;
 		overlayLabel = nullptr;
 	}
 
