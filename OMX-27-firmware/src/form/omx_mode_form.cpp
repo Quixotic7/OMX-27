@@ -622,8 +622,19 @@ bool OmxModeForm::onEncoderMI(int dir)
 		omxDisp.setDirty();
 		return true;
 	}
+	// Page 0 (keyboard): the encoder changes the selected track. The menu is entered by clicking.
+	if (miCursor_ == 0)
+	{
+		int t = constrain((int)selectedMachine_ + dir, 0, kNumMachines - 1);
+		if (t != (int)selectedMachine_)
+			selectMachine((uint8_t)t);
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
 	if (!miEncEdit_)
 	{
+		// Menu nav (1-10). Turning left off item 1 drops back to page 0 (the keyboard).
 		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 10);
 		omxDisp.setDirty();
 		return true;
@@ -664,6 +675,12 @@ bool OmxModeForm::onEncoderButtonMI()
 		miClearSub_ = false;
 		omxDisp.setDirty();
 		omxLeds.setDirty();
+		return true;
+	}
+	if (miCursor_ == 0)
+	{
+		miCursor_ = 1; // page 0: click opens the menu (turn now navigates the params)
+		omxDisp.setDirty();
 		return true;
 	}
 	if (miCursor_ == 9)
@@ -2947,19 +2964,17 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	{
 		if (thisKey == 0)
 		{
-			// MI QUANTIZE submenu: AUX exits without applying (restores the original timing).
-			if (formView_ == FORMVIEW_MI && miQuantSub_)
+			// MI submenus: a fresh AUX press exits (QUANTIZE restores, CLEAR cancels). Keep the AUX
+			// held-state bookkeeping correct either way (don't leave midiAUX stuck).
+			if (formView_ == FORMVIEW_MI && (miQuantSub_ || miClearSub_))
 			{
-				if (e.down() && !e.held())
-					quantExitSubmenu(false);
-				return;
-			}
-			// MI CLEAR submenu: AUX cancels (no clear).
-			if (formView_ == FORMVIEW_MI && miClearSub_)
-			{
+				midiSettings.midiAUX = e.down();
 				if (e.down() && !e.held())
 				{
-					miClearSub_ = false;
+					if (miQuantSub_)
+						quantExitSubmenu(false);
+					else
+						miClearSub_ = false;
 					omxDisp.setDirty();
 					omxLeds.setDirty();
 				}
@@ -3016,15 +3031,23 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 				omxDisp.displayMessage("Octave: " + String(midiSettings.octave));
 				keyConsumed = true;
 			}
-			else if (auxMacroManager_.isMFXQuickEditEnabled() == false && (thisKey == 1 || thisKey == 2)) // Change Param selection
+			else if (auxMacroManager_.isMFXQuickEditEnabled() == false && (thisKey == 1 || thisKey == 2)) // transport
 			{
-				if (thisKey == 1)
+				// AUX + 1 + 2 held together = full STOP (stop the transport + reset to the start),
+				// regardless of the order the two keys go down.
+				if ((thisKey == 1 && midiSettings.keyState[2]) || (thisKey == 2 && midiSettings.keyState[1]))
+				{
+					if (omxFormGlobal.isPlaying)
+						togglePlayback();
+					resetPlayback();
+					omxDisp.displayMessage("STOP");
+				}
+				else if (thisKey == 1) // play / pause
 				{
 					togglePlayback();
-					// params.decrementParam();
 					omxDisp.displayMessage(omxFormGlobal.isPlaying ? "PLAY" : "PAUSE");
 				}
-				else if (thisKey == 2)
+				else // thisKey == 2: reset to start
 				{
 					resetPlayback();
 					omxDisp.displayMessage("RESET");
@@ -3297,6 +3320,20 @@ bool OmxModeForm::onKeyHeldSelMidiFX(OMXKeypadEvent e)
 
 void OmxModeForm::onKeyHeldUpdate(OMXKeypadEvent e)
 {
+	// Hold AUX + Rec Arm (key 3) = quick-access the CLEAR TRACK submenu. Handle it first, before the
+	// macro / MFX / machine handlers that otherwise consume held AUX keys.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX && e.key() == 3 && !miClearSub_)
+	{
+		omxFormGlobal.recArm = !omxFormGlobal.recArm; // undo the arm toggle the down-press did
+		if (formView_ != FORMVIEW_MI)
+			setFormView(FORMVIEW_MI, true); // the CLEAR submenu lives in the MI view
+		miClearSub_ = true;
+		clearSel_ = 0;
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return;
+	}
+
 	if (auxMacroManager_.onKeyHeldUpdate(e))
 		return;
 
@@ -3312,6 +3349,7 @@ void OmxModeForm::onKeyHeldUpdate(OMXKeypadEvent e)
 	}
 
 	int thisKey = e.key();
+	(void)thisKey;
 
 	// v2 single-engine: hold-a-track no longer opens the machine-type picker
 	// (every track is the OMNI engine). Held keys go straight to the machine.
