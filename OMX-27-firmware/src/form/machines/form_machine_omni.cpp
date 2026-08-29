@@ -365,7 +365,7 @@ namespace FormOmni
             noteOns_.clear();
 
             ratchetDivs_ = 0; // don't leave a ratchet pending across stop
-            ratchetStep_ = nullptr;
+            ratchetStepIdx_ = -1;
 
             didNotesPlayThisStep_ = false;
         }
@@ -1062,9 +1062,18 @@ namespace FormOmni
     bool FormMachineOmni::evaluateTrig(uint8_t stepIndex, Step *step)
     {
         if(step->mute == 1) return false;
-        if(step->prob == 100 && step->condition == 0) return true;
+        if(step->prob == 100 && step->condition == 0)
+        {
+            // An unconditional fire counts as "previous trig was true" for PRE/!PRE, the
+            // same as a passing probability roll below — otherwise PRE semantics differ
+            // between a prob-100 step and a prob-99 step that happened to pass.
+            prevCondWasTrue_ = true;
+            return true;
+        }
 
-        if (step->prob != 100 && (step->prob == 0 || random(100) > step->prob))
+        // random(100) is 0-99, so >= makes prob N fire exactly N% of the time
+        // (with > , prob 50 fired 51% and prob 99 fired always).
+        if (step->prob != 100 && (step->prob == 0 || random(100) >= step->prob))
         {
             prevCondWasTrue_ = false;
 			return false;
@@ -1416,7 +1425,7 @@ namespace FormOmni
                         if (!ratchetHit && n.noteNumber == noteNumber)
                         {
                             noteTriggeredOnSameStep = true;
-                            continue;
+                            break;
                         }
                     }
 
@@ -1998,8 +2007,7 @@ namespace FormOmni
                 // Step repeat (ratchet): split the step into (repeat+1) even sub-hits.
                 if (currentStep->repeat > 0 && ticksPerStep_ > 1)
                 {
-                    ratchetStep_ = currentStep;
-                    ratchetDynamic_ = dynamicStep;
+                    ratchetStepIdx_ = (int8_t)track->positionToStep(playingStep_);
                     ratchetDivs_ = currentStep->repeat + 1;
                     ratchetHitIndex_ = 1;
                     ratchetTotalTicks_ = ticksPerStep_;
@@ -2137,13 +2145,16 @@ namespace FormOmni
 
         // Step repeat (ratchet): fire the queued sub-hits at round(k*total/divs) ticks into the
         // step. Re-triggering the step note-offs the prior hit and note-ons again.
-        if (ratchetDivs_ > 1 && ratchetStep_ != nullptr && ratchetHitIndex_ < ratchetDivs_)
+        if (ratchetDivs_ > 1 && ratchetStepIdx_ >= 0 && ratchetHitIndex_ < ratchetDivs_)
         {
             ratchetElapsed_++;
             int16_t target = (int16_t)(((int32_t)ratchetHitIndex_ * ratchetTotalTicks_) / ratchetDivs_);
             if (ratchetElapsed_ >= target)
             {
-                triggerStep(ratchetStep_, ratchetDynamic_, true);
+                // Resolve the step from its index each hit — edits during playback may have
+                // re-initialised the step the original pointers referenced.
+                triggerStep(&getTrack()->steps[ratchetStepIdx_],
+                            &getDynamicTrack()->steps[ratchetStepIdx_], true);
                 ratchetHitIndex_++;
             }
         }
@@ -2223,7 +2234,6 @@ namespace FormOmni
         if (stepLenMult < 1.0f)
         {
             return String(stepLenMult, 2);
-            omxDisp.setLegend(2, "LEN", String(stepLenMult, 2));
         }
         else if (stepLenMult > 16)
         {
@@ -2710,8 +2720,9 @@ namespace FormOmni
 
             if (param == 0)
             {
-                track->len = constrain(track->len + amtSlow, 0, 63);
-                onTrackLengthChanged();
+                // Through setTrackLen so enabledPages/pageLen are rebuilt too — writing
+                // track->len directly desyncs them and the next syncLen() reverts the edit.
+                setTrackLen(constrain(track->len + amtSlow, 0, 63));
             }
             else if (param == 1)
             {

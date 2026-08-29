@@ -286,7 +286,7 @@ namespace FormOmni
             seq_ = s;
             seqDynamic_.Reset();  // loaded pattern starts from a clean playback state
             ratchetDivs_ = 0;     // and no ratchet carried over from the old pattern
-            ratchetStep_ = nullptr;
+            ratchetStepIdx_ = -1;
         }
 
     private:
@@ -400,8 +400,10 @@ namespace FormOmni
         // Step repeat (ratchet): after a step with repeat>0 triggers, re-fire it so the step is
         // split into `ratchetDivs_` (= repeat+1) even sub-hits. Each sub-hit's tick is recomputed
         // as round(k * total / divs) so integer rounding doesn't drift the later hits.
-        Step *ratchetStep_ = nullptr;
-        StepDynamic *ratchetDynamic_ = nullptr;
+        // Stored as an absolute step index (not pointers into seq_): a clear/paste/pattern
+        // switch during playback re-initialises steps in place, which would leave a raw
+        // pointer aimed at reused memory mid-ratchet.
+        int8_t ratchetStepIdx_ = -1;   // absolute step (0-63), -1 = none
         uint8_t ratchetDivs_ = 0;      // subdivisions (repeat+1); 0/1 = inactive
         uint8_t ratchetHitIndex_ = 0;  // next sub-hit to fire (1 .. divs-1)
         int16_t ratchetTotalTicks_ = 0;

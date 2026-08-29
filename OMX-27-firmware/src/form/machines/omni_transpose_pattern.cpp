@@ -249,10 +249,13 @@ namespace FormOmni
             break;
             case TPATSHORT_HELDSTEP:
             {
-                // Select the transpose value while key is held
-                if (heldKey16_ >= 0 && thisKey > 0 && thisKey < 11)
+                // Select the transpose value while key is held. Keys 1-10 map to -5..+4
+                // (key 6 = 0) so negative transposes are reachable from the palette (the
+                // display advertises them; the old 0..9 mapping couldn't enter one). Down
+                // events only — this also fired a second time on the key's release.
+                if (e.down() && heldKey16_ >= 0 && thisKey > 0 && thisKey < 11)
                 {
-                    tPat->pat[heldKey16_] = thisKey - 1;
+                    tPat->pat[heldKey16_] = (int8_t)thisKey - 6;
                 }
                 else if (e.down() && thisKey >= 11)
                 {

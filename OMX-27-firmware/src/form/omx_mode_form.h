@@ -276,11 +276,19 @@ private:
 	void recordNoteReleased(int8_t note); // commit the held note (step/nudge/length) on release
 	void flushRecHeld();                  // commit any still-held recording notes (on stop)
 	// Notes being held while recording. The note is committed to its step ON RELEASE (with the
-	// step/nudge resolved at press time), so the sequencer can't replay it and cut the live note.
-	struct RecHeld { int8_t note; uint8_t step; int8_t nudge; uint32_t onMicros; };
+	// step/nudge — and the track — resolved at press time), so the sequencer can't replay it and
+	// cut the live note, and switching tracks mid-hold can't re-target the write.
+	struct RecHeld { int8_t note; uint8_t step; int8_t nudge; uint8_t track; uint32_t onMicros; };
 	RecHeld recHeld_[8] = {};
 	uint8_t recHeldCount_ = 0;
 	void commitRecHeld(const RecHeld &h); // write one held note (note/nudge/length) into its step
+	// Preview-note bookkeeping, per key: which note (and machine) a key's preview note-on started,
+	// so the matching note-off always goes out — even if AUX/a modifier swallows the key's release
+	// event for the view, or the octave/track/view changed while the key was held.
+	int8_t previewNote_[27];
+	uint8_t previewMach_[27];
+	void previewKeyOn(uint8_t key, int8_t note); // note-on on the selected track, remembered per key
+	int8_t previewKeyOff(uint8_t key);           // send the pending note-off (if any); returns the note or -1
 	// CC meter is transient: show it only briefly after a knob moves.
 	uint32_t lastPotMs_ = 0;
 	bool ccMeterWasActive_ = false;
@@ -348,8 +356,8 @@ private:
 	// (not yet persisted with the pattern).
 	uint8_t trackHue_[kNumMachines];
 
-	FormMachineInterface *copyBuffer_; // Machine for cut/copy/paste and undo
-	FormMachineInterface *undoBuffer_; // Machine for cut/copy/paste and undo
+	FormMachineInterface *copyBuffer_ = nullptr; // Machine for cut/copy/paste and undo
+	FormMachineInterface *undoBuffer_ = nullptr; // Machine for cut/copy/paste and undo
 
 	// v2 pattern data layer: the bank of whole-sequencer snapshots. The active pattern is
 	// live in the machines; the others sit here. See form_patterns.h + FORM_IMPLEMENTATION.md.

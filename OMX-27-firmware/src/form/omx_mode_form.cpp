@@ -55,6 +55,12 @@ OmxModeForm::OmxModeForm()
 
 	machines_[0]->setTest();
 
+	for (uint8_t k = 0; k < 27; k++)
+	{
+		previewNote_[k] = -1;
+		previewMach_[k] = 0;
+	}
+
 	selectMachine(0);
 
 	ledUpdateTime_ = 0;
@@ -96,6 +102,39 @@ void OmxModeForm::cleanup()
 		delete undoBuffer_;
 		undoBuffer_ = nullptr;
 	}
+
+	if(patternBuffer_ != nullptr)
+	{
+		delete patternBuffer_;
+		patternBuffer_ = nullptr;
+	}
+}
+
+// ---- Preview-note bookkeeping ----
+// Every manual note-on goes through here so its note-off can always be delivered from the
+// key's release — even if a modifier (AUX/F-keys), an octave change, a track switch, or a
+// view switch happens while the key is held.
+void OmxModeForm::previewKeyOn(uint8_t key, int8_t note)
+{
+	if (key >= 27 || note < 0 || note > 127)
+		return;
+	previewKeyOff(key); // never leak an earlier note still ringing on this key
+	static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine())->previewNote(note, true);
+	previewNote_[key] = note;
+	previewMach_[key] = selectedMachine_;
+}
+
+int8_t OmxModeForm::previewKeyOff(uint8_t key)
+{
+	if (key >= 27)
+		return -1;
+	int8_t note = previewNote_[key];
+	if (note >= 0)
+	{
+		static_cast<FormOmni::FormMachineOmni *>(machines_[previewMach_[key]])->previewNote(note, false);
+		previewNote_[key] = -1;
+	}
+	return note;
 }
 
 void OmxModeForm::changeFormMode(uint8_t newFormMode)
@@ -291,6 +330,11 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	notesF1Used_ = notesF2Used_ = false;
 	notesCursor_ = 0; // open on the keyboard page, select mode
 	miCursor_ = 0; // MI opens on the keyboard, select mode
+	// Clear the F1+page gesture state too: a page key still physically held across a view
+	// switch releases into the new view's handler, so its bit would otherwise stay stuck and
+	// fire a phantom loop-range on the next F1+page press.
+	heldPageMask_ = 0;
+	pageGestureDone_ = false;
 
 	// Editor views map to an OMNI UI mode, applied to every track so the view stays
 	// consistent when you switch tracks. Patterns / MI are rendered by the container.
@@ -445,6 +489,21 @@ void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
 		switchStyle_ = k - 3;
 		if (switchStyle_ != 3)
 			chainLen_ = 0; // leaving Chained clears the chain
+		// A pattern queued under Finish Loop / Next Bar must not be orphaned by the style
+		// change (only those styles commit the queue): Instant fires it now, Chained drops it.
+		if (queuedPattern_ >= 0)
+		{
+			if (switchStyle_ == 2)
+			{
+				uint8_t q = (uint8_t)queuedPattern_;
+				queuedPattern_ = -1;
+				switchPattern(q);
+			}
+			else if (switchStyle_ == 3)
+			{
+				queuedPattern_ = -1;
+			}
+		}
 		omxDisp.displayMessage(kSwitchStyleNames[switchStyle_]);
 		omxDisp.setDirty();
 		omxLeds.setDirty();
@@ -547,15 +606,27 @@ void OmxModeForm::onKeyUpdateMI(OMXKeypadEvent e)
 	uint8_t k = e.key();
 	if (k == 0 || k >= 27)
 		return; // AUX handled by the top-level layer
+
+	// Releases are handled first, BEFORE the AUX-layer guard, and use the remembered note —
+	// so a note started before AUX went down can't hang, and an octave/track change mid-hold
+	// can't desync the note-off.
+	if (!e.down())
+	{
+		int8_t played = previewKeyOff(k);
+		if (played >= 0)
+			recordNoteReleased(played); // capture the note's length (no-op if not being recorded)
+		omxLeds.setDirty();
+		return;
+	}
+
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
 		return; // AUX layer owns the keys while held
 
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	int8_t note = omxUtil.getNoteNumber(k, omxFormGlobal.musicScale);
 	if (note < 0 || note > 127)
 		return; // out of range / out-of-scale (locked)
 
-	if (e.down() && !e.held())
+	if (!e.held())
 	{
 		// Start-on-note: armed but stopped -> begin playback + recording on the first note played.
 		if (omxFormGlobal.recArm && !omxFormGlobal.isPlaying)
@@ -564,16 +635,10 @@ void OmxModeForm::onKeyUpdateMI(OMXKeypadEvent e)
 			togglePlayback(); // start the transport
 			recClearedMask_ = 0;
 		}
-		omni->previewNote(note, true); // note-on on the track's channel
+		previewKeyOn(k, note); // note-on on the track's channel (remembered for the release)
 		if (omxFormGlobal.recArm && omxFormGlobal.isPlaying)
 			recordPlayedNote(note); // record into the selected track, keeping timing + length (§7)
 		omxDisp.setDirty();
-		omxLeds.setDirty();
-	}
-	else if (!e.down())
-	{
-		omni->previewNote(note, false); // note-off
-		recordNoteReleased(note);       // capture the note's length (no-op if not being recorded)
 		omxLeds.setDirty();
 	}
 }
@@ -806,6 +871,8 @@ void OmxModeForm::recordPlayedNote(int8_t note)
 {
 	if (note < 0 || note > 127)
 		return;
+	if (recHeldCount_ >= 8)
+		return; // full — don't clear a step's content for a note we can't record
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 	int8_t nudge;
 	uint8_t step = omni->recordResolveStep(recQuantize_, nudge); // resolve step + nudge at play time
@@ -818,18 +885,18 @@ void OmxModeForm::recordPlayedNote(int8_t note)
 		recClearedMask_ |= (1ULL << step);
 	}
 	// Defer the write until release: while the note is held it stays out of the pattern, so the
-	// sequencer won't retrigger it and cut off the live-monitored note. The step/nudge are captured
-	// now (from where the playhead was), the length on release.
-	if (recHeldCount_ < 8)
-		recHeld_[recHeldCount_++] = {note, step, nudge, micros()};
+	// sequencer won't retrigger it and cut off the live-monitored note. The step/nudge — and the
+	// track — are captured now (from where the playhead was), the length on release.
+	recHeld_[recHeldCount_++] = {note, step, nudge, selectedMachine_, micros()};
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 }
 
-// Commit one held note to its step: write the note + nudge (resolved at press) and the length.
+// Commit one held note to its step: write the note + nudge (resolved at press) and the length —
+// into the track it was recorded on, even if the selection changed while the note was held.
 void OmxModeForm::commitRecHeld(const RecHeld &h)
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[h.track]);
 	omni->recordNoteToStep(h.step, h.note); // add note (dedup, default vel if the step was empty)
 	omni->setStepNudge(h.step, h.nudge);
 	float sm = omni->stepMicros();
@@ -1019,6 +1086,18 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 	bool down = e.down();
 	bool held = e.held();
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+
+	// Any release delivers the key's pending preview note-off first (with the remembered note),
+	// so a modifier held over the release — or an octave/track change mid-hold — can't hang it.
+	if (!down)
+	{
+		int8_t played = previewKeyOff(k);
+		if (played >= 0)
+		{
+			recordNoteReleased(played); // commit the recorded note's length (no-op if not tracked)
+			omxLeds.setDirty();
+		}
+	}
 
 	// keyState[k] is still true on this key's own release event, so track the palette keys (11/12/13)
 	// with an explicit mask and read F1/F2 with a release-aware check.
@@ -1246,16 +1325,11 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 			notesSetChordFromHeld(); // edit the selected step (stopped / not armed)
 		// Audible feedback while auditioning (stopped) or recording (armed + playing).
 		if ((!omxFormGlobal.isPlaying || recording) && note >= 0 && note <= 127)
-			omni->previewNote((int8_t)note, true);
+			previewKeyOn(k, (int8_t)note); // remembered per key; the release flush sends the off
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 	}
-	else if (!down)
-	{
-		if ((!omxFormGlobal.isPlaying || recording) && note >= 0 && note <= 127)
-			omni->previewNote((int8_t)note, false);
-		recordNoteReleased((int8_t)note); // commit the recorded note's length (no-op if not tracked)
-	}
+	// (Releases are fully handled by the preview flush at the top of this function.)
 }
 
 void OmxModeForm::updateNotesLEDs()
@@ -1537,6 +1611,8 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 			int8_t note = omxFormGlobal.musicScale->getNoteByDegree(degree, midiSettings.octave);
 			if (e.down() && !e.held())
 			{
+				if (note < 0 || note > 127)
+					return; // octave extremes can push a degree out of MIDI range
 				bool fresh = (heldNoteKeys_ == 0);
 				for (uint8_t s = 0; s < 16; s++)
 					if (heldStepMask_ & (1 << s))
@@ -1547,7 +1623,7 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 				heldNoteKeys_ |= (1 << degree);
 				stepEdited_ = true;
 				if (!omxFormGlobal.isPlaying)
-					omni->previewNote(note, true); // audition only while stopped
+					previewKeyOn(thisKey, note); // audition only while stopped (remembered per key)
 				if (heldStepKey_ >= 0) omni->getStepNotes(heldStepKey_, lastNotes_); // remember chord
 				omxDisp.setDirty();
 				omxLeds.setDirty();
@@ -1555,7 +1631,7 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 			else if (!e.down())
 			{
 				heldNoteKeys_ &= ~(1 << degree);
-				omni->previewNote(note, false);
+				previewKeyOff(thisKey); // sends the off with the note actually auditioning (if any)
 				omxLeds.setDirty();
 			}
 			return;
@@ -1762,7 +1838,7 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 				// Releasing the last step ends chord entry: note-off any auditioning notes.
 				for (uint8_t d = 0; d < 10; d++)
 					if (heldNoteKeys_ & (1 << d))
-						omni->previewNote(omxFormGlobal.musicScale->getNoteByDegree(d, midiSettings.octave), false);
+						previewKeyOff(d + 1); // key = degree + 1; uses the remembered note
 				heldNoteKeys_ = 0;
 			}
 			omxDisp.setDirty();
@@ -2330,7 +2406,7 @@ static uint8_t mixPlayModeIndex(FormOmni::Track *t)
 }
 
 // Low-row per-track controls shown while a track is held in Mix:
-// 11 Mute · 12 Solo · 14-18 play mode (fwd/rev/fwd-pong/rev-pong/random) · 25 copy · 26 paste.
+// 11 Mute · 12 Solo · 13-17 play mode (fwd/rev/fwd-pong/rev-pong/random) · 19-26 colour presets.
 void OmxModeForm::onKeyUpdateMixHold(OMXKeypadEvent e)
 {
 	if (e.held() || !e.down())
@@ -2454,8 +2530,11 @@ void OmxModeForm::updateShortcutMode()
 	{
 		omxFormGlobal.shortcutMode = FORMSHORTCUT_F2;
 	}
-	else if (midiSettings.keyState[0])
+	else if (midiSettings.keyState[0] && midiSettings.midiAUX)
 	{
+		// Gate on midiAUX (set only by a real AUX press event) so an AUX press that was
+		// swallowed by an F-key hold can't flip the shortcut layer on when the F-key lifts,
+		// with the AUX LEDs / view-commit logic still disarmed.
 		omxFormGlobal.shortcutMode = FORMSHORTCUT_AUX;
 	}
 	else
@@ -2508,6 +2587,15 @@ void OmxModeForm::onModeActivated()
 	params.setSelPageAndParam(0, 0);
 	omxFormGlobal.encoderSelect = true;
 
+	// A previous session can't leave a modal submenu or record state armed behind:
+	// re-entering FORM with a stale QUANTIZE snapshot (quantOrigNudges_) or a half-open
+	// CLEAR confirm would act on data that has since changed.
+	miQuantSub_ = false;
+	miClearSub_ = false;
+	clearReturnView_ = -1;
+	recHeldCount_ = 0;
+	recClearedMask_ = 0;
+
 	// Serial.println("AuxMacroActivated");
 	auxMacroManager_.onModeActivated();
 	// Serial.println("onModeActivated complete");
@@ -2520,6 +2608,9 @@ void OmxModeForm::onModeActivated()
 
 void OmxModeForm::onModeDeactivated()
 {
+	// Release any manual preview notes still sounding before the mode goes away.
+	for (uint8_t k = 1; k < 27; k++)
+		previewKeyOff(k);
 	stopSequencers();
 
 	for (uint8_t i = 0; i < NUM_MIDIFX_GROUPS; i++)
@@ -2888,7 +2979,7 @@ void OmxModeForm::onEncoderButtonDown()
 	// }
 
 	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect;
-	omxDisp.isDirty();
+	omxDisp.setDirty();
 }
 
 void OmxModeForm::onEncoderButtonUp()
@@ -3313,7 +3404,9 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 
 bool OmxModeForm::onKeyUpdateSelMidiFX(OMXKeypadEvent e)
 {
-	if (auxMacroManager_.onKeyUpdateAuxMFXShortcuts(e, omxFormGlobal.selMidiFX))
+	// The selected track's actual MidiFX group (255 = off) — omxFormGlobal.selMidiFX is
+	// never written, so passing it would always target group 1.
+	if (auxMacroManager_.onKeyUpdateAuxMFXShortcuts(e, getSelectedMachine()->getSelectedMidiFX()))
 		return true;
 
 	return false;
@@ -3321,7 +3414,7 @@ bool OmxModeForm::onKeyUpdateSelMidiFX(OMXKeypadEvent e)
 
 bool OmxModeForm::onKeyHeldSelMidiFX(OMXKeypadEvent e)
 {
-	if (auxMacroManager_.onKeyHeldAuxMFXShortcuts(e, omxFormGlobal.selMidiFX))
+	if (auxMacroManager_.onKeyHeldAuxMFXShortcuts(e, getSelectedMachine()->getSelectedMidiFX()))
 		return true;
 
 	return false;
