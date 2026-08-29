@@ -290,9 +290,7 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	notesHoldUIShown_ = false;
 	notesF1Used_ = notesF2Used_ = false;
 	notesCursor_ = 0; // open on the keyboard page, select mode
-	notesEncEdit_ = false;
 	miCursor_ = 0; // MI opens on the keyboard, select mode
-	miEncEdit_ = false;
 
 	// Editor views map to an OMNI UI mode, applied to every track so the view stays
 	// consistent when you switch tracks. Patterns / MI are rendered by the container.
@@ -347,8 +345,11 @@ bool OmxModeForm::viewEditActive()
 // own job (SEQ param nav, MI menu, etc).
 bool OmxModeForm::onEncoderTrackPage(int dir)
 {
+	// The encoder never switches views (that's AUX + the key shortcuts only). Each view handles the
+	// turn itself and reads select-vs-edit from getEncoderSelect() (= encoderSelect && !midiAUX), so
+	// holding AUX temporarily forces EDIT mode everywhere, like the main OMX modes.
 	(void)dir;
-	return midiSettings.midiAUX; // consume (no-op) under AUX, else let the view handle the turn
+	return false;
 }
 
 // The encoder click no longer enters a view selector — views change only via AUX + key shortcuts.
@@ -605,14 +606,14 @@ bool OmxModeForm::onEncoderMI(int dir)
 		omxDisp.setDirty();
 		return true;
 	}
-	if (!miEncEdit_)
+	if (getEncoderSelect())
 	{
 		// Select mode: navigate the cursor (0-10). Page 0 is the keyboard; 1-10 are the params.
 		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 10);
 		omxDisp.setDirty();
 		return true;
 	}
-	// Edit mode:
+	// Edit mode (encoderSelect off, or AUX held):
 	if (miCursor_ == 0)
 	{
 		// Page 0: the encoder changes the selected track (only in edit mode).
@@ -672,7 +673,7 @@ bool OmxModeForm::onEncoderButtonMI()
 		omxDisp.setDirty();
 		return true;
 	}
-	miEncEdit_ = !miEncEdit_;
+	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect; // unified select/edit toggle
 	omxDisp.setDirty();
 	return true;
 }
@@ -692,7 +693,7 @@ void OmxModeForm::onDisplayMI()
 		vals[3] = scaleConfig.group16 ? "1" : "0";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 1, miEncEdit_);
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 1, !getEncoderSelect());
 		return;
 	}
 
@@ -707,7 +708,7 @@ void OmxModeForm::onDisplayMI()
 		vals[3] = String((int)midiSettings.octave);
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 5, miEncEdit_);
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 5, !getEncoderSelect());
 		return;
 	}
 
@@ -972,7 +973,7 @@ bool OmxModeForm::onEncoderNotes(int dir)
 {
 	if (dir == 0)
 		return true;
-	if (!notesEncEdit_)
+	if (getEncoderSelect())
 	{
 		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 19);
 		omxDisp.setDirty();
@@ -1001,10 +1002,10 @@ bool OmxModeForm::onEncoderNotes(int dir)
 	return true;
 }
 
-// Encoder click in the Notes view: toggle select vs edit.
+// Encoder click in the Notes view: toggle the unified select/edit state.
 bool OmxModeForm::onEncoderButtonNotes()
 {
-	notesEncEdit_ = !notesEncEdit_;
+	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect;
 	omxDisp.setDirty();
 	return true;
 }
@@ -1432,7 +1433,7 @@ void OmxModeForm::onDisplayNotes()
 			else
 				labels6[i] = "-";
 		}
-		omxDisp.dispNoteSlots(labels6, headers[0], notesCursor_ - 1, !notesEncEdit_);
+		omxDisp.dispNoteSlots(labels6, headers[0], notesCursor_ - 1, getEncoderSelect());
 		return;
 	}
 
@@ -1449,7 +1450,7 @@ void OmxModeForm::onDisplayNotes()
 		vals[3] = scaleConfig.group16 ? "1" : "0";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 8, notesEncEdit_);
+		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 8, !getEncoderSelect());
 		return;
 	}
 
@@ -1469,7 +1470,7 @@ void OmxModeForm::onDisplayNotes()
 			values[i] = vals[i].c_str();
 			locked[i] = omni->stepParamLocked(notesSelStep_, pid);
 		}
-		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 12 - base, notesEncEdit_);
+		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 12 - base, !getEncoderSelect());
 		return;
 	}
 
@@ -1966,11 +1967,11 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		return true;
 	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
 
-	// Machine menu (page 3+): let the machine navigate/edit, except turning left off its first
-	// page returns to the custom TRIG page.
+	// Machine menu (page 3+): let the machine navigate/edit (it reads getEncoderSelect() too),
+	// except turning left off its first page in SELECT mode returns to the custom TRIG page.
 	if (stepMenuPage_ == 3)
 	{
-		if (dir < 0 && omni->seqMenuAtStart())
+		if (getEncoderSelect() && dir < 0 && omni->seqMenuAtStart())
 		{
 			stepMenuPage_ = 2;
 			stepMenuSel_ = 3;
@@ -1981,18 +1982,8 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		return false; // forward to the machine
 	}
 
-	// Overview, track-select armed (no step held): the encoder changes the track.
-	if (stepMenuPage_ == 0 && stepTrackSelEdit_ && heldStepMask_ == 0)
-	{
-		int8_t t = constrain((int)selectedMachine_ + dir, 0, kNumMachines - 1);
-		if (t != (int8_t)selectedMachine_)
-			selectMachine(t);
-		omxDisp.setDirty();
-		omxLeds.setDirty();
-		return true;
-	}
-
-	// Holding a step on a custom param page: encoder edits the selected param (auto edit-mode).
+	// Holding a step on a custom param page always edits the selected param (a hold is an edit
+	// gesture), regardless of select/edit mode.
 	if (heldStepMask_ != 0 && stepMenuPage_ != 0)
 	{
 		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
@@ -2010,20 +2001,29 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		return true;
 	}
 
-	// Custom param page, default-edit armed (no step held): encoder edits the track default.
-	if (stepMenuPage_ != 0 && stepMenuPage_ != 3 && stepDefaultEdit_ && heldStepMask_ == 0)
+	// EDIT mode (encoderSelect off, or AUX held) — no step held:
+	if (!getEncoderSelect())
 	{
-		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
-		int delta = enc.accel(1);
-		if (delta == 0)
-			delta = dir;
-		omni->editParamDefault(pid, delta);
+		if (stepMenuPage_ == 0) // overview: change the selected track
+		{
+			int8_t t = constrain((int)selectedMachine_ + dir, 0, kNumMachines - 1);
+			if (t != (int8_t)selectedMachine_)
+				selectMachine(t);
+		}
+		else // custom param page: edit the track default for that param
+		{
+			uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
+			int delta = enc.accel(1);
+			if (delta == 0)
+				delta = dir;
+			omni->editParamDefault(pid, delta);
+		}
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 		return true;
 	}
 
-	// Navigate the custom cursor [overview=0, params 1..8], then hand off to the machine menu.
+	// SELECT mode: navigate the custom cursor [overview=0, params 1..8], then into the machine menu.
 	int idx = (stepMenuPage_ == 0) ? 0 : (1 + (stepMenuPage_ - 1) * 4 + stepMenuSel_);
 	idx += dir;
 	if (idx > 8)
@@ -2059,14 +2059,8 @@ bool OmxModeForm::onEncoderButtonStep()
 	if (formView_ != FORMVIEW_STEP)
 		return false;
 	if (stepMenuPage_ == 3)
-		return false; // machine menu: let it toggle its own select/edit
-	// Overview (no step held): arm/disarm changing the track with the encoder.
-	if (stepMenuPage_ == 0 && heldStepMask_ == 0)
-	{
-		stepTrackSelEdit_ = !stepTrackSelEdit_;
-		omxDisp.setDirty();
-		return true;
-	}
+		return false; // machine menu: falls through to toggle the global select/edit
+	// Holding a step on a param page: clear that param's P-Lock (a distinct action, not select/edit).
 	if (heldStepMask_ != 0 && stepMenuPage_ != 0)
 	{
 		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
@@ -2080,13 +2074,9 @@ bool OmxModeForm::onEncoderButtonStep()
 		omxLeds.setDirty();
 		return true;
 	}
-	// Custom param page, no step held: arm/disarm editing the track default.
-	if (stepMenuPage_ != 0 && heldStepMask_ == 0)
-	{
-		stepDefaultEdit_ = !stepDefaultEdit_;
-		omxDisp.setDirty();
-		return true;
-	}
+	// Otherwise toggle the unified select/edit state.
+	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect;
+	omxDisp.setDirty();
 	return true;
 }
 
@@ -2119,7 +2109,7 @@ void OmxModeForm::onDisplayStepMenu()
 		values[i] = vals[i].c_str();
 	}
 	// Value box inverts while editing: holding a step, or the default-edit is armed.
-	omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, holding || stepDefaultEdit_);
+	omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, holding || !getEncoderSelect());
 }
 
 void OmxModeForm::onDisplayStep()
@@ -2250,6 +2240,13 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 		modOverlay = 2;
 		overlayLabel = "MUTE / PLAY MODE";
 	}
+	else if (!getEncoderSelect() && heldStepMask_ == 0)
+	{
+		// Overview in EDIT mode (encoder clicked to edit, or AUX held): box the "TRK n" name to show
+		// the encoder now selects the track.
+		modOverlay = 2;
+		overlayLabel = nullptr;
+	}
 
 	// View tag (the page-1 view selector). While editing, it shows the browsed pendingView_ and
 	// boxes/inverts; otherwise it names the current view. MIX = "MIX", STEP = "SEQ".
@@ -2257,7 +2254,7 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 	{
 		// MI keyboard view: no F1/F2 overlays (keys 1/2 are notes here, not modifiers). In edit mode
 		// (encoder clicked on page 0), box the "TRK n" name to show the encoder now selects the track.
-		modOverlay = (formView_ == FORMVIEW_MI && miEncEdit_ && miCursor_ == 0) ? 2 : 0;
+		modOverlay = (formView_ == FORMVIEW_MI && !getEncoderSelect() && miCursor_ == 0) ? 2 : 0;
 		overlayLabel = nullptr;
 	}
 
@@ -2771,6 +2768,18 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 	if (onEncoderStep(enc))
 		return;
 
+	// Mix overview: in EDIT mode the encoder selects the track (same as Step/MI page 0); in select
+	// mode the machine navigates its params.
+	if (formView_ == FORMVIEW_MIX && !getEncoderSelect() && heldTrackKey_ < 0 && enc.dir() != 0)
+	{
+		int t = constrain((int)selectedMachine_ + enc.dir(), 0, kNumMachines - 1);
+		if (t != (int)selectedMachine_)
+			selectMachine((uint8_t)t);
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return;
+	}
+
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderChanged(enc);
 
@@ -2859,10 +2868,10 @@ void OmxModeForm::onEncoderButtonDown()
 	if (onEncoderButtonTrackPage())
 		return;
 
-	if (formView_ == FORMVIEW_NOTES && !viewEditActive() && onEncoderButtonNotes())
+	if (formView_ == FORMVIEW_NOTES && onEncoderButtonNotes())
 		return;
 
-	if (formView_ == FORMVIEW_MI && !viewEditActive() && onEncoderButtonMI())
+	if (formView_ == FORMVIEW_MI && onEncoderButtonMI())
 		return;
 
 	if (onEncoderButtonStep())

@@ -225,7 +225,6 @@ private:
 	// small menu: 0 = keyboard · 1-4 = Scale (root/scale/lock/group) · 5-8 = Track (chan/vel/
 	// bank/oct). Click toggles select (turn = move) vs edit (turn = change value).
 	uint8_t miCursor_ = 0;
-	bool miEncEdit_ = false;
 	// QUANTIZE submenu (cursor 9): click enters, turn morphs the amount + previews it live on the
 	// track (from a snapshot of the original nudges), click applies, AUX exits (restores original).
 	bool miQuantSub_ = false;
@@ -262,7 +261,6 @@ private:
 	// params A (vel/nudge/len/mfx), 16-19 = step params B (prob/cond/func/accum). Click toggles
 	// select (turn = move cursor) vs edit (turn = change value).
 	uint8_t notesCursor_ = 0;
-	bool notesEncEdit_ = false;
 	bool onEncoderNotes(int dir);       // encoder turn in the Notes view. consumed?
 	bool onEncoderButtonNotes();        // encoder click in the Notes view. consumed?
 	void notesEditScaleParam(uint8_t param, int dir); // 0 root · 1 scale · 2 lock · 3 group
@@ -300,8 +298,6 @@ private:
 	// pages (STEP: Vel/Nudge/Len/MFX, TRIG: Prob/Cond/Func/Accum), selMenu = param 0-3.
 	uint8_t stepMenuPage_ = 0;
 	uint8_t stepMenuSel_ = 0;
-	bool stepTrackSelEdit_ = false; // overview: encoder-click armed to change the track
-	bool stepDefaultEdit_ = false;  // param page (no step held): encoder-click armed to edit the default
 	bool stepPasteArmed_ = false;   // F2 buffer state: next F2 pastes (after a copy/cut)
 	uint8_t heldPageMask_ = 0;      // F1 + page keys currently held (for loop-range gesture)
 	bool pageGestureDone_ = false;  // a range gesture consumed this F1+page press group
