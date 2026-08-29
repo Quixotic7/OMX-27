@@ -74,7 +74,6 @@ public:
 	virtual void selectMidiFx(uint8_t mfxIndex, bool dispMsg) {};
 	virtual uint8_t getSelectedMidiFX() { return 255; }
 
-	virtual void setTest(){};
 
 	// Selected Machine in form
 	virtual void onSelected() {}
@@ -92,7 +91,6 @@ public:
 protected:
 	uint8_t machineIndex_;
 	bool enabled_;
-	bool encoderSelect_;
 
 	void *context_;
 	void (*noteOnFuncPtr)(void *, MidiNoteGroup, uint8_t);

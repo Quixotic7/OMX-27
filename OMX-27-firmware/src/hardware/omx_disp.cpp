@@ -573,46 +573,6 @@ static void drawPlayIcon(uint8_t mode, int x, int y)
 	}
 }
 
-void OmxDisp::dispTrackHold(uint8_t trackNum, bool muted, bool soloed, uint8_t playModeIndex)
-{
-	display.fillRect(0, 0, 128, 32, BLACK);
-	u8g2_display.setFontMode(1);
-
-	// Title: TRACK n
-	u8g2_display.setFont(FONT_TENFAT);
-	u8g2_display.setForegroundColor(WHITE);
-	u8g2_display.setBackgroundColor(BLACK);
-	char buf[16];
-	snprintf(buf, sizeof(buf), "TRACK %u", (unsigned)trackNum);
-	u8g2centerText(buf, 0, 14, 128, 8);
-
-	// M / S cells (filled/inverted when active).
-	u8g2_display.setFont(FONT_TENFAT);
-	const int cellY = 17, cellH = 14, cellW = 14;
-	const struct { const char *s; int x; bool active; } ms[2] = {
-		{"M", 24, muted},
-		{"S", 44, soloed},
-	};
-	for (uint8_t i = 0; i < 2; i++)
-	{
-		if (ms[i].active)
-		{
-			display.fillRect(ms[i].x, cellY, cellW, cellH, WHITE);
-			u8g2_display.setForegroundColor(BLACK);
-			u8g2_display.setBackgroundColor(WHITE);
-		}
-		else
-		{
-			display.drawRect(ms[i].x, cellY, cellW, cellH, WHITE);
-			u8g2_display.setForegroundColor(WHITE);
-			u8g2_display.setBackgroundColor(BLACK);
-		}
-		u8g2centerText(ms[i].s, ms[i].x, 31, cellW, 8);
-	}
-
-	// Play-direction icon (17x9, right side), vertically centred in the cell band.
-	drawPlayIcon(playModeIndex, 82, cellY + (cellH - 9) / 2);
-}
 
 // A small folded-corner "page" icon (6x8) at top-left (x,y), filled or outline, in `color`.
 // Shared 16-step row renderer — the single source of truth for how sequencer steps look, used
@@ -820,32 +780,6 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	drawStepRow(23, stepState, pageLen, playhead);
 }
 
-void OmxDisp::dispStepPlayModes(uint8_t selected, const char *name, const char *bottomLabel)
-{
-	if (isMessageActive())
-	{
-		renderMessage();
-		return;
-	}
-	display.fillRect(0, 0, 128, 32, BLACK);
-
-	u8g2_display.setFontMode(1);
-	u8g2_display.setFont(FONT_TENFAT);
-	u8g2_display.setForegroundColor(WHITE);
-	u8g2_display.setBackgroundColor(BLACK);
-
-	// Current play mode: icon + name, centred as a group on the top.
-	uint16_t nameW = u8g2_display.getUTF8Width(name);
-	int groupW = 17 + 6 + (int)nameW; // icon + gap + name
-	int x0 = (128 - groupW) / 2;
-	if (x0 < 0) x0 = 0;
-	drawPlayIcon(selected, x0, 1);
-	u8g2_display.setCursor(x0 + 17 + 6, 11);
-	u8g2_display.print(name);
-
-	// Bottom label.
-	u8g2centerText(bottomLabel, 0, 30, 128, 8);
-}
 
 void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel, bool editing)
 {

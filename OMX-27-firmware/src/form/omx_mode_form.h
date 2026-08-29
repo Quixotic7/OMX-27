@@ -10,106 +10,9 @@
 #include "machines/form_machine_interface.h"
 #include "form_patterns.h"
 
-// AUX View - Rendered by form
-// Familiar shortcuts as MI Modes
-
-// AUX + Top 1 = Play/Stop
-// For Omni:
-// AUX + Top 2 = Reset
-// AUX + Top 3 = Flip play direction if forward or reverse
-// AUX + Top 4 = Increment rand/shuffle mode
-
-// Main view, F1, F2, 8 Sequencer machines - Top keys, rendered by Form
-// Lower portion rendered by the sequencer
-
-// Top 8 - Select a machine
-// Hold top 8, press bottom 16 to select a sequencer type
-// Changing sequencer type will get rid of current sequencer.
-// Maybe keep this in ram and offer undo with F1?
-
-// Machines:
-// OMNI - Powerful step sequencer
-// Euclidean
-// Grids
-// Tambola - Bouncing balls in rotating polygon
-
-// OMNI
-// Pot 1 - Pickup off, Selects Page: 1 - 4
-// Pot 2 - Pickup on, Selects Zoom: 1 Bar, 2 Bar, 4 Bar, Steps faster than zoom are hidden.
-// Pot 3 - Pickup on, Cross Page: Applies changes to step on all bars if zoom level 1 bar,
-// Pot 4 - Pickup on, Sets track rate, maybe play mode instead since there are now F3 rate shortcuts
-
-// Pot 5 - Pickup On, default is mix. Change behaviour of keys, also on UI page
-
-
-// Pot 5 - UI Mode:
-// 	SEQ - Edit steps, change active machine
-//	MIDI KEYBOARD - Play the keyboard, record notes into active machine
-//	MIDI KEYBOARD TRANSPOSE - Play the keyboard, transpose the current machine
-//	TRANSPOSE PATTERN - Edit the transpose pattern
-//	NOTE EDITOR - Edit the notes
-//	MACHINE CONFIG - Edit the machine configuration (Cut, copy, paste machines) (Load different machine types)
-
-// Pot 4 - SEQ
-//	MIX - Quickclick steps to toggle mute, hold step to edit velocity for held steps on top row, Double Click keys to edit notes, F1, F2 shortcuts for muting and soloing F1 + F2 to change length
-//  EDIT MODES: In these modes F1 and F2 do cut, copy, paste, track length, quickclick mute toggle is off?
-//	EDIT FUNC - Hold step to edit function or jump to specific step. 
-//  EDIT NOTE LENGTH - Hold steps to edit their note lengths(Top row keys)
-//	EDIT NUDGE - Hold steps to edit their nudge(Top row keys)
-//	EDIT MFX - Hold steps and use top keys to set midifx
-//	EDIT ACCUM - Hold steps and use top keys to set step accum values
-//	EDIT CHANCE - Hold steps and use top keys to set step chance values
-//	EDIT CONDITIONS - Hold steps and use top keys to set step condition values
-//	EDIT CHORD - Hold steps and use the top row keys to set a chord, 8 Chord keys configurable like in chord mode. 
-//  EDIT DRUM - Hold steps and use the top row keys to set drum keys, 8 drum keys configurable like drum mode
-
-// Pot 4 - MIDI KEYBOARD
-//	RECORD OFF
-//	RECORD ON - Record notes to pattern
-
-// MIDI KEYBOARD
-//	Menu option to clear the pattern
-
-
-// Mix - Press keys to mute/unmute, hold to enter note editor
-//      Mix note editor here shows full note params
-//      Pots will set params of current page using pot pickup
-//      Sequencers can also be muted with a click, or soloed by holding down the sequencer key
-
-// Transpose - Changes keys to keyboard view, select a key to set transpose value
-
-// Step - Enters note editor, pressing keys sets notes for step, auto advances to next step when releasing notes
-
-// Note Edit - Enters note editor, pressing keys toggles notes on and off, advance to next step by turning encoder
-//      OMNI can be set to monophonic, in this case, Note Edit sets note to latest key, only one note
-
-// Params - Hold key to quickly set the parameters for step of current page using the pots or encoder.
-//      If using pots, pot pickup is used
-//      4 Pot CC's can be set on last page
-//      If holding a step then pressing another step it will set that steps length
-
-// Track Length - Set the start and end steps for the track length, behaviour is changed by selecting highlighted start or end step than selecting non highlighted step or using the encoder
-
-// Function - Hold key then press top keys to set the step function
-
-// Transpose Pattern - Edit the transpose pattern using keys like in arp editor
-
-// Configure - Use this mode to change sequencers
-//      Hold sequencer and select type below
-//      Global config params also available in menu here
-//
-
-// Macro modes - Available and accessible just like in MI mode by double pressing AUX.
-
-// Menu Pages
-// Transpose Pattern - Editable in menu unless pot 5 mode is set to transpose pattern.
-
-// F1 = Copy / Undo cut or undo changing a machine
-// F2 = Paste
-// F1 + F2 = Cut
-
-// Other features
-// - Make sequencer keys light up as notes are triggered by them
+// FORM v2: an 8-track polyphonic step sequencer (single engine — the OMNI machine),
+// six views on the AUX layer, patterns, live recording. Design: design/form/FORM_REDESIGN.md
+// (v1 machine-type spec history lives in git and design/form/FORM_DESIGN.md).
 
 // v2 shell: the six top-level views, switched on the AUX layer (AUX + keys 13-18).
 // The four editor views map to the OMNI machine's UI modes; Patterns + MI are rendered
@@ -121,7 +24,7 @@ enum FormView
 	FORMVIEW_TRANSPOSE, // AUX+15
 	FORMVIEW_NOTES,     // AUX+16
 	FORMVIEW_PATTERNS,  // AUX+17 (container-rendered)
-	FORMVIEW_MI,        // AUX+18 (container-rendered; stub for now)
+	FORMVIEW_MI,        // AUX+18 (container-rendered live-play keyboard)
 	FORMVIEW_COUNT
 };
 
@@ -139,9 +42,6 @@ enum StepMode
 	STEPMODE_COUNT
 };
 
-// This mode is designed to be used with samplers or drum machines
-// Each key can be configured to whatever Note, Vel, Midi Chan you want.
-// This class is very similar to the midi keyboard, maybe we merge or inherit.
 class OmxModeForm : public OmxModeInterface
 {
 public:
@@ -195,15 +95,9 @@ private:
 	// While AUX is held, tapping a view key selects a pending view (preview + message);
 	// the switch is committed on AUX release so the AUX overlay stays up while you browse.
 	uint8_t pendingView_ = FORMVIEW_MIX;
-	// Page-1 (track page) encoder view selector: click the encoder to enter edit mode (the view
-	// tag boxes/inverts), turn to browse pendingView_, click again to commit. See isTrackPage().
-	bool viewSelectEdit_ = false;
-	// silent = live switch from the selector: no popup, keep the selector open.
+	// silent = live switch (e.g. the CLEAR submenu returning): no popup.
 	void setFormView(uint8_t view, bool silent = false);
-	bool isTrackPage();      // true when the MIX/SEQ page-1 track overview owns the encoder
-	bool viewEditActive();   // view selector is live (encoder latch OR AUX held)
-	bool onEncoderTrackPage(int dir); // encoder turn: live-switch views while editing. consumed?
-	bool onEncoderButtonTrackPage();  // encoder click: enter/exit the view selector. consumed?
+	bool viewEditActive();   // AUX held = view browsing live (the view tag boxes)
 	void updateAuxViewLEDs(); // paint the view selector (keys 13-18) on the AUX overlay
 	// Container-rendered views:
 	// Patterns view: switch style (top row 3-6) governs WHEN a tapped slot takes over.
@@ -306,7 +200,6 @@ private:
 	// pages (STEP: Vel/Nudge/Len/MFX, TRIG: Prob/Cond/Func/Accum), selMenu = param 0-3.
 	uint8_t stepMenuPage_ = 0;
 	uint8_t stepMenuSel_ = 0;
-	bool stepPasteArmed_ = false;   // F2 buffer state: next F2 pastes (after a copy/cut)
 	uint8_t heldPageMask_ = 0;      // F1 + page keys currently held (for loop-range gesture)
 	bool pageGestureDone_ = false;  // a range gesture consumed this F1+page press group
 	void onKeyUpdateStep(OMXKeypadEvent e);
@@ -348,7 +241,6 @@ private:
 
 	// uint8_t copiedMachineIndex_;
 
-	void changeFormMode(uint8_t newFormMode);
 
 	FormMachineInterface *machines_[kNumMachines];
 
@@ -356,8 +248,6 @@ private:
 	// (not yet persisted with the pattern).
 	uint8_t trackHue_[kNumMachines];
 
-	FormMachineInterface *copyBuffer_ = nullptr; // Machine for cut/copy/paste and undo
-	FormMachineInterface *undoBuffer_ = nullptr; // Machine for cut/copy/paste and undo
 
 	// v2 pattern data layer: the bank of whole-sequencer snapshots. The active pattern is
 	// live in the machines; the others sit here. See form_patterns.h + FORM_IMPLEMENTATION.md.
@@ -371,8 +261,6 @@ private:
 
 	bool isMachineValid(uint8_t machineIndex);
 
-	const char *getMachineName(uint8_t machineIndex);
-	int getMachineColor(uint8_t machineIndex);
 
 	void selectMachine(uint8_t machineIndex);
 
@@ -380,9 +268,6 @@ private:
 
 	void changeMachineAtIndex(uint8_t machineIndex, uint8_t machineType);
 
-	void cutMachineAt(uint8_t machineIndex);
-	void copyMachineAt(uint8_t machineIndex);
-	void pasteMachineTo(uint8_t machineIndex);
 	void setMachineTo(uint8_t machineIndex, FormMachineInterface *ptr);
 
 	// char foo[sizeof(auxMacroManager_)]

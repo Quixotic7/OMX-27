@@ -98,6 +98,5 @@ void FormMachineInterface::onEncoderChangedSelectParam(Encoder::Update enc)
 
 void FormMachineInterface::onEncoderButtonDown()
 {
-	encoderSelect_ = !encoderSelect_;
 	omxDisp.setDirty();
 }

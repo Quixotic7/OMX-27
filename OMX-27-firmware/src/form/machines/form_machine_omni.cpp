@@ -13,23 +13,30 @@
 
 namespace FormOmni
 {
+    // The machine menu (walked with the encoder from the Step machine-menu and from Mix).
+    // Opens on the specialized editors (STEPNOTES / STEPPOTS / TPAT — kept as-is per the
+    // FORM_V2_REVIEW.md §4 decisions); the seven param pages after them render in the
+    // shared dispStepParams grid. The old STEP1/STEPCONDITION pages are gone — the shell's
+    // Step param pages 1-2 (P-Lockable) cover those fields.
     enum OmniPage
     {
-        OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
-        OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
         OMNIPAGE_STEPNOTES,
         OMNIPAGE_STEPPOTS,
-        OMNIPAGE_TPAT, // Transpose pattern — sits right after CC
+        OMNIPAGE_TPAT, // Transpose pattern editor
         OMNIPAGE_TRACK, // Length, MidiFX
-        OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode,
+        OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode
         OMNIPAGE_SEQMIX, // Mute, Solo, Gate
-        OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat,
+        OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat
         OMNIPAGE_SEQMIDI, // Midi Chan, MonoPhonic, SendMidi, SendCV
         OMNIPAGE_TIMINGS, // BPM, Rate, Swing, Swing Division
         OMNIPAGE_SCALE,
-        OMNIPAGE_NAV,  // Page, Zoom, UI Mode
         OMNIPAGE_COUNT
     };
+
+    // 2-char cell codes for the play modes (full kTrackModeMsg name pops while turning —
+    // §4 label rule: a dispStepParams cell fits <=3 digits of number or <=2 chars of text).
+    const char* kTrackModeShort[] = {"--", "PG", "RD", "R2", "SF", "SH"};
+    const char* kTranspModeShort[] = {"GI", "SE", "LI"};
 
     enum OmniStepPage
     {
@@ -104,7 +111,6 @@ namespace FormOmni
 
     // Global param management so pages are same across machines
     ParamManager trackParams_;
-    ParamManager stepParams_;
     ParamManager tPatParams_;
 
     bool paramsInit_ = false;
@@ -124,23 +130,16 @@ namespace FormOmni
         if (trackParams_.getNumPages() > 0)
             return;
 
-        trackParams_.addPage(4); // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
-        trackParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
-        trackParams_.addPage(7); // OMNIPAGE_STEPNOTES,
-        trackParams_.addPage(7); // OMNIPAGE_STEPPOTS,
-        trackParams_.addPage(17); // OMNIPAGE_TPAT, transpose pattern (moved after CC)
-        trackParams_.addPage(4); // OMNIPAGE_TRACK, // Length, MidiFX
-        trackParams_.addPage(4); // OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode,
-        trackParams_.addPage(4); // OMNIPAGE_SEQMIX, // Mute, Solo, Gate
-        trackParams_.addPage(4); // OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat,
-        trackParams_.addPage(4); // OMNIPAGE_SEQMIDI, // Midi Chan, MonoPhonic, SendMidi, SendCV
-        trackParams_.addPage(4); // OMNIPAGE_TIMINGS, // BPM, Rate, Swing, Swing Division
-        trackParams_.addPage(4); // OMNIPAGE_SCALE,
-
-        stepParams_.addPage(4); // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
-        stepParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
-        stepParams_.addPage(7); // OMNIPAGE_STEPNOTES,
-        stepParams_.addPage(7); // OMNIPAGE_STEPPOTS,
+        trackParams_.addPage(7);  // OMNIPAGE_STEPNOTES
+        trackParams_.addPage(7);  // OMNIPAGE_STEPPOTS
+        trackParams_.addPage(17); // OMNIPAGE_TPAT (transpose pattern editor)
+        trackParams_.addPage(2);  // OMNIPAGE_TRACK: Length, MidiFX
+        trackParams_.addPage(3);  // OMNIPAGE_TRACKMODES: Triplet, Direction, Mode
+        trackParams_.addPage(3);  // OMNIPAGE_SEQMIX: Mute, Solo, Gate
+        trackParams_.addPage(3);  // OMNIPAGE_SEQTPOSE: Transpose, Mode, Apply TPat
+        trackParams_.addPage(4);  // OMNIPAGE_SEQMIDI: Chan, Mono, SendMidi, SendCV
+        trackParams_.addPage(4);  // OMNIPAGE_TIMINGS: BPM, Rate, Swing, Swing Div
+        trackParams_.addPage(4);  // OMNIPAGE_SCALE: Root, Scale, Lock, Group
 
         tPatParams_.addPage(17);
 
@@ -172,67 +171,10 @@ namespace FormOmni
     ParamManager *FormMachineOmni::getParams()
     {
         return &trackParams_;
-
-        // switch (omniUiMode_)
-        // {
-        // case OMNIUIMODE_CONFIG:
-        // case OMNIUIMODE_MIX:
-        // {
-        //     if(stepHeld_)
-        //     {
-        //         return &stepParams_;
-        //     }
-        //     else
-        //     {
-        //         return &trackParams_;
-        //     }
-        // }
-        // break;
-        // case OMNIUIMODE_LENGTH:
-        // break;
-        // case OMNIUIMODE_TRANSPOSE:
-        //     return &tPatParams_;
-        // case OMNIUIMODE_STEP:
-        // case OMNIUIMODE_NOTEEDIT:
-        // break;
-        // }
-
-        // return &trackParams_;
     }
 
     void FormMachineOmni::onSelected()
     {
-        setPotPickups(OMNIPAGE_NAV);
-    }
-
-    void FormMachineOmni::setPotPickups(uint8_t page)
-    {
-        switch (page)
-        {
-        case OMNIPAGE_STEP1:
-        {
-            auto selStep = getSelStep();
-
-            omxFormGlobal.potPickups[0].SetValRemap(selStep->vel, 0, 127);
-            omxFormGlobal.potPickups[1].SetValRemap(selStep->nudge, -60, 60);
-            omxFormGlobal.potPickups[2].SetValRemap(selStep->len, 0, 22);
-            omxFormGlobal.potPickups[3].SetValRemap(selStep->mfxIndex, 0, 6);
-        }
-        break;
-        case OMNIPAGE_STEPCONDITION:
-            break;
-        case OMNIPAGE_STEPNOTES:
-            break;
-        case OMNIPAGE_STEPPOTS:
-            break;
-        case OMNIPAGE_NAV:
-        {
-            omxFormGlobal.potPickups[0].SetValRemap(activePage_, 0, kFormNumPages - 1);
-            omxFormGlobal.potPickups[1].SetValRemap(zoomLevel_, 0, 2); // zoom retired (unused)
-            omxFormGlobal.potPickups[4].SetValRemap(omniUiMode_, 0, OMNIUIMODE_COUNT - 1);
-        }
-        break;
-        };
     }
 
     bool FormMachineOmni::doesConsumePots()
@@ -260,10 +202,6 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         case OMNIUIMODE_LENGTH:
-            if (stepHeld_)
-            {
-                return true;
-            }
             return false;
         case OMNIUIMODE_TRANSPOSE:
         case OMNIUIMODE_STEP:
@@ -280,12 +218,6 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         case OMNIUIMODE_LENGTH:
-        {
-            if(stepHeld_)
-            {
-                return true;
-            }
-        }
             return false;
         case OMNIUIMODE_TRANSPOSE:
         case OMNIUIMODE_STEP:
@@ -312,24 +244,8 @@ namespace FormOmni
         {
             shouldSelect = transpPat_.getEncoderSelect();
         }
-        else if (omniUiMode_ <= OMNIUIMODE_MIX)
-        {
-            shouldSelect = !stepHeld_;
-        }
 
 	    return omxFormGlobal.encoderSelect && !midiSettings.midiAUX && shouldSelect;
-    }
-
-    void FormMachineOmni::setTest()
-    {
-        auto track = getTrack();
-
-        track->len = 3;
-        track->steps[0].notes[0] = 60;
-        track->steps[1].notes[0] = 64;
-        track->steps[2].notes[0] = 67;
-        track->steps[3].notes[0] = 71;
-        onTrackLengthChanged();
     }
 
     void FormMachineOmni::playBackStateChanged(bool newIsPlaying)
@@ -473,19 +389,6 @@ namespace FormOmni
         return (slot < NUM_CC_POTS) ? pots[seq_.potBank][slot] : 0;
     }
 
-    uint8_t FormMachineOmni::recordStepIndex()
-    {
-        auto track = getTrack();
-        uint16_t total = track->totalLen();
-        if (total == 0)
-            return track->positionToStep(playingStep_);
-        float frac = (ticksPerStep_ > 0) ? (1.0f - (float)ticksTilNextTriggerRate_ / (float)ticksPerStep_) : 0.0f;
-        uint16_t pos = playingStep_;
-        if (frac >= 0.5f)
-            pos = (uint16_t)((playingStep_ + 1) % total);
-        return track->positionToStep(pos);
-    }
-
     void FormMachineOmni::recordNoteToStep(uint8_t absStep, int8_t note)
     {
         if (note < 0 || note > 127 || absStep >= 64)
@@ -569,43 +472,6 @@ namespace FormOmni
         uint8_t stepIndex = (view * page) + (key16 * zoomMult);
 
         return stepIndex;
-    }
-
-    void FormMachineOmni::selStep(uint8_t stepIndex)
-    {
-        if (stepHeld_)
-        {
-            // setPotPickups(OMNIPAGE_GBL1);
-            // Update pickups to new step
-            setPotPickups(trackParams_.getSelPage());
-            // stepHeld_ = false;
-        }
-        selStep_ = key16toStep(stepIndex);
-
-        omniNoteEditor.setSelStep(selStep_);
-    }
-
-    void FormMachineOmni::stepHeld(uint8_t key16Index)
-    {
-        if(!stepHeld_)
-        {
-            selStep(key16Index);
-            setPotPickups(trackParams_.getSelPage());
-            stepHeld_ = true;
-        }
-    }
-
-    void FormMachineOmni::stepReleased(uint8_t key16Index)
-    {
-        if(stepHeld_)
-        {
-            uint8_t stepIndex = key16toStep(key16Index);
-            if(selStep_ == stepIndex)
-            {
-                setPotPickups(OMNIPAGE_NAV);
-                stepHeld_ = false;
-            }
-        }
     }
 
     void FormMachineOmni::copyStep(uint8_t keyIndex)
@@ -1549,7 +1415,6 @@ namespace FormOmni
 
     void FormMachineOmni::onEnabled()
     {
-        stepHeld_ = false;
     }
     void FormMachineOmni::onDisabled()
     {
@@ -1563,11 +1428,6 @@ namespace FormOmni
         case OMNIUIMODE_MIX:
         case OMNIUIMODE_LENGTH:
         {
-            if (stepHeld_)
-            {
-                stepParams_.changeParam(enc.dir());
-            }
-            else
             {
                 int8_t prevPage = trackParams_.getSelPage();
 
@@ -1688,7 +1548,6 @@ namespace FormOmni
             uint8_t prevMode = omniUiMode_;
             omniUiMode_ = newMode;
             onUIModeChanged(prevMode, newMode);
-            encoderSelect_ = true;
 
             if (!silent)
             {
@@ -1711,8 +1570,6 @@ namespace FormOmni
             transpPat_.onUIEnabled();
         }
 
-        stepHeld_ = false;
-        // Tell Note editor it's been started for step mode
     }
 
     void FormMachineOmni::onPotChanged(int potIndex, int prevValue, int newValue, int analogDelta)
@@ -1722,74 +1579,15 @@ namespace FormOmni
         // v2: K5 no longer selects the UI mode — views live on the AUX layer (AUX+13-18).
         // Knobs are the track's pot bank (§2): all 5 send their mapped CC live (below).
 
-        if (stepHeld_)
+        // The 5 knobs are the track's pot bank — send the mapped CC live on the track's own
+        // channel. The CC number comes from pots[bank][slot] (§2); the P-Lock path (hold step
+        // + pot, shell-side) locks the same slot per-step (§3). The v1 step-held pot editing
+        // that lived here is gone (velocity/length/etc. are key palettes now).
+        if (seq_.sendMidi && potIndex < NUM_CC_POTS)
         {
-            auto page = stepParams_.getSelPage();
-
-            switch (page)
-            {
-            case OMNIPAGE_STEP1:
-            {
-                auto selStep = getSelStep();
-
-                if (potIndex == 0)
-                {
-                    selStep->vel = omxFormGlobal.potPickups[0].UpdatePotGetMappedValue(prevValue, newValue, 0, 127);
-                    omxFormGlobal.potPickups[0].DisplayValue("Velocity", selStep->vel);
-                }
-                else if (potIndex == 1)
-                {
-                    selStep->nudge = omxFormGlobal.potPickups[1].UpdatePotGetMappedValue(prevValue, newValue, -60, 60);
-                    int8_t nudgePerc = selStep->nudge / 60.0f * 100;
-                    tempString = "Nudge " + String(nudgePerc) + "%";
-                    omxFormGlobal.potPickups[1].DisplayLabel(tempString.c_str());
-                }
-                else if (potIndex == 2)
-                {
-                    selStep->len = omxFormGlobal.potPickups[2].UpdatePotGetMappedValue(prevValue, newValue, 0, 22);
-                    tempString = "Nt Length " + getStepLenString(selStep->len);
-                    omxFormGlobal.potPickups[2].DisplayLabel(tempString.c_str());
-                }
-                else if (potIndex == 3)
-                {
-                    selStep->mfxIndex = omxFormGlobal.potPickups[3].UpdatePotGetMappedValue(prevValue, newValue, 0, 6);
-                    tempString = "MidiFX " + (selStep->mfxIndex == 0 ? "Off" : selStep->mfxIndex == 1 ? "Track"
-                                                                                                      : String(selStep->mfxIndex - 1));
-                    omxFormGlobal.potPickups[3].DisplayLabel(tempString.c_str());
-                }
-            }
-            break;
-            case OMNIPAGE_STEPCONDITION:
-                break;
-            case OMNIPAGE_STEPNOTES:
-                break;
-            case OMNIPAGE_STEPPOTS:
-                break;
-            // case OMNIPAGE_GBL1:
-            //     break;
-            // case OMNIPAGE_1:
-            //     break;
-            // case OMNIPAGE_2:
-            //     break;
-            // case OMNIPAGE_3:
-            //     break;
-            // case OMNIPAGE_TPAT:
-            //     break;
-            };
+            MM::sendControlChange(pots[seq_.potBank][potIndex], newValue, seq_.channel + 1);
+            omxDisp.setDirty(); // the top-row CC meter reflects the value; no popup
         }
-        else
-        {
-            // No step held: the 5 knobs are the track's pot bank — send the mapped CC live on the
-            // track's own channel. The CC number comes from pots[bank][slot] (§2); the P-Lock path
-            // (hold step + pot) locks the same slot per-step (§3).
-            if (seq_.sendMidi && potIndex < NUM_CC_POTS)
-            {
-                MM::sendControlChange(pots[seq_.potBank][potIndex], newValue, seq_.channel + 1);
-                omxDisp.setDirty(); // the top-row CC meter reflects the value; no popup
-            }
-        }
-
-        
     }
 
     void FormMachineOmni::onClockTick()
@@ -2292,23 +2090,6 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         {
-            auto heldStep = getSelStep();
-
-            if(stepHeld_)
-            {
-                for (uint8_t i = 0; i < STEPFUNC_COUNT; i++)
-                {
-                    int keyColor = kStepFuncColors[i];
-
-                    if(i == heldStep->func)
-                    {
-                        keyColor = blinkState ? LEDOFF : keyColor;
-                    }
-
-                    strip.setPixelColor(1 + i, keyColor);
-                }
-            }
-
             auto track = getTrack();
 
             for (uint8_t i = 0; i < 16; i++)
@@ -2317,11 +2098,6 @@ namespace FormOmni
                 bool isInLen = stepIndex <= track->len;
                 auto step = &track->steps[stepIndex];
                 int keyColor = (step->mute || !isInLen) ? LEDOFF : (step->hasNotes() ? LTBLUE : DKBLUE);
-
-                if (stepHeld_ && heldStep->func >= STEPFUNC_COUNT && (heldStep->func - STEPFUNC_COUNT) == stepIndex)
-                {
-                    keyColor = LTYELLOW;
-                }
 
                 strip.setPixelColor(11 + i, keyColor);
             }
@@ -2374,314 +2150,56 @@ namespace FormOmni
         omxDisp.setDirty();
         omxLeds.setDirty();
 
-        if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
-        {
-            if(e.down())
-            {
-                if(thisKey == 3)
-                {
-                    auto track = getTrack();
-                    track->playDirection = track->playDirection == TRACKDIRECTION_FORWARD ? TRACKDIRECTION_REVERSE : TRACKDIRECTION_FORWARD;
-                    omxDisp.displayMessage(track->playDirection == TRACKDIRECTION_FORWARD ? ">>" : "<<");
-                }
-                else if (thisKey >= 13 && thisKey < 19)
-                {
-                    changeUIMode(thisKey - 13, false);
-                    setPotPickups(OMNIPAGE_NAV);
-                    return true;
-                }
-            }
-        }
-
+        // v2: the shell owns AUX, the step row, and the top row in every view. The only
+        // key events that still reach the machine are the Mix-view F3 fall-through
+        // (rate + flat track length) and the Transpose view's delegation. The old v1
+        // layers that lived here (AUX uiMode switch, step-hold mute/func/jump palette,
+        // F1/F2 step copy-cut/paste, double-click into the note editor) are gone.
         switch (omniUiMode_)
         {
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         {
-            // Double click to enter note edit
-            if (!e.down() && thisKey >= 11 && e.clicks() == 2)
+            if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
             {
-                auto track = getTrack();
-
-                selStep(thisKey - 11);
-                stepReleased(thisKey - 11);
-                uint8_t stepIndex = key16toStep(thisKey - 11);
-                // reverse effects of quick click mute
-                track->steps[stepIndex].mute = !track->steps[stepIndex].mute;
-
-                changeUIMode(OMNIUIMODE_NOTEEDIT, false);
-                omxFormGlobal.auxBlock = true;
-                return true;
-            }
-
-            if (stepHeld_)
-            {
-                // Shortcut to set mute
-                if (e.quickClicked() && thisKey >= 11)
+                if (e.down() && thisKey >= 3 && thisKey <= 10)
                 {
-                    auto track = getTrack();
-
-                    selStep(thisKey - 11);
-                    stepReleased(thisKey - 11);
-                    uint8_t stepIndex = key16toStep(thisKey - 11);
-                    track->steps[stepIndex].mute = !track->steps[stepIndex].mute;
+                    seq_.rate = kRateShortcuts[thisKey - 3];
+                    omxDisp.displayMessage("RATE 1:" + String(kSeqRates[seq_.rate]));
+                    onRateChanged();
                 }
-                else if (e.down() && thisKey >= 1 && thisKey <= STEPFUNC_COUNT)
+                if (e.down() && thisKey >= 11 && thisKey < 27)
                 {
-                    auto step = getSelStep();
-
-                    step->func = thisKey - 1;
-                    omxDisp.displayMessage(kStepFuncs[step->func]);
-                }
-                // Shortcut to jump to another step
-                else if (e.down() && thisKey >= 11)
-                {
-                    uint8_t jumpStep = key16toStep(thisKey - 11);
-
-                    // Conditional might be unneeded, this should never be false
-                    if (jumpStep != selStep_)
-                    {
-                        auto step = getSelStep();
-
-                        step->func = jumpStep + STEPFUNC_COUNT;
-
-                        omxDisp.displayMessage("Jump to " + String(jumpStep + 1));
-                    }
-                }
-                // Release the held step key
-                if (!e.down() && thisKey >= 11)
-                {
-                    stepReleased(thisKey - 11);
-                }
-            }
-            else
-            {
-                switch (omxFormGlobal.shortcutMode)
-                {
-                case FORMSHORTCUT_NONE:
-                {
-                    if (thisKey >= 11 && thisKey < 27)
-                    {
-                        // Shortcut to set mute, not sure this is needed here
-                        if (e.quickClicked())
-                        {
-                            auto track = getTrack();
-
-                            selStep(thisKey - 11);
-                            stepReleased(thisKey - 11);
-                            uint8_t stepIndex = key16toStep(thisKey - 11);
-                            track->steps[stepIndex].mute = !track->steps[stepIndex].mute;
-                        }
-                        else if (e.down())
-                        {
-                            selStep(thisKey - 11);
-                            stepHeld(thisKey - 11);
-                        }
-                        else
-                        {
-                            stepReleased(thisKey - 11);
-                        }
-                    }
-                }
-                break;
-                case FORMSHORTCUT_AUX:
-                    break;
-                case FORMSHORTCUT_F1:
-                    if (e.down() && thisKey == 0)
-                    {
-                        changeUIMode(OMNIUIMODE_NOTEEDIT, false);
-                        omxFormGlobal.auxBlock = true;
-                        return true;
-                    }
-                    // Copy Paste
-                    else if (e.down() && thisKey >= 11 && thisKey < 27)
-                    {
-                        if (omxFormGlobal.shortcutPaste == false)
-                        {
-                            copyStep(thisKey - 11);
-                            omxFormGlobal.shortcutPaste = true;
-                        }
-                        else
-                        {
-                            pasteStep(thisKey - 11);
-                        }
-                    }
-                    break;
-                case FORMSHORTCUT_F2:
-                    // Cut Paste
-                    if (e.down() && thisKey >= 11 && thisKey < 27)
-                    {
-                        if (omxFormGlobal.shortcutPaste == false)
-                        {
-                            cutStep(thisKey - 11);
-                            omxFormGlobal.shortcutPaste = true;
-                        }
-                        else
-                        {
-                            pasteStep(thisKey - 11);
-                        }
-                    }
-                    break;
-                case FORMSHORTCUT_F3:
-                    // Set track length
-                    if (e.down() && thisKey >= 3 && thisKey <= 10)
-                    {
-                        seq_.rate = kRateShortcuts[thisKey - 3];
-                        omxDisp.displayMessage("RATE 1:" + String(kSeqRates[seq_.rate]));
-                        onRateChanged();
-                    }
-                    if (e.down() && thisKey >= 11 && thisKey < 27)
-                    {
-                        uint8_t flatLen = (thisKey - 11) + (16 * min(activePage_, kPageMax[zoomLevel_] - 1));
-                        setTrackLen(flatLen); // rebuild the page structure from a flat length
-                        omxDisp.displayMessage("LENGTH " + String(getTrack()->getLength()));
-                    }
-                    break;
+                    uint8_t flatLen = (thisKey - 11) + (16 * min(activePage_, kPageMax[zoomLevel_] - 1));
+                    setTrackLen(flatLen); // rebuild the page structure from a flat length
+                    omxDisp.displayMessage("LENGTH " + String(getTrack()->getLength()));
                 }
             }
         }
-        break;
-        case OMNIUIMODE_LENGTH:
         break;
         case OMNIUIMODE_TRANSPOSE:
         {
             transpPat_.onKeyUpdate(e, &tPatParams_, &seq_.transposePattern);
         }
         break;
-        case OMNIUIMODE_STEP:
-        case OMNIUIMODE_NOTEEDIT:
-            // if (e.down() && thisKey == 0)
-            // {
-            //     changeUIMode(OMNIUIMODE_MIX, false);
-            //     return true;
-            // }
-            omniNoteEditor.onKeyUpdate(e, getTrack());
+        default:
             break;
         }
         return false;
     }
     bool FormMachineOmni::onKeyHeldUpdate(OMXKeypadEvent e)
     {
-        // uint8_t thisKey = e.key();
-
-        switch (omniUiMode_)
-        {
-        case OMNIUIMODE_CONFIG:
-        case OMNIUIMODE_MIX:
-        {
-            switch (omxFormGlobal.shortcutMode)
-            {
-            case FORMSHORTCUT_NONE:
-            {
-                // if (thisKey >= 11 && thisKey < 27)
-                // {
-                //     stepHeld(thisKey - 11);
-                // }
-            }
-            break;
-            case FORMSHORTCUT_AUX:
-                break;
-            case FORMSHORTCUT_F1:
-                break;
-            case FORMSHORTCUT_F2:
-                break;
-            case FORMSHORTCUT_F3:
-                break;
-            }
-        }
-        break;
-        case OMNIUIMODE_LENGTH:
-        break;
-        case OMNIUIMODE_TRANSPOSE:
+        if (omniUiMode_ == OMNIUIMODE_TRANSPOSE)
         {
             transpPat_.onKeyHeldUpdate(e, &seq_.transposePattern);
         }
-        break;
-        case OMNIUIMODE_STEP:
-        case OMNIUIMODE_NOTEEDIT:
-            omniNoteEditor.onKeyHeldUpdate(e, getTrack());
-            break;
-        }
-
         return true;
-    }
-
-    bool FormMachineOmni::onKeyQuickClicked(OMXKeypadEvent e)
-    {
-        uint8_t thisKey = e.key();
-
-        switch (omniUiMode_)
-        {
-        case OMNIUIMODE_CONFIG:
-        case OMNIUIMODE_MIX:
-        break;
-        case OMNIUIMODE_LENGTH:
-        break;
-        case OMNIUIMODE_TRANSPOSE:
-        break;
-        case OMNIUIMODE_STEP:
-        case OMNIUIMODE_NOTEEDIT:
-            if (omxFormGlobal.auxBlock == false && thisKey == 0)
-            {
-                changeUIMode(OMNIUIMODE_MIX, false);
-                omxFormGlobal.auxBlock = true;
-                return true;
-            }
-            break;
-        }
-
-        return false;
     }
 
     void FormMachineOmni::editPage(uint8_t page, uint8_t param, int8_t amtSlow, int8_t amtFast)
     {
         switch (page)
         {
-        case OMNIPAGE_STEP1: // Vel, Nudge, Length, MFX
-        {
-            auto selStep = getSelStep();
-
-            if (param == 0)
-            {
-                selStep->vel = constrain(selStep->vel + amtFast, 0, 127);
-            }
-            else if (param == 1)
-            {
-                selStep->nudge = constrain(selStep->nudge + amtSlow, -60, 60);
-            }
-            else if (param == 2)
-            {
-                selStep->len = constrain(selStep->len + amtSlow, 0, 22);
-            }
-            else if (param == 3)
-            {
-                selStep->mfxIndex = constrain(selStep->mfxIndex + amtSlow, 0, NUM_MIDIFX_GROUPS + 2 - 1);
-            }
-        }
-        break;
-        case OMNIPAGE_STEPCONDITION: // Prob, Condition, Func, Accum
-        {
-            auto selStep = getSelStep();
-
-            if (param == 0)
-            {
-                selStep->prob = constrain(selStep->prob + amtFast, 0, 100);
-            }
-            else if (param == 1)
-            {
-                // 0-8 are the special conditions; 9-43 map to the 35 A:B ratio rows (abIndex = condition-9)
-                selStep->condition = constrain(selStep->condition + amtSlow, 0, 9 + 35 - 1);
-            }
-            else if (param == 2)
-            {
-                selStep->func = constrain(selStep->func + amtSlow, 0, STEPFUNC_COUNT + 64 - 1);
-            }
-            else if (param == 3)
-            {
-                selStep->accumTPat = constrain(selStep->accumTPat + amtSlow, 0, 4);
-            }
-        }
-        break;
         case OMNIPAGE_STEPNOTES:
         {
             auto selStep = getSelStep();
@@ -2730,7 +2248,7 @@ namespace FormOmni
             }
         }
         break;
-        // Triplet Mode, Direction, Mode,
+        // Triplet Mode, Direction, Mode
         case OMNIPAGE_TRACKMODES:
         {
             auto track = getTrack();
@@ -2742,7 +2260,7 @@ namespace FormOmni
             }
             else if (param == 1)
             {
-                // Reverse encoder direction since forward makes more sense to the right. 
+                // Reverse encoder direction since forward makes more sense to the right.
                 track->playDirection = constrain(track->playDirection - amtSlow, 0, 1);
             }
             else if (param == 2)
@@ -2754,6 +2272,8 @@ namespace FormOmni
                 {
                     calculateShuffle();
                 }
+                // The cell only fits a 2-char code — the full name shows while turning (§4 rule).
+                omxDisp.displayMessage(kTrackModeMsg[track->playMode]);
             }
         }
         break;
@@ -2774,7 +2294,7 @@ namespace FormOmni
             }
         }
         break;
-        // Transpose, Transpose Mode, Apply Transpose Pat,
+        // Transpose, Transpose Mode, Apply Transpose Pat
         case OMNIPAGE_SEQTPOSE:
         {
             if (param == 0)
@@ -2832,6 +2352,7 @@ namespace FormOmni
             {
                 seq_.rate = constrain(seq_.rate + amtSlow, 0, kNumSeqRates - 1);
                 onRateChanged();
+                omxDisp.displayMessage("RATE 1:" + String(kSeqRates[seq_.rate])); // §4: full form while turning
             }
             else if (param == 2)
             {
@@ -2840,6 +2361,7 @@ namespace FormOmni
             else if (param == 3)
             {
                 track->swingDivision = constrain(track->swingDivision + amtSlow, 0, 1);
+                omxDisp.displayMessage(track->swingDivision == 0 ? "SWING 16th" : "SWING 8th");
             }
         }
         break;
@@ -2902,52 +2424,27 @@ namespace FormOmni
             }
         }
         break;
-        case OMNIPAGE_TPAT: // SendMidi, SendCV
-        {
-        }
+        case OMNIPAGE_TPAT: // edited by the transpose-pattern editor itself
         break;
         }
+    }
+
+    // Render one 4-cell param page in the shared shell look (dispStepParams). Values obey
+    // the FORM_V2_REVIEW.md §4 label rules: numerics up to 3 digits inline, text at most
+    // 2 chars; longer names show transiently while the encoder edits (see editPage).
+    void FormMachineOmni::dispParamGrid(const char *labels[4], const String vals[4], uint8_t selParam)
+    {
+        const char *values[4];
+        for (uint8_t i = 0; i < 4; i++)
+            values[i] = vals[i].c_str();
+        const bool locked[4] = {false, false, false, false};
+        omxDisp.dispStepParams(labels, values, locked, selParam, !getEncoderSelect());
     }
 
     bool FormMachineOmni::drawPage(uint8_t page, uint8_t selParam)
     {
         switch (page)
         {
-        case OMNIPAGE_STEP1: // Vel, Nudge, Length, MFX
-        {
-            omxDisp.clearLegends();
-
-            auto selStep = getSelStep();
-
-            omxDisp.setLegend(0, "VEL", selStep->vel);
-
-            int8_t nudgePerc = (selStep->nudge / 60.0f) * 100;
-            omxDisp.setLegend(1, "NUDG", nudgePerc);
-            omxDisp.setLegend(2, "LEN", getStepLenString(selStep->len));
-            omxDisp.setLegend(3, "MFX", selStep->mfxIndex == 0, selStep->mfxIndex == 1 ? "TRK" : String(selStep->mfxIndex - 1));
-        }
-            return true;
-        case OMNIPAGE_STEPCONDITION: // Prob, Condition, Func, Accum
-        {
-            omxDisp.clearLegends();
-
-            auto selStep = getSelStep();
-
-            omxDisp.setLegend(0, "CHC%", selStep->prob);
-            omxDisp.setLegend(1, "COND", getCondChar(selStep->condition));
-
-            if (selStep->func >= STEPFUNC_COUNT)
-            {
-                omxDisp.setLegend(2, "FUNC", "J" + String(selStep->func - STEPFUNC_COUNT + 1));
-            }
-            else
-            {
-                omxDisp.setLegend(2, "FUNC", kStepFuncs[selStep->func]);
-            }
-
-            omxDisp.setLegend(3, "ACUM", selStep->accumTPat == 0, selStep->accumTPat);
-        }
-            return true;
         case OMNIPAGE_STEPNOTES:
         {
             const char *labels[6];
@@ -2962,7 +2459,6 @@ namespace FormOmni
 
                 if (note >= 0 && note <= 127)
                 {
-                    // note = note + (5 * 12); // get rid of negative octaves since we can only disp 3 chars per note
                     tempStrings[i] = omxFormGlobal.useNoteNumbers ? String(note) : omxFormGlobal.musicScale->getFullNoteName(note);
                     labels[i] = tempStrings[i].c_str();
                 }
@@ -3001,82 +2497,85 @@ namespace FormOmni
             }
 
             omxDisp.dispCenteredSlots(labels, 5, selParam, getEncoderSelect(), true, true, headers, 2);
-
-            // omxDisp.clearLegends();
-
-            // auto selStep = getSelStep();
-            // // auto bank = pots[potSettings.potbank];
-
-            // omxDisp.setLegend(0, "CC1", selStep->potVals[0] < 0, selStep->potVals[0]);
-            // omxDisp.setLegend(1, "CC2", selStep->potVals[1] < 0, selStep->potVals[1]);
-            // omxDisp.setLegend(2, "CC3", selStep->potVals[2] < 0, selStep->potVals[2]);
-            // omxDisp.setLegend(3, "CC4", selStep->potVals[3] < 0, selStep->potVals[3]);
         }
             return false;
-        // Length, MidiFX
+        // The seven param pages render in the shared 4-cell grid — same look as the
+        // shell's Step/Notes/MI param pages (FORM_V2_REVIEW.md §4 decision 2).
         case OMNIPAGE_TRACK:
         {
             auto track = getTrack();
-
-            omxDisp.setLegend(0, "LEN", track->len + 1);
-            omxDisp.setLegend(1, "MFX", track->midiFx == 0, track->midiFx);
+            const char *labels[4] = {"LEN", "MFX", "", ""};
+            String vals[4];
+            vals[0] = String(track->len + 1);
+            vals[1] = track->midiFx == 0 ? "--" : String(track->midiFx);
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
-        // Triplet Mode, Direction, Mode,
+            return false;
         case OMNIPAGE_TRACKMODES:
         {
             auto track = getTrack();
-
-            omxDisp.setLegend(0, "TRIP", bool2lightswitchMsg[track->tripletMode]);
-            omxDisp.setLegend(1, "DIR", track->playDirection == TRACKDIRECTION_FORWARD ? ">>" : "<<");
-            omxDisp.setLegend(2, "MODE", kTrackModeMsg[track->playMode]);
+            const char *labels[4] = {"TRIP", "DIR", "MODE", ""};
+            String vals[4];
+            vals[0] = track->tripletMode ? "On" : "--";
+            vals[1] = track->playDirection == TRACKDIRECTION_FORWARD ? ">>" : "<<";
+            vals[2] = kTrackModeShort[track->playMode];
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
-        // Mute, Solo, Gate
+            return false;
         case OMNIPAGE_SEQMIX:
         {
-            omxDisp.setLegend(0, "MUTE", seq_.mute == 1);
-            omxDisp.setLegend(1, "SOLO", seq_.solo == 1);
-            uint8_t gateMult = getGateMult(seq_.gate) * 100;
-            omxDisp.setLegend(2, "GATE", gateMult);
+            const char *labels[4] = {"MUTE", "SOLO", "GATE", ""};
+            String vals[4];
+            vals[0] = seq_.mute == 1 ? "On" : "--";
+            vals[1] = seq_.solo == 1 ? "On" : "--";
+            vals[2] = String((uint16_t)(getGateMult(seq_.gate) * 100));
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
-        // Transpose, Transpose Mode, Apply Transpose Pat,
+            return false;
         case OMNIPAGE_SEQTPOSE:
         {
-            omxDisp.setLegend(0, "TPOS", seq_.transpose);
-            omxDisp.setLegend(1, "TYPE", kTranspModeMsg[seq_.transposeMode]);
-            omxDisp.setLegend(2, "TPAT", seq_.applyTransPat == 1);
+            const char *labels[4] = {"TPOS", "TYPE", "TPAT", ""};
+            String vals[4];
+            vals[0] = String(seq_.transpose);
+            vals[1] = kTranspModeShort[seq_.transposeMode];
+            vals[2] = seq_.applyTransPat == 1 ? "On" : "--";
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
-        // Midi Chan, MonoPhonic, SendMidi, SendCV
+            return false;
         case OMNIPAGE_SEQMIDI:
         {
-            omxDisp.setLegend(0, "CHAN", seq_.channel + 1);
-            omxDisp.setLegend(1, "MONO", seq_.monoPhonic == 1 ? "MONO" : "POLY");
-            omxDisp.setLegend(2, "MIDI", seq_.sendMidi ? "SEND" : paramOffMsg);
-            omxDisp.setLegend(3, "CV", seq_.sendCV ? "SEND" : paramOffMsg);
+            const char *labels[4] = {"CHAN", "MONO", "MIDI", "CV"};
+            String vals[4];
+            vals[0] = String(seq_.channel + 1);
+            vals[1] = seq_.monoPhonic == 1 ? "On" : "--";
+            vals[2] = seq_.sendMidi ? "On" : "--";
+            vals[3] = seq_.sendCV ? "On" : "--";
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
-        // BPM, Rate, Swing, Swing Division
+            return false;
         case OMNIPAGE_TIMINGS:
         {
             auto track = getTrack();
-
-            omxDisp.setLegend(0, "BPM", (uint16_t)clockConfig.clockbpm);
-            omxDisp.setLegend(1, "RATE", "1/" + String(kSeqRates[seq_.rate]));
-            omxDisp.setLegend(2, "SWNG", track->swing);
-            omxDisp.setLegend(3, "S-DV", track->swingDivision == 0 ? "16th" : "8th");
+            const char *labels[4] = {"BPM", "RATE", "SWNG", "S-DV"};
+            String vals[4];
+            vals[0] = String((uint16_t)clockConfig.clockbpm);
+            vals[1] = String(kSeqRates[seq_.rate]); // full "1:n" pops while turning
+            vals[2] = String(track->swing);
+            vals[3] = track->swingDivision == 0 ? "16" : "8"; // "16th"/"8th" pops while turning
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
+            return false;
         case OMNIPAGE_SCALE:
         {
-            omxDisp.setLegend(0, "ROOT", omxFormGlobal.musicScale->getNoteName(scaleConfig.scaleRoot));
-            omxDisp.setLegend(1, "SCALE", scaleConfig.scalePattern < 0, scaleConfig.scalePattern);
-            omxDisp.setLegend(2, "LOCK", scaleConfig.lockScale);
-            omxDisp.setLegend(3, "GROUP", scaleConfig.group16);
+            const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
+            String vals[4];
+            vals[0] = omxFormGlobal.musicScale->getNoteName(scaleConfig.scaleRoot);
+            vals[1] = scaleConfig.scalePattern < 0 ? "--" : String(scaleConfig.scalePattern);
+            vals[2] = scaleConfig.lockScale ? "On" : "--";
+            vals[3] = scaleConfig.group16 ? "On" : "--";
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
+            return false;
         case OMNIPAGE_TPAT:
         {
             transpPat_.onDisplayUpdate(omniUiMode_ == OMNIUIMODE_TRANSPOSE ? &tPatParams_ : &trackParams_, &seq_.transposePattern, getEncoderSelect());
@@ -3097,28 +2596,9 @@ namespace FormOmni
         case OMNIUIMODE_MIX:
         case OMNIUIMODE_LENGTH:
         {
-            int8_t selPage = trackParams_.getSelPage();
-            int8_t selParam = trackParams_.getSelParam();
-
-            // bool drawGeneric = true;
-
-            // switch (selPage)
-            // {
-            // case OMNIPAGE_STEP1:
-            // case OMNIPAGE_STEPCONDITION:
-            // case OMNIPAGE_STEPNOTES:
-            // case OMNIPAGE_STEPPOTS:
-            // case OMNIPAGE_TPAT: // SendMidi, SendCV
-            //     drawGeneric = drawPage(selPage, selParam);
-            //     break;
-            // }
-
-            bool drawGeneric = drawPage(selPage, selParam);
-
-            if(drawGeneric)
-            {
-                omxDisp.dispGenericMode2(trackParams_.getNumPages(), trackParams_.getSelPage(), trackParams_.getSelParam(), getEncoderSelect());
-            }
+            // Every page renders itself (the specialized editors, or the shared
+            // dispParamGrid look) — the legacy dispGenericMode2 legend fallback is retired.
+            drawPage(trackParams_.getSelPage(), trackParams_.getSelParam());
         }
         break;
         case OMNIUIMODE_TRANSPOSE:

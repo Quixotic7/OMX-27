@@ -12,24 +12,11 @@
 #include "machines/form_machine_omni.h"
 #include "omx_form_global.h"
 
-enum FormModePage
-{
-	FORMPAGE_INSPECT,		// Sent Pot CC, Last Note, Last Vel, Last Chan, Not editable, just FYI
-	FORMPAGE_DRUMKEY,		// Note, Chan, Vel, MidiFX
-	FORMPAGE_DRUMKEY2,		// Hue, RND Hue, Copy, Paste
-	FORMPAGE_SCALES,		// Hue,
-	FORMPAGE_POTSANDMACROS, // PotBank, Thru, Macro, Macro Channel
-	FORMPAGE_CFG,
-	FORMPAGE_NUMPAGES
-};
 
-const char *kMachineNames[FORMMACH_COUNT] = {"NONE", "OMNI"};
 
-const int kMachineColors[FORMMACH_COUNT] = {LEDOFF, ORANGE};
 
 OmxModeForm::OmxModeForm()
 {
-	params.addPages(FORMPAGE_NUMPAGES);
 
 	auxMacroManager_.setContext(this);
 	auxMacroManager_.setMacroNoteOn(&OmxModeForm::doNoteOnForwarder);
@@ -52,8 +39,6 @@ OmxModeForm::OmxModeForm()
 		static_cast<FormOmni::FormMachineOmni *>(machines_[i])->setChannel(i); // tracks default to MIDI ch 1-8
 		trackHue_[i] = i * (256 / kNumMachines); // spread 8 hues around the wheel
 	}
-
-	machines_[0]->setTest();
 
 	for (uint8_t k = 0; k < 27; k++)
 	{
@@ -91,18 +76,6 @@ void OmxModeForm::cleanup()
 		}
 	}
 
-	if(copyBuffer_ != nullptr)
-	{
-		delete copyBuffer_;
-		copyBuffer_ = nullptr;
-	}
-
-	if(undoBuffer_ != nullptr)
-	{
-		delete undoBuffer_;
-		undoBuffer_ = nullptr;
-	}
-
 	if(patternBuffer_ != nullptr)
 	{
 		delete patternBuffer_;
@@ -137,37 +110,9 @@ int8_t OmxModeForm::previewKeyOff(uint8_t key)
 	return note;
 }
 
-void OmxModeForm::changeFormMode(uint8_t newFormMode)
-{
-	if (newFormMode < FORMMODE_COUNT)
-	{
-		omxFormGlobal.formMode = newFormMode;
-	}
-}
-
 bool OmxModeForm::isMachineValid(uint8_t machineIndex)
 {
 	return machineIndex < kNumMachines;
-}
-
-const char *OmxModeForm::getMachineName(uint8_t machineIndex)
-{
-	if (isMachineValid(machineIndex) == false)
-		return "";
-
-	uint8_t mType = static_cast<uint8_t>(machines_[machineIndex]->getType());
-
-	return kMachineNames[mType];
-}
-
-int OmxModeForm::getMachineColor(uint8_t machineIndex)
-{
-	if (isMachineValid(machineIndex) == false)
-		return LEDOFF;
-
-	uint8_t mType = static_cast<uint8_t>(machines_[machineIndex]->getType());
-
-	return kMachineColors[mType];
 }
 
 void OmxModeForm::selectMachine(uint8_t machineIndex)
@@ -195,52 +140,17 @@ void OmxModeForm::changeMachineAtIndex(uint8_t machineIndex, uint8_t machineType
 	setMachineTo(machineIndex, new FormOmni::FormMachineOmni());
 }
 
-void OmxModeForm::cutMachineAt(uint8_t machineIndex)
-{
-	if (isMachineValid(machineIndex) == false)
-		return;
-
-	// Cut = copy the track, then reset the slot to an empty OMNI track (no NULL type).
-	copyMachineAt(machineIndex);
-	setMachineTo(machineIndex, new FormOmni::FormMachineOmni());
-}
-
-void OmxModeForm::copyMachineAt(uint8_t machineIndex)
-{
-	if (isMachineValid(machineIndex) == false)
-		return;
-
-	if (copyBuffer_ != nullptr)
-	{
-		delete copyBuffer_;
-		copyBuffer_ = nullptr;
-	}
-
-	copyBuffer_ = machines_[machineIndex]->getClone();
-}
-
-void OmxModeForm::pasteMachineTo(uint8_t machineIndex)
-{
-	if (isMachineValid(machineIndex) == false)
-		return;
-
-	if (copyBuffer_ != nullptr)
-	{
-		setMachineTo(machineIndex, copyBuffer_->getClone());
-	}
-}
-
 void OmxModeForm::setMachineTo(uint8_t machineIndex, FormMachineInterface *ptr)
 {
 	if (isMachineValid(machineIndex) == false)
 		return;
 
-	if (undoBuffer_ != nullptr)
+	// v2: the machine cut/copy/paste/undo buffers are gone (patterns + the step buffer
+	// cover it), so the old machine is simply deleted.
+	if (machines_[machineIndex] != nullptr)
 	{
-		delete undoBuffer_;
+		delete machines_[machineIndex];
 	}
-
-	undoBuffer_ = machines_[machineIndex];
 
 	machines_[machineIndex] = ptr;
 	machines_[machineIndex]->setContext(this);
@@ -355,7 +265,6 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 
 	if (!silent)
 	{
-		viewSelectEdit_ = false; // an explicit commit leaves the page-1 selector
 		static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI"};
 		omxDisp.displayMessage(kViewNames[view]);
 	}
@@ -365,41 +274,10 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 
 // The MIX/SEQ page-1 track overview owns the encoder (for the view selector) only when no
 // modifier is held, no track/step is held, and — in SEQ — we're on the overview (page 0).
-bool OmxModeForm::isTrackPage()
-{
-	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
-		return false;
-	if (heldTrackKey_ >= 0)
-		return false;
-	if (formView_ == FORMVIEW_MIX)
-		return true;
-	if (formView_ == FORMVIEW_STEP)
-		return stepMenuPage_ == 0 && heldStepMask_ == 0;
-	return false;
-}
-
 // AUX is a modifier for browsing views via the key shortcuts (13-18); the tag boxes while it's held.
 bool OmxModeForm::viewEditActive()
 {
 	return midiSettings.midiAUX;
-}
-
-// The encoder no longer switches views. While AUX is held it's swallowed (no-op) so an accidental
-// turn while browsing views with the keys can't change the track/params; otherwise it's the view's
-// own job (SEQ param nav, MI menu, etc).
-bool OmxModeForm::onEncoderTrackPage(int dir)
-{
-	// The encoder never switches views (that's AUX + the key shortcuts only). Each view handles the
-	// turn itself and reads select-vs-edit from getEncoderSelect() (= encoderSelect && !midiAUX), so
-	// holding AUX temporarily forces EDIT mode everywhere, like the main OMX modes.
-	(void)dir;
-	return false;
-}
-
-// The encoder click no longer enters a view selector — views change only via AUX + key shortcuts.
-bool OmxModeForm::onEncoderButtonTrackPage()
-{
-	return false;
 }
 
 // While AUX is held, keys 13-18 are the view selector: the selected (pending) view is
@@ -753,9 +631,9 @@ void OmxModeForm::onDisplayMI()
 		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
 		String vals[4];
 		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
-		vals[1] = (scaleConfig.scalePattern < 0) ? String("-") : String((int)scaleConfig.scalePattern);
-		vals[2] = scaleConfig.lockScale ? "1" : "0";
-		vals[3] = scaleConfig.group16 ? "1" : "0";
+		vals[1] = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
+		vals[2] = scaleConfig.lockScale ? "On" : "--";
+		vals[3] = scaleConfig.group16 ? "On" : "--";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 1, !getEncoderSelect());
@@ -795,7 +673,8 @@ void OmxModeForm::onDisplayMI()
 	{
 		const char *labels[4] = {"QUANT", "CLEAR", "", ""};
 		String qv = String(recQuantize_);
-		const char *values[4] = {qv.c_str(), "TRK", "", ""};
+		// §4 label rule: "TRK" overflows the value cell — ">" = click the encoder to open.
+		const char *values[4] = {qv.c_str(), ">", "", ""};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 9, false);
 		return;
@@ -1517,11 +1396,11 @@ void OmxModeForm::onDisplayNotes()
 		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
 		String vals[4];
 		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
-		// SCALE shows a number (name pops as a message on change); LOCK/GROUP show 0/1 — full words
-		// overflow the narrow cell font.
-		vals[1] = (scaleConfig.scalePattern < 0) ? String("-") : String((int)scaleConfig.scalePattern);
-		vals[2] = scaleConfig.lockScale ? "1" : "0";
-		vals[3] = scaleConfig.group16 ? "1" : "0";
+		// §4 label rules: SCALE shows a number (the name pops as a message on change);
+		// LOCK/GROUP show On/-- — full words overflow the cell.
+		vals[1] = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
+		vals[2] = scaleConfig.lockScale ? "On" : "--";
+		vals[3] = scaleConfig.group16 ? "On" : "--";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 8, !getEncoderSelect());
@@ -2544,7 +2423,8 @@ void OmxModeForm::updateShortcutMode()
 
 	if (prevMode != omxFormGlobal.shortcutMode)
 	{
-		omxFormGlobal.shortcutPaste = false;
+		omxFormGlobal.shortcutPaste = false; // Transpose/machine F1-F2 copy-cut/paste toggle resets
+
 
 		// Mix: holding F2 activates FILL on all tracks (steps with a Fill condition play).
 		bool fillOn = (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F2);
@@ -2840,9 +2720,6 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 	if (auxMacroManager_.onEncoderChanged(enc))
 		return;
 
-	if (onEncoderTrackPage(enc.dir()))
-		return;
-
 	// Notes view: the encoder navigates its pages (select) / edits values (edit).
 	if (formView_ == FORMVIEW_NOTES)
 	{
@@ -2873,90 +2750,11 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderChanged(enc);
-
-	// if (getEncoderSelect())
-	// {
-	// 	// onEncoderChangedSelectParam(enc);
-	// 	params.changeParam(enc.dir());
-	// 	omxDisp.setDirty();
-	// 	return;
-	// }
-
-	// auto amt = enc.accel(5); // where 5 is the acceleration factor if you want it, 0 if you don't)
-
-	// int8_t selPage = params.getSelPage();
-	// int8_t selParam = params.getSelParam() + 1; // Add one for readability
-
-	// if (selPage == FORMPAGE_POTSANDMACROS)
-	// {
-	// 	if (selParam == 1)
-	// 	{
-	// 		potSettings.potbank = constrain(potSettings.potbank + amt, 0, NUM_CC_BANKS - 1);
-	// 	}
-	// 	if (selParam == 2)
-	// 	{
-	// 		midiSettings.midiSoftThru = constrain(midiSettings.midiSoftThru + amt, 0, 1);
-	// 	}
-	// 	if (selParam == 3)
-	// 	{
-	// 		midiMacroConfig.midiMacro = constrain(midiMacroConfig.midiMacro + amt, 0, nummacromodes);
-	// 	}
-	// 	if (selParam == 4)
-	// 	{
-	// 		midiMacroConfig.midiMacroChan = constrain(midiMacroConfig.midiMacroChan + amt, 1, 16);
-	// 	}
-	// }
-	// else if (selPage == FORMPAGE_SCALES)
-	// {
-	// 	if (selParam == 1)
-	// 	{
-	// 		int prevRoot = scaleConfig.scaleRoot;
-	// 		scaleConfig.scaleRoot = constrain(scaleConfig.scaleRoot + amt, 0, 12 - 1);
-	// 		if (prevRoot != scaleConfig.scaleRoot)
-	// 		{
-	// 			omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
-	// 		}
-	// 	}
-	// 	if (selParam == 2)
-	// 	{
-	// 		int prevPat = scaleConfig.scalePattern;
-	// 		scaleConfig.scalePattern = constrain(scaleConfig.scalePattern + amt, -1, omxFormGlobal.musicScale->getNumScales() - 1);
-	// 		if (prevPat != scaleConfig.scalePattern)
-	// 		{
-	// 			omxDisp.displayMessage(omxFormGlobal.musicScale->getScaleName(scaleConfig.scalePattern));
-	// 			omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
-	// 		}
-	// 	}
-	// 	if (selParam == 3)
-	// 	{
-	// 		scaleConfig.lockScale = constrain(scaleConfig.lockScale + amt, 0, 1);
-	// 	}
-	// 	if (selParam == 4)
-	// 	{
-	// 		scaleConfig.group16 = constrain(scaleConfig.group16 + amt, 0, 1);
-	// 	}
-	// }
-	// else if (selPage == FORMPAGE_CFG)
-	// {
-	// 	if (selParam == 3)
-	// 	{
-	// 		clockConfig.globalQuantizeStepIndex = constrain(clockConfig.globalQuantizeStepIndex + amt, 0, kNumArpRates - 1);
-	// 	}
-	// 	else if (selParam == 4)
-	// 	{
-	// 		cvNoteUtil.triggerMode = constrain(cvNoteUtil.triggerMode + amt, 0, 1);
-	// 	}
-	// }
-
-	// omxDisp.setDirty();
 }
 
 void OmxModeForm::onEncoderButtonDown()
 {
 	if (auxMacroManager_.onEncoderButtonDown())
-		return;
-
-	if (onEncoderButtonTrackPage())
 		return;
 
 	if (formView_ == FORMVIEW_NOTES && onEncoderButtonNotes())
@@ -2970,13 +2768,6 @@ void OmxModeForm::onEncoderButtonDown()
 
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderButtonDown();
-
-	// if (params.isPageAndParam(FORMPAGE_CFG, 0))
-	// {
-	// 	auxMacroManager_.enableSubmode(&omxUtil.subModePotConfig);
-	// 	omxDisp.isDirty();
-	// 	return;
-	// }
 
 	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect;
 	omxDisp.setDirty();
@@ -3026,10 +2817,6 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 
 	if (auxMacroManager_.onKeyUpdate(e))
 		return; // Key consumed by macro
-
-	// Enables quick key aux exit
-	if(e.quickClicked() && selMachine->onKeyQuickClicked(e))
-		return;
 
 	if (omxFormGlobal.auxBlock)
 		return;
@@ -3098,7 +2885,6 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			midiSettings.midiAUX = e.down();
 			if (e.down() && !wasAux)
 			{
-				viewSelectEdit_ = false;    // AUX is the alternate view selector; drop the encoder one
 				pendingView_ = formView_; // start browsing from the current view
 			}
 			// v2 shell: on AUX release, commit the view you browsed to while holding AUX.
@@ -3282,124 +3068,13 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 		return;
 	}
 
-	if(keyConsumed)
-	return;
+	if (keyConsumed)
+		return;
 
-	switch (omxFormGlobal.formMode)
-	{
-	case FORMMODE_BASE:
-	{
-		switch (omxFormGlobal.shortcutMode)
-		{
-		case FORMSHORTCUT_AUX:
-		break;
-		case FORMSHORTCUT_F1: // Copy
-		{
-			if (!e.held() && e.down())
-			{
-				if(thisKey == 0)
-				{
-					omxDisp.displayMessage("AUX F1");
-				}
-				else if (thisKey >= 3 && thisKey < 11)
-				{
-					if (omxFormGlobal.shortcutPaste == false)
-					{
-						copyMachineAt(thisKey - 3);
-						omxFormGlobal.shortcutPaste = true;
-						keyConsumed = true;
-					}
-					else
-					{
-						pasteMachineTo(thisKey - 3);
-						keyConsumed = true;
-					}
-				}
-			}
-		}
-		break;
-		case FORMSHORTCUT_F2: // Cut
-		{
-			if (!e.held() && e.down())
-			{
-				if (thisKey == 0)
-				{
-					omxDisp.displayMessage("AUX F2");
-				}
-				else if (thisKey >= 3 && thisKey < 11)
-				{
-					if (omxFormGlobal.shortcutPaste == false)
-					{
-						cutMachineAt(thisKey - 3);
-						omxFormGlobal.shortcutPaste = true;
-						keyConsumed = true;
-					}
-					else
-					{
-						pasteMachineTo(thisKey - 3);
-						keyConsumed = true;
-					}
-				}
-			}
-		}
-		break;
-		case FORMSHORTCUT_F3: // Sequencer shortcut
-		{
-			if (thisKey == 0)
-			{
-				omxDisp.displayMessage("AUX F3");
-			}
-			// if (!e.held() && e.down())
-			// {
-			// 	if (thisKey >= 3 && thisKey < 11)
-			// 	{
-			// 		cutMachineAt(thisKey - 3);
-			// 		keyConsumed = true;
-			// 	}
-			// }
-		}
-		break;
-		default:
-		{
-			// Toggle Mute
-			if(!e.down() && e.clicks() == 2)
-			{
-				if (thisKey >= 3 && thisKey < 11)
-				{
-					selectMachine(thisKey - 3);
-					keyConsumed = true;
-					auto m = getSelectedMachine();
-					m->setMute(!m->getMute());
-
-					omxDisp.displayMessage(m->getMute() ? "MUTE" : "UNMUTE");
-					// selectMachineMode_ = true;
-				}
-			}
-			else if (!e.held() && e.down())
-			{
-				if (thisKey >= 3 && thisKey < 11)
-				{
-					selectMachine(thisKey - 3);
-					keyConsumed = true;
-					// selectMachineMode_ = true;
-				}
-			}
-			// Key released
-			else if (!e.held() && !e.down())
-			{
-			}
-
-		}
-		break;
-		}
-
-		if(!keyConsumed)
-		{
-			selMachine->onKeyUpdate(e);
-		}
-	}
-	break;
-	}
+	// Whatever the shell didn't capture goes to the machine. In Mix this is the F3
+	// fall-through (the machine's F3 branch handles rate + page length); the old
+	// FORMMODE_BASE machine copy/cut/paste layer that lived here is gone.
+	selMachine->onKeyUpdate(e);
 }
 
 bool OmxModeForm::onKeyUpdateSelMidiFX(OMXKeypadEvent e)
@@ -3516,10 +3191,11 @@ void OmxModeForm::updateLEDs()
 		for (uint8_t i = 0; i < kNumMachines; i++)
 		{
 			bool isMuted = machines_[i]->getMute();
-			// Mix view: per-track colour from its hue. Other views keep the machine colour.
+			// Mix view: per-track colour from its hue. Other views use a single colour
+			// (every track is the same engine — the per-type machine colours are gone).
 			uint32_t trackColor = (formView_ == FORMVIEW_MIX)
 									   ? strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[i] << 8, 255, 255))
-									   : (uint32_t)getMachineColor(i);
+									   : (uint32_t)ORANGE;
 			uint32_t color = isMuted ? (uint32_t)RED : trackColor;
 
 			if(i == selectedMachine_)
@@ -3637,204 +3313,26 @@ void OmxModeForm::onDisplayUpdate()
 		return;
 	}
 
-	bool dispLabel = false;
-	bool dispParams = true;
-
-	switch (omxFormGlobal.shortcutMode)
+	// Mix is the only view that reaches here (the others returned above, and its
+	// F1/F2/F3 screens did too): the shared track/page overview.
+	if (formView_ == FORMVIEW_MIX)
 	{
-	// case FORMSHORTCUT_AUX:
-	// 	// tempString = "Aux";
-	// 	break;
-	case FORMSHORTCUT_F1:
-		tempString = omxFormGlobal.shortcutPaste ? "Paste" : "Copy";
-		dispLabel = true;
-		break;
-	case FORMSHORTCUT_F2:
-		tempString = omxFormGlobal.shortcutPaste ? "Paste" : "Cut";
-		dispLabel = true;
-		break;
-	case FORMSHORTCUT_F3:
-		tempString = selMachine->getF3shortcutName();
-		dispLabel = true;
-		break;
-	default:
-	{
-		// Mix's first page shows the same track/page overview as the Seq view.
-		if (formView_ == FORMVIEW_MIX)
-		{
-			onDisplaySeqTrackPage();
-			return;
-		}
-		selMachine->onDisplayUpdate();
+		onDisplaySeqTrackPage();
 		return;
 	}
-		break;
-	}
-
-	if(dispLabel){
-		omxDisp.dispGenericModeLabel(tempString.c_str(), 0, 0);
-	}
-	else if(dispParams)
-	{
-		// omxDisp.clearLegends();
-
-		// switch (params.getSelPage())
-		// {
-		// case FORMPAGE_INSPECT:
-		// {
-		// 	omxDisp.setLegend(0, "P CC", potSettings.potCC);
-		// 	omxDisp.setLegend(1, "P VAL", potSettings.potCC);
-		// 	omxDisp.setLegend(2, "NOTE", potSettings.potCC);
-		// 	omxDisp.setLegend(3, "VEL", potSettings.potCC);
-		// }
-		// break;
-
-		// default:
-		// 	break;
-		// }
-
-		// omxDisp.dispGenericMode2(params.getNumPages(), params.getSelPage(), params.getSelParam(), getEncoderSelect());
-		// // omxDisp.dispGenericModeLabelDoubleLine
-
-	}
-	// if (params.getSelPage() == FORMPAGE_INSPECT)
-	// {
-	// 	omxDisp.clearLegends();
-
-	// 	omxDisp.legends[0] = "P CC";
-	// 	omxDisp.legends[1] = "P VAL";
-	// 	omxDisp.legends[2] = "NOTE";
-	// 	omxDisp.legends[3] = "VEL";
-	// 	omxDisp.legendVals[0] = potSettings.potCC;
-	// 	omxDisp.legendVals[1] = potSettings.potVal;
-	// 	omxDisp.legendVals[2] = midiSettings.midiLastNote;
-	// 	omxDisp.legendVals[3] = midiSettings.midiLastVel;
-	// }
-	// else if (params.getSelPage() == FORMPAGE_POTSANDMACROS) // SUBMODE_MIDI3
-	// {
-	// 	omxDisp.clearLegends();
-
-	// 	omxDisp.legends[0] = "PBNK"; // Potentiometer Banks
-	// 	omxDisp.legends[1] = "THRU"; // MIDI thru (usb to hardware)
-	// 	omxDisp.legends[2] = "MCRO"; // Macro mode
-	// 	omxDisp.legends[3] = "M-CH";
-	// 	omxDisp.legendVals[0] = potSettings.potbank + 1;
-	// 	omxDisp.legendText[1] = midiSettings.midiSoftThru ? "On" : "Off";
-	// 	omxDisp.legendText[2] = macromodes[midiMacroConfig.midiMacro];
-	// 	omxDisp.legendVals[3] = midiMacroConfig.midiMacroChan;
-	// }
-	// else if (params.getSelPage() == FORMPAGE_SCALES) // SCALES
-	// {
-	// 	omxDisp.clearLegends();
-	// 	omxDisp.legends[0] = "ROOT";
-	// 	omxDisp.legends[1] = "SCALE";
-	// 	omxDisp.legends[2] = "LOCK";
-	// 	omxDisp.legends[3] = "GROUP";
-	// 	omxDisp.legendVals[0] = -127;
-	// 	if (scaleConfig.scalePattern < 0)
-	// 	{
-	// 		omxDisp.legendVals[1] = -127;
-	// 		omxDisp.legendText[1] = "Off";
-	// 	}
-	// 	else
-	// 	{
-	// 		omxDisp.legendVals[1] = scaleConfig.scalePattern;
-	// 	}
-
-	// 	omxDisp.legendVals[2] = -127;
-	// 	omxDisp.legendVals[3] = -127;
-
-	// 	omxDisp.legendText[0] = musicScale->getNoteName(scaleConfig.scaleRoot);
-	// 	omxDisp.legendText[2] = scaleConfig.lockScale ? "On" : "Off";
-	// 	omxDisp.legendText[3] = scaleConfig.group16 ? "On" : "Off";
-	// }
-	// else if (params.getSelPage() == FORMPAGE_CFG) // CONFIG
-	// {
-	// 	omxDisp.clearLegends();
-	// 	omxDisp.setLegend(0, "P CC", "CFG");
-	// 	omxDisp.setLegend(1, "CLR", "STOR");
-	// 	omxDisp.setLegend(2, "QUANT", "1/" + String(kArpRates[clockConfig.globalQuantizeStepIndex]));
-	// 	omxDisp.setLegend(3, "CV M", cvNoteUtil.getTriggerModeDispName());
-	// }
-
-	// omxDisp.dispGenericMode2(params.getNumPages(), params.getSelPage(), params.getSelParam(), getEncoderSelect());
+	selMachine->onDisplayUpdate();
 }
-
-// void onDisplayUpdateLoadKit()
-// {
-
-// }
 
 // incoming midi note on
 void OmxModeForm::inMidiNoteOn(byte channel, byte note, byte velocity)
 {
-	// midiSettings.midiLastNote = note;
-	// midiSettings.midiLastVel = velocity;
-	// int whatoct = (note / 12);
-	// int thisKey;
-	// uint32_t keyColor = MIDINOTEON;
-
-	// if ((whatoct % 2) == 0)
-	// {
-	// 	thisKey = note - (12 * whatoct);
-	// }
-	// else
-	// {
-	// 	thisKey = note - (12 * whatoct) + 12;
-	// }
-	// if (whatoct == 0)
-	// { // ORANGE,YELLOW,GREEN,MAGENTA,CYAN,BLUE,LIME,LTPURPLE
-	// }
-	// else if (whatoct == 1)
-	// {
-	// 	keyColor = ORANGE;
-	// }
-	// else if (whatoct == 2)
-	// {
-	// 	keyColor = YELLOW;
-	// }
-	// else if (whatoct == 3)
-	// {
-	// 	keyColor = GREEN;
-	// }
-	// else if (whatoct == 4)
-	// {
-	// 	keyColor = MAGENTA;
-	// }
-	// else if (whatoct == 5)
-	// {
-	// 	keyColor = CYAN;
-	// }
-	// else if (whatoct == 6)
-	// {
-	// 	keyColor = LIME;
-	// }
-	// else if (whatoct == 7)
-	// {
-	// 	keyColor = CYAN;
-	// }
-	// strip.setPixelColor(midiKeyMap[thisKey], keyColor); //  Set pixel's color (in RAM)
-	// 													//	dirtyPixels = true;
-	// strip.show();
-	// omxDisp.setDirty();
+	// FORM does not consume incoming MIDI notes (the old drum-key idea was dropped).
+	(void)channel; (void)note; (void)velocity;
 }
 
 void OmxModeForm::inMidiNoteOff(byte channel, byte note, byte velocity)
 {
-	// int whatoct = (note / 12);
-	// int thisKey;
-	// if ((whatoct % 2) == 0)
-	// {
-	// 	thisKey = note - (12 * whatoct);
-	// }
-	// else
-	// {
-	// 	thisKey = note - (12 * whatoct) + 12;
-	// }
-	// strip.setPixelColor(midiKeyMap[thisKey], LEDOFF); //  Set pixel's color (in RAM)
-	// 												  //	dirtyPixels = true;
-	// strip.show();
-	// omxDisp.setDirty();
+	(void)channel; (void)note; (void)velocity;
 }
 
 void OmxModeForm::inMidiControlChange(byte channel, byte control, byte value)
@@ -3848,52 +3346,6 @@ void OmxModeForm::SetScale(MusicScales *scale)
 	omxFormGlobal.musicScale = scale;
 	auxMacroManager_.SetScale(scale);
 }
-
-// void OmxModeForm::drumKeyDown(uint8_t keyIndex)
-// {
-//     auto drumKey = activeDrumKit.drumKeys[keyIndex - 1];
-
-//     MidiNoteGroup noteGroup = omxUtil.midiDrumNoteOn(keyIndex, drumKey.noteNum, drumKey.vel, drumKey.chan);
-
-// 	if (noteGroup.noteNumber == 255)
-// 		return;
-
-//     selDrumKey = keyIndex - 1;
-
-// 	noteGroup.unknownLength = true;
-// 	noteGroup.prevNoteNumber = noteGroup.noteNumber;
-
-// 	if (drumKey.midifx < NUM_MIDIFX_GROUPS)
-// 	{
-// 		subModeMidiFx[drumKey.midifx].noteInput(noteGroup);
-// 	}
-// 	else
-// 	{
-// 		onNotePostFX(noteGroup);
-// 	}
-// }
-
-// void OmxModeForm::drumKeyUp(uint8_t keyIndex)
-// {
-//     MidiNoteGroup noteGroup = omxUtil.midiDrumNoteOff(keyIndex);
-
-// 	if (noteGroup.noteNumber == 255)
-// 		return;
-
-//     auto drumKey = activeDrumKit.drumKeys[keyIndex - 1];
-
-// 	noteGroup.unknownLength = true;
-// 	noteGroup.prevNoteNumber = noteGroup.noteNumber;
-
-// 	if (drumKey.midifx < NUM_MIDIFX_GROUPS)
-// 	{
-// 		subModeMidiFx[drumKey.midifx].noteInput(noteGroup);
-// 	}
-// 	else
-// 	{
-// 		onNotePostFX(noteGroup);
-// 	}
-// }
 
 void OmxModeForm::seqNoteOn(MidiNoteGroup noteGroup, uint8_t midifx)
 {

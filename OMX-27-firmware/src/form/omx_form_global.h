@@ -3,7 +3,6 @@
 // #include "../../hardware/omx_keypad.h"
 // #include "../../utils/param_manager.h"
 #include "../utils/music_scales.h"
-#include "../utils/PotPickupUtil.h"
 
 enum ShortCutMode
 {
@@ -12,12 +11,6 @@ enum ShortCutMode
 	FORMSHORTCUT_F1,   // Top key 1 held
 	FORMSHORTCUT_F2,   // Top key 2 held
 	FORMSHORTCUT_F3,   // Top key 1 & 2 held
-};
-
-enum FormMode
-{
-	FORMMODE_BASE,
-	FORMMODE_COUNT
 };
 
 extern const uint8_t kSeqRates[];
@@ -33,9 +26,6 @@ bool isPlaying = false;
 // Set to true for F1 Copy and F2 Cut shortcuts once something is added to buffer
 bool shortcutPaste = false;
 
-// If true reset will happen on next quantization step
-bool quantizeReset = false;
-
 bool auxBlock = false;
 
 bool useNoteNumbers = false;
@@ -47,10 +37,7 @@ bool recReplace = false; // false = overdub (add to step), true = replace (clear
 MusicScales *musicScale;
 
 uint8_t shortcutMode;
-uint8_t formMode;
-uint8_t selMidiFX;
 
-PotPickupUtil potPickups[5];
 };
 
 extern OmxFormGlobalSettings omxFormGlobal;

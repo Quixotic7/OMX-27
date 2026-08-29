@@ -253,13 +253,51 @@ Ordered; each step is independently landable.
      (key 6 = 0) instead of 0..9, and only on key-down.
    - B15: `FORMSHORTCUT_AUX` now additionally requires `midiSettings.midiAUX` (set
      only by a real AUX press event), so a swallowed AUX press can't half-arm the layer.
-2. **Deletion pass** — §1.3 in full (shell fallback + commented blocks + dead members;
-   dead machine-side v1 UI; `form2_data`/`form2_store` unless wired in). ~1,200 lines,
-   zero behavior change. Do before any refactor — it shrinks everything after it.
-3. **Param-page modernization** — §4 decisions 2–3: the label rules, then port the
-   seven legacy legend pages to `dispStepParams`; keep the specialized editors
-   (decision 1) untouched. Retiring the legacy `editPage`/`drawPage` branches also
-   fixes B6 and removes the SEQMIX/duplicate-page redundancy.
+2. **Deletion pass** — §1.3. ✅ **Done 2026-08-29** (~1,500 lines removed; all three
+   targets build). What went, beyond the list:
+   - Shell: FORMMODE_BASE fallback (its one live path — the Mix F3 machine forward —
+     preserved as a plain `selMachine->onKeyUpdate(e)`), the legacy display switch
+     (Mix default path preserved), the v1 spec comment block in the header, the
+     machine cut/copy/paste plumbing + `copyBuffer_`/`undoBuffer_` (`setMachineTo`
+     now deletes the old machine directly), `FormModePage`, `FormMode`/`formMode`,
+     `quantizeReset`, `selMidiFX`, `potPickups`, the no-op view-selector functions,
+     `setTest`, `getMachineName/Color` + `kMachineNames/Colors`.
+   - Machine: the AUX uiMode-switch branch, the whole v1 step-held machinery
+     (`stepHeld_`/`stepHeld()`/`stepReleased()`/`selStep()`/`setPotPickups` + the
+     step-held pot-editing branch + its LED/func-palette blocks + the `doesConsume*`
+     special cases), the F1/F2 step copy/paste + double-click/F1+AUX note-editor
+     entries (which could desync `omniUiMode_` from the view router), the
+     `onKeyQuickClicked` AUX-exit override (same desync class — its removal also
+     stops it swallowing AUX releases in Notes view), `recordStepIndex`,
+     `encoderSelect_` (interface).
+   - `form2_data.h` / `form2_store.{h,cpp}` deleted; the geometry macros moved into
+     `form2_config.h`, whose stale 145 KB size note now points at the real ~10.6 KB
+     `FormPattern` measurement. `dispTrackHold`/`dispStepPlayModes` deleted from
+     `omx_disp`.
+   - Deliberately KEPT (still reachable, dies in step 3/4): the legacy
+     `OMNIPAGE_STEP1`/`STEPCONDITION` menu pages (Mix's encoder can walk to them),
+     the zoom plumbing (pinned, simplification not deletion), `saveKit`/`loadKit`
+     stubs (presetManager contract), `getClone`/`changeMachineAtIndex` (save format).
+3. **Param-page modernization** — §4 decisions 2–3. ✅ **Done 2026-08-29** (all three
+   targets build). What shipped:
+   - The seven legend pages (TRACK / TRACKMODES / SEQMIX / SEQTPOSE / SEQMIDI /
+     TIMINGS / SCALE) render in the shared `dispStepParams` grid via a new
+     `dispParamGrid()` helper; `dispGenericMode2` is no longer used by FORM.
+   - The duplicate STEP1/STEPCONDITION menu pages are **gone** (enum + pages
+     restructured; the menu now runs STEPNOTES → STEPPOTS → TPAT → the seven param
+     pages, entered at STEPNOTES from both Step and Mix). The specialized editors
+     (STEPNOTES / STEPPOTS / TPAT, Transpose view) are untouched per decision 1.
+     Dead `stepParams_` ParamManager removed. Page param counts now match the real
+     param counts (no empty selectable cells).
+   - **Label rules applied** (decision 3): cells show ≤3-digit numerics inline and
+     ≤2-char text ("On"/"--", ">>"/"<<", play-mode codes `--/PG/RD/R2/SF/SH`,
+     transpose-mode codes `GI/SE/LI`, swing-div `16/8`, rate as the bare divisor);
+     full names pop transiently while the encoder turns (play mode, transpose mode,
+     `RATE 1:n`, `SWING 16th/8th`, scale name). The MI menu's CLEAR cell — the
+     original "TRK" overflow — now shows ">" (click to open). The shell's Notes/MI
+     scale pages unified to the same "--"/"On" convention as the machine SCALE page.
+   - Full-width overlays (hold-step big value, `dispStepOverview`) are exempt — the
+     rule constrains only the 32px grid cells.
 4. **Interface collapse** (§1.1) + **view-handler table** (§1.2) — mechanical but wide;
    much smaller after step 2. Save-format change rides the existing version byte.
 5. **Extraction pass** (§1.4) — opportunistic; the page-gesture and quick-copy/paste

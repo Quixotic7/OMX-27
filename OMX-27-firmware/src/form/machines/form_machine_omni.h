@@ -34,7 +34,6 @@ namespace FormOmni
 	    bool getEncoderSelect() override;
 
 
-        void setTest() override;
 
 	    void playBackStateChanged(bool newIsPlaying) override;
 	    void resetPlayback() override;
@@ -51,7 +50,6 @@ namespace FormOmni
         void onEncoderButtonDown() override;
         bool onKeyUpdate(OMXKeypadEvent e) override;
         bool onKeyHeldUpdate(OMXKeypadEvent e) override;
-	    bool onKeyQuickClicked(OMXKeypadEvent e) override;
 
         void onDisplayUpdate() override;
 
@@ -248,7 +246,6 @@ namespace FormOmni
 
         // Live recording: the absolute step (0-63) to record a played note into — the playing
         // step, quantized to nearest (past the step's midpoint rounds up to the next step).
-        uint8_t recordStepIndex();
         void recordNoteToStep(uint8_t absStep, int8_t note); // add (dedup); fresh step -> default vel
         // Resolve where a note played *now* should record: the nearest step, plus that step's NUDGE
         // from how far off the grid it was, scaled by (100-quantizePct)/100 (100 = hard snap, 0 =
@@ -294,7 +291,6 @@ namespace FormOmni
         OmniSeqDynamic seqDynamic_;
 
         uint8_t selStep_ = 0;
-        bool stepHeld_ = false;
 
         // Notes currently sounding from a Mix step audition, per low-row key (0-15). -1 = none.
         int8_t auditionNotes_[16][6];
@@ -313,13 +309,14 @@ namespace FormOmni
         void changeUIMode(uint8_t newMode, bool silent);
         void onUIModeChanged(uint8_t prevMode, uint8_t newMode);
 
-        void setPotPickups(uint8_t page);
 
         void resetPlayback(bool resetTickCounters);
 
         // returns true if should draw generic page
         void editPage(uint8_t page, uint8_t param, int8_t amtSlow, int8_t amtFast);
         bool drawPage(uint8_t page, uint8_t selParam);
+        // Shared 4-cell param-grid renderer for the menu's plain param pages (§4 label rules).
+        void dispParamGrid(const char *labels[4], const String vals[4], uint8_t selParam);
 
         Track *getTrack();
         Step *getSelStep();
@@ -332,9 +329,6 @@ namespace FormOmni
 
         uint8_t key16toStep(uint8_t key16);
 
-        void selStep(uint8_t stepIndex); // 0-15
-        void stepHeld(uint8_t key16Index); // 0-15
-        void stepReleased(uint8_t key16Index);
 
         Step bufferedStep_; 
 
