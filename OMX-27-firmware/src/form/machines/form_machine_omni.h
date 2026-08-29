@@ -122,6 +122,12 @@ namespace FormOmni
         }
         uint8_t getEnabledPages() { return getTrack()->enabledPages; }
         uint8_t getPageLen(uint8_t page) { return page < 4 ? getTrack()->pageLen[page] : 16; }
+        // v2 Mix encoder pages: gate / rate accessors (values live on the OmniSeq).
+        uint8_t getGate() { return seq_.gate; }
+        void editGate(int amt);
+        uint8_t getRate() { return seq_.rate; }
+        void editRate(int amt);       // clamps + onRateChanged
+        String gateBox();             // gate as a percent string for a param cell
         // v2 Step F3: set the rate from a top-row key (0-7), like Mix F3.
         void setRateShortcut(uint8_t topKeyIndex);
         int8_t rateShortcutSel(); // which top-row key (0-7) matches the current rate, -1 if none

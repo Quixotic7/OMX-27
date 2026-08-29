@@ -596,6 +596,22 @@ namespace FormOmni
         return -1;
     }
 
+    void FormMachineOmni::editGate(int amt)
+    {
+        seq_.gate = constrain((int)seq_.gate + amt, 0, 100);
+    }
+
+    void FormMachineOmni::editRate(int amt)
+    {
+        seq_.rate = constrain((int)seq_.rate + amt, 0, kNumSeqRates - 1);
+        onRateChanged();
+    }
+
+    String FormMachineOmni::gateBox()
+    {
+        return String((uint16_t)(getGateMult(seq_.gate) * 100));
+    }
+
     void FormMachineOmni::seqMenuEnter()
     {
         trackParams_.setSelPageAndParam(OMNIPAGE_STEPNOTES, 0);

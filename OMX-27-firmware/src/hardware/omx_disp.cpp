@@ -833,6 +833,40 @@ void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const
 	}
 }
 
+// FORM Mix LEVELS page: 8 per-track bars (default velocity as a mixer). sel = 0-7.
+// Title top-left, the selected track + value top-right; the selected slot is boxed and
+// inverts while the encoder is editing it.
+void OmxDisp::dispMixLevels(const char *title, const char *valText, const int8_t vals[8], uint8_t sel, bool editing)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_LABELS);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	u8g2centerText(title, 0, 9, 64, 8);
+	u8g2centerText(valText, 64, 9, 64, 8);
+
+	const uint8_t slotW = 16, y0 = 11, h = 21; // bars area y 11..31
+	for (uint8_t i = 0; i < 8; i++)
+	{
+		int x = i * slotW;
+		int v = vals[i] < 0 ? 0 : vals[i];
+		uint8_t bh = (uint8_t)((v * (h - 3)) / 127);
+		display.fillRect(x + 4, y0 + (h - 2 - bh), slotW - 8, bh + 1, WHITE);
+		if (i == sel)
+		{
+			display.drawRect(x + 1, y0, slotW - 2, h, WHITE);
+			if (editing)
+				display.fillRect(x + 2, y0 + 1, slotW - 4, h - 2, INVERSE);
+		}
+	}
+}
+
 void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus)
 {
 	if (isMessageActive())

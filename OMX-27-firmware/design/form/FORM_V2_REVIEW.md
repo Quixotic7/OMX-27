@@ -298,6 +298,15 @@ Ordered; each step is independently landable.
      scale pages unified to the same "--"/"On" convention as the machine SCALE page.
    - Full-width overlays (hold-step big value, `dispStepOverview`) are exempt — the
      rule constrains only the 32px grid cells.
+   - **Mix encoder pages** (added 2026-08-29, user request): Mix previously showed only
+     the track overview while its encoder walked the machine menu *blind* (the display
+     never rendered it). Mix now has its own flat cursor (`mixCursor_`, like MI/Notes):
+     **0** = track overview (edit-turn selects the track) · **1–8** = **LEVELS**, a
+     per-track default-velocity mixer (8 bars, new `dispMixLevels` renderer; edit-turn
+     adjusts the bar under the cursor and pushes to every step without its own velocity
+     lock) · **9–12** = **TRACK** grid: Mute / Solo / Gate / Rate for the selected track
+     (label rules apply; rate pops "RATE 1:n" while turning). The blind machine-menu
+     walk from Mix is gone — the menu is reached from the Step view.
 4. **Interface collapse** (§1.1) + **view-handler table** (§1.2) — mechanical but wide;
    much smaller after step 2. Save-format change rides the existing version byte.
 5. **Extraction pass** (§1.4) — opportunistic; the page-gesture and quick-copy/paste

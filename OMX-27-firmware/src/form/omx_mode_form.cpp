@@ -240,6 +240,7 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	notesF1Used_ = notesF2Used_ = false;
 	notesCursor_ = 0; // open on the keyboard page, select mode
 	miCursor_ = 0; // MI opens on the keyboard, select mode
+	mixCursor_ = 0; // Mix opens on the track overview
 	// Clear the F1+page gesture state too: a page key still physically held across a view
 	// switch releases into the new view's handler, so its bit would otherwise stay stuck and
 	// fire a phantom loop-range on the next F1+page press.
@@ -2736,20 +2737,96 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 	if (onEncoderStep(enc))
 		return;
 
-	// Mix overview: in EDIT mode the encoder selects the track (same as Step/MI page 0); in select
-	// mode the machine navigates its params.
-	if (formView_ == FORMVIEW_MIX && !getEncoderSelect() && heldTrackKey_ < 0 && enc.dir() != 0)
+	// Mix view: the encoder navigates its own pages (overview / LEVELS / TRACK) — it no
+	// longer walks the machine menu (which the Mix display never rendered anyway).
+	if (formView_ == FORMVIEW_MIX)
 	{
-		int t = constrain((int)selectedMachine_ + enc.dir(), 0, kNumMachines - 1);
-		if (t != (int)selectedMachine_)
-			selectMachine((uint8_t)t);
-		omxDisp.setDirty();
-		omxLeds.setDirty();
+		onEncoderMix(enc.dir());
 		return;
 	}
 
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderChanged(enc);
+}
+
+// Mix encoder pages (flat cursor, like MI/Notes; click toggles select/edit):
+//   0     = the track overview (edit-turn selects the track)
+//   1-8   = LEVELS: per-track default-velocity mixer (edit-turn adjusts that track;
+//           the change pushes to every step without its own velocity lock)
+//   9-12  = TRACK: Mute / Solo / Gate / Rate for the selected track
+bool OmxModeForm::onEncoderMix(int dir)
+{
+	if (dir == 0)
+		return true;
+	if (getEncoderSelect())
+	{
+		mixCursor_ = (uint8_t)constrain((int)mixCursor_ + dir, 0, 12);
+		omxDisp.setDirty();
+		return true;
+	}
+	// Edit mode:
+	if (mixCursor_ == 0)
+	{
+		if (heldTrackKey_ < 0)
+		{
+			int t = constrain((int)selectedMachine_ + dir, 0, kNumMachines - 1);
+			if (t != (int)selectedMachine_)
+				selectMachine((uint8_t)t);
+		}
+	}
+	else if (mixCursor_ <= 8) // LEVELS: edits the bar under the cursor, not the selection
+	{
+		static_cast<FormOmni::FormMachineOmni *>(machines_[mixCursor_ - 1])->editParamDefault(0, dir);
+	}
+	else
+	{
+		auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		switch (mixCursor_)
+		{
+		case 9:  omni->setMute(!(dir < 0)); break;  // turn right = mute, left = unmute
+		case 10: omni->setSolo(!(dir < 0)); break;
+		case 11: omni->editGate(dir); break;
+		case 12:
+			omni->editRate(dir);
+			// §4 label rule: the cell shows the bare divisor; the full form pops while turning.
+			omxDisp.displayMessage("RATE 1:" + String(kSeqRates[omni->getRate()]));
+			break;
+		}
+	}
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+	return true;
+}
+
+// Render the Mix view's encoder pages.
+void OmxModeForm::onDisplayMix()
+{
+	if (mixCursor_ >= 1 && mixCursor_ <= 8) // LEVELS
+	{
+		int8_t vals[8];
+		for (uint8_t i = 0; i < kNumMachines; i++)
+			vals[i] = (int8_t)static_cast<FormOmni::FormMachineOmni *>(machines_[i])->trackPtr()->paramDefaults[0];
+		uint8_t sel = mixCursor_ - 1;
+		char vbuf[12];
+		snprintf(vbuf, sizeof(vbuf), "T%u %u", (unsigned)(sel + 1), (unsigned)vals[sel]);
+		omxDisp.dispMixLevels("LEVELS", vbuf, vals, sel, !getEncoderSelect());
+		return;
+	}
+	if (mixCursor_ >= 9) // TRACK: Mute / Solo / Gate / Rate (selected track)
+	{
+		auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		const char *labels[4] = {"MUTE", "SOLO", "GATE", "RATE"};
+		String vals[4];
+		vals[0] = omni->getMute() ? "On" : "--";
+		vals[1] = omni->getSolo() ? "On" : "--";
+		vals[2] = omni->gateBox();
+		vals[3] = String(kSeqRates[omni->getRate()]); // full "1:n" pops while turning
+		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
+		bool locked[4] = {false, false, false, false};
+		omxDisp.dispStepParams(labels, values, locked, mixCursor_ - 9, !getEncoderSelect());
+		return;
+	}
+	onDisplaySeqTrackPage(); // cursor 0: the shared track/page overview
 }
 
 void OmxModeForm::onEncoderButtonDown()
@@ -3314,10 +3391,10 @@ void OmxModeForm::onDisplayUpdate()
 	}
 
 	// Mix is the only view that reaches here (the others returned above, and its
-	// F1/F2/F3 screens did too): the shared track/page overview.
+	// F1/F2/F3 screens did too): its encoder pages (overview / LEVELS / TRACK).
 	if (formView_ == FORMVIEW_MIX)
 	{
-		onDisplaySeqTrackPage();
+		onDisplayMix();
 		return;
 	}
 	selMachine->onDisplayUpdate();

@@ -53,6 +53,8 @@ public:
 	// selected cell is boxed when navigating; when `editing` (holding a step) it is fully
 	// inverted to show the encoder is locked onto it.
 	void dispStepParams(const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel, bool editing);
+	// FORM Mix LEVELS page: 8 per-track velocity bars; sel boxed, inverted while editing.
+	void dispMixLevels(const char *title, const char *valText, const int8_t vals[8], uint8_t sel, bool editing);
 	// Step F2 view: the current play-direction icon + its name on top, a bottom label below.
 	// Step view Note hold: a compact piano keyboard (chord = notesAsKeys[6]) on top, with the
 	// 16 step-marker cells beneath (filled = has content; `focus` step gets a tick). No text.

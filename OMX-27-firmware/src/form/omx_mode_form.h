@@ -218,6 +218,11 @@ private:
 	void onKeyUpdateMixStepMute(OMXKeypadEvent e); // F1 + low-row toggles the selected track's step mutes
 	void updateMixHoldLEDs();                  // paint those controls on the low row
 	int8_t heldTrackKey_ = -1; // track key held right now in Mix (for K5 hue), -1 = none
+	// Mix encoder pages (flat cursor): 0 = track overview, 1-8 = LEVELS (per-track
+	// default-velocity mixer), 9-12 = TRACK (Mute/Solo/Gate/Rate). Click = select/edit.
+	uint8_t mixCursor_ = 0;
+	bool onEncoderMix(int dir); // encoder turn in the Mix view. consumed?
+	void onDisplayMix();        // render the Mix view's encoder pages
 
 	static const uint8_t kNumMachines = 8;
 
