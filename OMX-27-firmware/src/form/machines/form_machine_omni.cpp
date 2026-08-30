@@ -773,7 +773,12 @@ namespace FormOmni
 
     // ---- v2 Step value palettes ----
 
+    // v2 nudge palette: 9 keys spanning -60..+60 with a true zero on key 5.
+    static const int8_t kNudgePalette[9] = {-60, -45, -30, -15, 0, 15, 30, 45, 60};
+
     // Which P-Lock bit a Step-view edit mode owns (-1 = none, e.g. Note).
+    // Modes 8/9 are the param-page pseudo-modes for Nudge / Accum (no StepMode of
+    // their own — they only exist as palettes on the Seq param pages).
     static int8_t stepModeToLock(uint8_t mode)
     {
         switch (mode)
@@ -785,6 +790,8 @@ namespace FormOmni
         case 5: return SLOCK_COND;
         case 6: return SLOCK_FUNC;
         case 7: return SLOCK_MFX;
+        case 8: return SLOCK_NUDGE;
+        case 9: return SLOCK_ACCUM;
         default: return -1;
         }
     }
@@ -800,6 +807,8 @@ namespace FormOmni
         case 5: return 10;             // math (1 Fill, 2 !Fill, 3-6 ratio A, 7-10 ratio B)
         case 6: return STEPFUNC_COUNT; // function
         case 7: return 6;              // midi fx (Off + FX 1-5)
+        case 8: return 9;              // nudge (-60..+60, zero on key 5)
+        case 9: return 5;              // accum (0-4)
         default: return 0;             // note = handled elsewhere
         }
     }
@@ -831,7 +840,45 @@ namespace FormOmni
         }
         case 6: if (p < STEPFUNC_COUNT) s->func = p; break;
         case 7: if (p < 6) s->mfxIndex = kMfxPalette[p]; break;
+        case 8: if (p < 9) s->nudge = kNudgePalette[p]; break;
+        case 9: if (p < 5) s->accumTPat = p; break;
         }
+    }
+
+    // Set a param DEFAULT from a value-palette key (same mapping as setStepPalette),
+    // pushing it to every step without its own lock (via editParamDefault's logic).
+    void FormMachineOmni::setParamDefaultPalette(uint8_t mode, uint8_t p)
+    {
+        Track *t = getTrack();
+        int pid = -1, v = 0;
+        switch (mode)
+        {
+        case 1: pid = 0; v = constrain(((int)(p + 1) * 127) / 10, 1, 127); break;
+        case 2: if (p < 10) { pid = 2; v = kLenPalette[p]; } break;
+        case 4: pid = 4; v = constrain((int)(p + 1) * 10, 1, 100); break;
+        case 5:
+        {
+            pid = 5;
+            uint8_t cur = (uint8_t)t->paramDefaults[5];
+            if (p == 0) { v = 1; break; }      // Fill
+            if (p == 1) { v = 2; break; }      // !Fill
+            uint8_t a = 1, b = 1;
+            if (cur >= 9) { a = kTrigConditionsAB[cur - 9][0]; b = kTrigConditionsAB[cur - 9][1]; }
+            if (p >= 2 && p <= 5) { a = (p - 2) + 1; if (b < a) b = a; }
+            else if (p >= 6 && p <= 9) { b = (p - 6) + 1; if (a > b) a = b; }
+            v = cur;
+            for (uint8_t i = 0; i < 35; i++)
+                if (kTrigConditionsAB[i][0] == a && kTrigConditionsAB[i][1] == b) { v = 9 + i; break; }
+            break;
+        }
+        case 6: if (p < STEPFUNC_COUNT) { pid = 6; v = p; } break;
+        case 7: if (p < 6) { pid = 3; v = kMfxPalette[p]; } break;
+        case 8: if (p < 9) { pid = 1; v = kNudgePalette[p]; } break;
+        case 9: if (p < 5) { pid = 7; v = p; } break;
+        }
+        if (pid < 0)
+            return;
+        editParamDefault((uint8_t)pid, v - (int)t->paramDefaults[pid]);
     }
 
     int16_t FormMachineOmni::stepPaletteSelected(uint8_t key16, uint8_t mode)
@@ -846,7 +893,27 @@ namespace FormOmni
         case 4: return constrain(((int)s->prob / 10) - 1, 0, 9);
         case 6: return (s->func < STEPFUNC_COUNT) ? s->func : -1;
         case 7: for (uint8_t i = 0; i < 6; i++) if (kMfxPalette[i] == s->mfxIndex) return i; return -1;
+        case 8: for (uint8_t i = 0; i < 9; i++) if (kNudgePalette[i] == s->nudge) return i; return -1;
+        case 9: return s->accumTPat;
         default: return -1; // math via stepMathInfo
+        }
+    }
+
+    // The DEFAULT's lit palette key for a mode (-1 = none) — mirrors stepPaletteSelected
+    // but reads the track's paramDefaults (for the param pages' no-hold palette LEDs).
+    int16_t FormMachineOmni::defaultPaletteSelected(uint8_t mode)
+    {
+        Track *t = getTrack();
+        switch (mode)
+        {
+        case 1: return constrain(((int)t->paramDefaults[0] * 10 + 63) / 127 - 1, 0, 9);
+        case 2: for (uint8_t i = 0; i < 10; i++) if (kLenPalette[i] == (uint8_t)t->paramDefaults[2]) return i; return -1;
+        case 4: return constrain(((int)t->paramDefaults[4] / 10) - 1, 0, 9);
+        case 6: return (t->paramDefaults[6] < STEPFUNC_COUNT) ? t->paramDefaults[6] : -1;
+        case 7: for (uint8_t i = 0; i < 6; i++) if (kMfxPalette[i] == (uint8_t)t->paramDefaults[3]) return i; return -1;
+        case 8: for (uint8_t i = 0; i < 9; i++) if (kNudgePalette[i] == t->paramDefaults[1]) return i; return -1;
+        case 9: return t->paramDefaults[7];
+        default: return -1;
         }
     }
 

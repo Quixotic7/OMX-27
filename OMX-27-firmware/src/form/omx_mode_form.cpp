@@ -1555,6 +1555,19 @@ bool OmxModeForm::onEncoderTools(int dir)
 	if (dir == 0)
 		return true;
 	auto omni = getSelectedMachine();
+	// Holding step(s) in a value tool (VEL/CHANCE): the encoder adjusts the held steps'
+	// value directly, alongside the top-row palette (a hold is an edit gesture).
+	if (heldStepMask_ != 0 && toolStepMode(toolIndex_) != STEPMODE_NOTE)
+	{
+		uint8_t pid = (toolStepMode(toolIndex_) == STEPMODE_VEL) ? 0 : 4;
+		for (uint8_t st = 0; st < 16; st++)
+			if (heldStepMask_ & (1 << st))
+				omni->editStepParam(st, pid, dir);
+		stepEdited_ = true;
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
 	uint8_t cells = kToolParams[toolIndex_] + kToolBtns[toolIndex_];
 	if (getEncoderSelect())
 	{
@@ -1617,12 +1630,23 @@ bool OmxModeForm::onEncoderTools(int dir)
 	case TOOL_VEL:
 		if (cell == 0) toolVelMin_ = (uint8_t)constrain((int)toolVelMin_ + dir, 0, 127);
 		else if (cell == 1) toolVelMax_ = (uint8_t)constrain((int)toolVelMax_ + dir, 0, 127);
-		else omni->editStepParam(cell - 2, 0, dir); // per-step velocity bar
+		else
+		{
+			// Editing an empty slot creates a ghost step, then sets its velocity.
+			if (!omni->stepIsOn(cell - 2))
+				omni->stepNotesToGhost(cell - 2);
+			omni->editStepParam(cell - 2, 0, dir);
+		}
 		break;
 	case TOOL_CHANCE:
 		if (cell == 0) toolChanceMin_ = (uint8_t)constrain((int)toolChanceMin_ + dir, 0, 100);
 		else if (cell == 1) toolChanceMax_ = (uint8_t)constrain((int)toolChanceMax_ + dir, 0, 100);
-		else omni->editStepParam(cell - 2, 4, dir); // per-step chance bar
+		else
+		{
+			if (!omni->stepIsOn(cell - 2))
+				omni->stepNotesToGhost(cell - 2);
+			omni->editStepParam(cell - 2, 4, dir);
+		}
 		break;
 	case TOOL_EUC:
 		if (cell == 0) toolEucPulses_ = (uint8_t)constrain((int)toolEucPulses_ + dir, 0, 64);
@@ -1677,7 +1701,28 @@ void OmxModeForm::updateToolsLEDs()
 		strip.setPixelColor(9, toolScopeAll_ ? LOWWHITE : WHITE);  // page
 		strip.setPixelColor(10, toolScopeAll_ ? WHITE : LOWWHITE); // track
 	}
-	// Step row + playhead come from the machine's MIX-mode LED pass (uiMode is MIX here).
+
+	// Step row: only actual triggers light (notes bright, ghosts dim, muted dark red);
+	// empty steps stay OFF so the pattern reads at a glance. Playhead = steady green.
+	auto omni = getSelectedMachine();
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		uint32_t sc = LEDOFF;
+		if (omni->stepIsOn(i))
+		{
+			if (omni->getStepMute(i))
+				sc = DKRED;
+			else
+				sc = omni->stepHasNotes(i) ? (uint32_t)LTBLUE : (uint32_t)DKBLUE;
+		}
+		strip.setPixelColor(11 + i, sc);
+	}
+	if (omxFormGlobal.isPlaying)
+	{
+		int16_t ph = (int16_t)omni->playingStepIndex() - (int16_t)omni->activePage() * 16;
+		if (ph >= 0 && ph < 16)
+			strip.setPixelColor(11 + ph, GREEN);
+	}
 }
 
 void OmxModeForm::onDisplayTools()
@@ -1754,7 +1799,7 @@ void OmxModeForm::onDisplayTools()
 		const char *pl[1] = {"SCOPE"};
 		const char *pv[1] = {scopeVal};
 		const char *btns[4] = {"OCT-", "OCT+", "SEMI-", "SEMI+"};
-		omxDisp.dispToolActionPage(pl, pv, 1, btns, 4, sel, editing, stepState, pageLen, playhead);
+		omxDisp.dispToolActionPage(pl, pv, 1, btns, 4, sel, editing, nullptr, 0, -1);
 		return;
 	}
 	case TOOL_SCALE:
@@ -1771,15 +1816,16 @@ void OmxModeForm::onDisplayTools()
 	{
 		bool isVel = toolIndex_ == TOOL_VEL;
 		int16_t bars[16];
+		uint8_t styles[16]; // 0 = no step, 1 = filled (notes), 2 = outlined (ghost)
 		for (uint8_t i = 0; i < 16; i++)
 		{
-			bool has = isVel ? omni->stepHasNotes(i) : omni->stepIsOn(i);
-			bars[i] = has ? (int16_t)omni->stepParamValue(i, isVel ? 0 : 4) : (int16_t)-1;
+			styles[i] = omni->stepHasNotes(i) ? 1 : (omni->stepIsOn(i) ? 2 : 0);
+			bars[i] = styles[i] != 0 ? (int16_t)omni->stepParamValue(i, isVel ? 0 : 4) : (int16_t)-1;
 		}
 		omxDisp.dispToolBarsPage(isVel ? toolVelMin_ : toolChanceMin_,
 								 isVel ? toolVelMax_ : toolChanceMax_,
 								 isVel ? 127 : 100,
-								 bars, isVel ? 127 : 100, sel, editing, playhead);
+								 bars, styles, isVel ? 127 : 100, sel, editing, playhead);
 		return;
 	}
 	case TOOL_EUC:
@@ -1833,6 +1879,34 @@ static void setTrackPlayModeIdx(FormOmni::Track *t, uint8_t idx)
 }
 
 // Apply a palette value (or refresh the value message) to every held step.
+// Which value palette edits a param-page pid. Nudge/Accum have no StepMode of their
+// own — they use the machine's pseudo palette modes 8/9 (param pages only).
+static const uint8_t PALMODE_NUDGE = 8;
+static const uint8_t PALMODE_ACCUM = 9;
+static uint8_t pidToPaletteMode(uint8_t pid)
+{
+	switch (pid)
+	{
+	case 0: return STEPMODE_VEL;
+	case 1: return PALMODE_NUDGE;
+	case 2: return STEPMODE_LENGTH;
+	case 3: return STEPMODE_MFX;
+	case 4: return STEPMODE_CHANCE;
+	case 5: return STEPMODE_MATH;
+	case 6: return STEPMODE_FUNC;
+	case 7: return PALMODE_ACCUM;
+	default: return 255;
+	}
+}
+
+// Palette key colour per palette mode (pseudo-modes get their own hues).
+static uint32_t paletteModeColor(uint8_t mode)
+{
+	if (mode < STEPMODE_COUNT)
+		return kStepModeColors[mode];
+	return (mode == PALMODE_NUDGE) ? (uint32_t)ORANGE : (uint32_t)MAGENTA;
+}
+
 void OmxModeForm::stepApplyToHeld(uint8_t paletteIndex)
 {
 	auto omni = getSelectedMachine();
@@ -1853,8 +1927,36 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	uint8_t thisKey = e.key();
 	auto omni = getSelectedMachine();
 
-	// While step(s) are held on the overview page, the top row is the value palette. On a
-	// param page the menu (encoder) does the editing, so the palette is suppressed.
+	// While step(s) are held on a param page (1-2), the top row is the SELECTED param's
+	// value palette (applied to the held steps).
+	if (heldStepMask_ != 0 && (stepMenuPage_ == 1 || stepMenuPage_ == 2) && thisKey >= 1 && thisKey <= 10)
+	{
+		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
+		uint8_t mode = pidToPaletteMode(pid);
+		if (mode == 255)
+			return; // nudge/accum have no palette
+		if (e.down() && !e.held())
+		{
+			uint8_t base = (mode == STEPMODE_MFX) ? 5 : 1;
+			if (thisKey >= base)
+			{
+				uint8_t pi = thisKey - base;
+				auto omni2 = getSelectedMachine();
+				if (pi < omni2->stepPaletteCount(mode))
+				{
+					for (uint8_t st = 0; st < 16; st++)
+						if (heldStepMask_ & (1 << st))
+							omni2->setStepPalette(st, mode, pi);
+					stepEdited_ = true;
+					omxDisp.setDirty();
+					omxLeds.setDirty();
+				}
+			}
+		}
+		return;
+	}
+
+	// While step(s) are held on the overview page, the top row is the value palette.
 	if (heldStepMask_ != 0 && stepMenuPage_ == 0 && thisKey >= 1 && thisKey <= 10)
 	{
 		// Note mode: keys 1-10 = chord entry. Held keys build the chord; a fresh press (from
@@ -1900,6 +2002,42 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 				uint8_t p = thisKey - base;
 				if (p < omni->stepPaletteCount(stepEditMode_))
 					stepApplyToHeld(p);
+			}
+		}
+		return;
+	}
+
+	// Track whether F1/F2 act as modifiers during this hold (for the param-page
+	// quick-tap palette below): pressing one while the other is down = F3 = used.
+	if (thisKey == 1 && e.down() && !e.held())
+		stepF1Used_ = midiSettings.keyState[2];
+	if (thisKey == 2 && e.down() && !e.held())
+		stepF2Used_ = midiSettings.keyState[1];
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && thisKey >= 3)
+		stepF1Used_ = true;
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && thisKey >= 3)
+		stepF2Used_ = true;
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
+		stepF1Used_ = stepF2Used_ = true;
+
+	// Param pages: a quick TAP of key 1/2 (release; not used as a modifier) is the
+	// selected param's palette keys 1/2. keyState is still true during the release, so
+	// this must run before the shortcut-mode gate below.
+	if ((stepMenuPage_ == 1 || stepMenuPage_ == 2) && heldStepMask_ == 0 &&
+		(thisKey == 1 || thisKey == 2) && !e.down() && e.quickClicked() &&
+		!(thisKey == 1 ? stepF1Used_ : stepF2Used_))
+	{
+		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
+		uint8_t mode = pidToPaletteMode(pid);
+		if (mode != 255 && mode != STEPMODE_MFX) // MFX palette starts at key 5
+		{
+			auto omni2 = getSelectedMachine();
+			uint8_t pi = thisKey - 1;
+			if (pi < omni2->stepPaletteCount(mode))
+			{
+				omni2->setParamDefaultPalette(mode, pi);
+				omxDisp.setDirty();
+				omxLeds.setDirty();
 			}
 		}
 		return;
@@ -2026,8 +2164,37 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
 		return; // other modifier combos: ignore
 
-	// Mode selector (only when no step is held).
-	if (heldStepMask_ == 0 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
+	// Param pages, nothing held: the top row sets the selected param's DEFAULT from its
+	// value palette. Keys 3-10 on press; keys 1/2 on a quick tap (holds stay F1/F2).
+	if ((stepMenuPage_ == 1 || stepMenuPage_ == 2) && heldStepMask_ == 0 && thisKey >= 1 && thisKey <= 10)
+	{
+		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
+		uint8_t mode = pidToPaletteMode(pid);
+		if (mode == 255)
+			return;
+		if (thisKey < 3)
+			return; // keys 1/2 are the quick-tap path above (holds stay F1/F2)
+		bool fire = e.down() && !e.held();
+		if (fire)
+		{
+			uint8_t base = (mode == STEPMODE_MFX) ? 5 : 1;
+			if (thisKey >= base)
+			{
+				uint8_t pi = thisKey - base;
+				auto omni2 = getSelectedMachine();
+				if (pi < omni2->stepPaletteCount(mode))
+				{
+					omni2->setParamDefaultPalette(mode, pi);
+					omxDisp.setDirty();
+					omxLeds.setDirty();
+				}
+			}
+		}
+		return;
+	}
+
+	// Mode selector (overview only; on param pages the top row is the value palette).
+	if (stepMenuPage_ == 0 && heldStepMask_ == 0 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
 	{
 		stepEditMode_ = thisKey - 3;
 		omxDisp.displayMessage(kStepModeNames[stepEditMode_]);
@@ -2192,6 +2359,66 @@ void OmxModeForm::updateStepLEDs()
 		return;
 	}
 
+	// Param pages (1-2): the top row is the SELECTED param's value palette — the held
+	// step's value lights, or the track default's when nothing is held (mirrors page 0).
+	if (stepMenuPage_ == 1 || stepMenuPage_ == 2)
+	{
+		// Step row: held steps blink white; the rest show content.
+		uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
+		for (uint8_t i = 0; i < 16; i++)
+		{
+			if (heldStepMask_ & (1 << i))
+				strip.setPixelColor(11 + i, blink ? WHITE : LOWWHITE);
+			else
+				strip.setPixelColor(11 + i, omni->stepIsOn(i) ? hue : (uint32_t)LEDOFF);
+		}
+		for (uint8_t k = 3; k <= 10; k++)
+			strip.setPixelColor(k, LEDOFF);
+
+		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
+		uint8_t mode = pidToPaletteMode(pid);
+		if (mode == 255)
+			return; // (unreachable: every pid has a palette now)
+		int8_t focus = heldStepKey_;
+		if (mode == STEPMODE_MFX)
+		{
+			int16_t sel = focus >= 0 ? omni->stepPaletteSelected(focus, STEPMODE_MFX)
+									 : omni->defaultPaletteSelected(STEPMODE_MFX);
+			strip.setPixelColor(5, sel == 0 ? colorConfig.selMidiFXGRPOffColor : colorConfig.midiFXGRPOffColor);
+			for (uint8_t i = 0; i < NUM_MIDIFX_GROUPS; i++)
+				strip.setPixelColor(6 + i, (sel == (int16_t)(i + 1)) ? colorConfig.selMidiFXGRPColor : colorConfig.midiFXGRPColor);
+			return;
+		}
+		if (mode == STEPMODE_MATH)
+		{
+			uint8_t a = 0, b = 0, kind = focus >= 0 ? omni->stepMathInfo(focus, a, b) : 0;
+			strip.setPixelColor(1, kind == 1 ? 0xff8000 : 0x4d2600); // Fill
+			strip.setPixelColor(2, kind == 2 ? 0xff0080 : 0x4d0026); // !Fill
+			for (uint8_t i = 0; i < 4; i++)
+				strip.setPixelColor(3 + i, (kind == 3 && a == i + 1) ? 0x00ff00 : 0x264d00); // ratio A
+			for (uint8_t i = 0; i < 4; i++)
+				strip.setPixelColor(7 + i, (kind == 3 && b == i + 1) ? 0x00ffff : 0x004c4d); // ratio B
+			return;
+		}
+		uint8_t count = omni->stepPaletteCount(mode);
+		int16_t sel = focus >= 0 ? omni->stepPaletteSelected(focus, mode)
+								 : omni->defaultPaletteSelected(mode);
+		uint32_t col = paletteModeColor(mode);
+		uint32_t dim = (col >> 3) & 0x1f1f1f;
+		bool isBar = (mode == STEPMODE_VEL || mode == STEPMODE_LENGTH || mode == STEPMODE_CHANCE ||
+					  mode == PALMODE_NUDGE || mode == PALMODE_ACCUM);
+		for (uint8_t i = 0; i < count; i++)
+		{
+			uint32_t c;
+			if (isBar)
+				c = ((int16_t)i == sel) ? col : ((int16_t)i < sel ? dim : (uint32_t)VLOWWHITE);
+			else
+				c = ((int16_t)i == sel) ? col : dim;
+			strip.setPixelColor(1 + i, c);
+		}
+		return;
+	}
+
 	// While step(s) are held on the overview page, the top row is the value palette.
 	if (heldStepMask_ != 0 && stepMenuPage_ == 0)
 	{
@@ -2326,6 +2553,45 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		stepEdited_ = true;
 		if (heldStepKey_ >= 0 && omni->stepParamWide(pid))
 			omxDisp.displayMessage(omni->stepParamValueString2(heldStepKey_, pid));
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
+
+	// Holding step(s) on the OVERVIEW: the encoder edits the current step-edit mode's
+	// value on the held steps — it must not navigate off into the param pages mid-hold.
+	if (heldStepMask_ != 0 && stepMenuPage_ == 0)
+	{
+		int delta = enc.accel(1);
+		if (delta == 0)
+			delta = dir;
+		for (uint8_t st = 0; st < 16; st++)
+		{
+			if (!(heldStepMask_ & (1 << st)))
+				continue;
+			switch (stepEditMode_)
+			{
+			case STEPMODE_NOTE: // shift the step's notes by a semitone per click
+			{
+				int8_t nts[6];
+				omni->getStepNotes(st, nts);
+				for (uint8_t n = 0; n < 6; n++)
+					if (nts[n] >= 0)
+						nts[n] = (int8_t)constrain(nts[n] + dir, 0, 127);
+				omni->stepSetNotes(st, nts);
+				break;
+			}
+			case STEPMODE_VEL:    omni->editStepParam(st, 0, delta); break;
+			case STEPMODE_LENGTH: omni->editStepParam(st, 2, dir); break;
+			case STEPMODE_REPEAT: omni->editStepRepeat(st, dir); break;
+			case STEPMODE_CHANCE: omni->editStepParam(st, 4, delta); break;
+			case STEPMODE_MATH:   omni->editStepParam(st, 5, dir); break;
+			case STEPMODE_FUNC:   omni->editStepParam(st, 6, dir); break;
+			case STEPMODE_MFX:    omni->editStepParam(st, 3, dir); break;
+			}
+		}
+		stepEdited_ = true;
+		stepHoldUIShown_ = true; // an edit engages the hold UI immediately
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 		return true;
@@ -3778,8 +4044,7 @@ void OmxModeForm::updateLEDs()
 			updateStepLEDs(); // F1/F2/F3 layers light exactly like the Seq view
 			return;
 		}
-		getSelectedMachine()->updateLEDs(); // step row + playhead (machine MIX pass)
-		updateToolsLEDs();                  // tool action keys on the top row
+		updateToolsLEDs(); // action keys + its own step row (triggers only, empties dark)
 		return;
 	}
 

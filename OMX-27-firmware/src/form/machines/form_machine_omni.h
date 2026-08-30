@@ -172,7 +172,9 @@ namespace FormOmni
         // (1 Vel, 2 Length, 3 Repeat, 4 Chance, 5 Math, 6 Func, 7 MFX; 0 Note = elsewhere).
         uint8_t stepPaletteCount(uint8_t mode);                     // palette keys used (0 = n/a)
         void setStepPalette(uint8_t key16, uint8_t mode, uint8_t paletteIndex);
-        int16_t stepPaletteSelected(uint8_t key16, uint8_t mode);   // lit palette index, -1 = none
+        void setParamDefaultPalette(uint8_t mode, uint8_t paletteIndex); // palette -> track default
+        int16_t stepPaletteSelected(uint8_t key16, uint8_t mode);
+        int16_t defaultPaletteSelected(uint8_t mode); // the DEFAULT's lit palette key (-1 = none)   // lit palette index, -1 = none
         String stepValueString(uint8_t key16, uint8_t mode);        // current value, for the OLED
         void resetStepValue(uint8_t key16, uint8_t mode);           // AUX = reset to default
         // Note mode: strip a step's notes but keep it on as a ghost trigger.
@@ -235,6 +237,11 @@ namespace FormOmni
         String paramDefaultBox(uint8_t pid);
         void editParamDefault(uint8_t pid, int delta); // edit + push to unlocked steps
         void editStepParam(uint8_t key16, uint8_t pid, int delta); // edits value, sets its lock
+        void editStepRepeat(uint8_t key16, int delta)               // ratchet count (no lock bit)
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            s->repeat = (uint8_t)constrain((int)s->repeat + delta, 0, 3);
+        }
         bool stepParamLocked(uint8_t key16, uint8_t pid);
         void clearStepParamLock(uint8_t key16, uint8_t pid); // clears the lock and resets to default
 

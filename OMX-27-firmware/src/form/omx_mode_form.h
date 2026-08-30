@@ -214,6 +214,10 @@ private:
 	uint8_t stepMenuPage_ = 0;
 	uint8_t stepMenuSel_ = 0;
 	uint8_t heldPageMask_ = 0;      // F1 + page keys currently held (for loop-range gesture)
+	// F1/F2 used as a modifier this hold (suppresses the param-page quick-tap palette
+	// on their release — keyState is still true during a key's own release event).
+	bool stepF1Used_ = false;
+	bool stepF2Used_ = false;
 	bool pageGestureDone_ = false;  // a range gesture consumed this F1+page press group
 	void onKeyUpdateStep(OMXKeypadEvent e);
 	bool onEncoderStep(Encoder::Update enc);   // returns true if the Step view consumed the encoder

@@ -453,6 +453,15 @@ Full rework of the Tools pages to the user's spec; all verified on device:
   (chord entry); the hold UI/LEDs/AUX-reset/shortcut-freeze all delegate to the Step
   view's implementations.
 
+### 7.5.1 Tools polish (2026-08-30, user feedback — verified on device)
+- TRANSPOSE drops the step row (tall SCOPE cell + the 4 buttons).
+- Hold-step + **encoder** adjusts the held steps' value in the VEL/CHANCE tools
+  (alongside the top-row palette — a hold is an edit gesture).
+- Bars pages: **ghost steps render as outlined bars** (filled = notes, outline =
+  ghost, baseline tick = empty); editing an empty slot **creates a ghost step** and
+  sets its value.
+- EUCLID/GRIDS param text un-clipped (params shifted down 1px into the preview gap).
+
 ## 7. QA follow-up fixes (2026-08-29, after QA pass #2)
 
 **The switch-style "drift" from QA pass #2 is solved — it was a real bug.**

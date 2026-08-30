@@ -1030,8 +1030,8 @@ void OmxDisp::dispToolActionPage(const char *pLabels[], const char *pVals[], uin
 // 1 = max handle), 16 tall per-step value bars beneath (sel 2+i = bar i; value < 0 = no
 // bar). No text — the layout is the interface.
 void OmxDisp::dispToolBarsPage(uint8_t vmin, uint8_t vmax, uint8_t vRange,
-							   const int16_t bars[16], int16_t barMax, int8_t sel, bool editing,
-							   int8_t playhead)
+							   const int16_t bars[16], const uint8_t styles[16], int16_t barMax,
+							   int8_t sel, bool editing, int8_t playhead)
 {
 	if (isMessageActive())
 	{
@@ -1060,18 +1060,22 @@ void OmxDisp::dispToolBarsPage(uint8_t vmin, uint8_t vmax, uint8_t vRange,
 		}
 	}
 
-	// Per-step bars.
+	// Per-step bars: filled = step with notes, outlined = ghost (on, no notes),
+	// baseline tick = no step.
 	const uint8_t y0 = 9, h = 23;
 	for (uint8_t i = 0; i < 16; i++)
 	{
 		int x = i * 8;
-		if (bars[i] >= 0)
+		if (styles[i] != 0 && bars[i] >= 0)
 		{
 			uint8_t bh = (uint8_t)(((int32_t)bars[i] * (h - 2)) / barMax);
-			display.fillRect(x + 2, y0 + (h - 1 - bh), 4, bh + 1, WHITE);
+			if (styles[i] == 2)
+				display.drawRect(x + 2, y0 + (h - 1 - bh), 4, bh + 1, WHITE);
+			else
+				display.fillRect(x + 2, y0 + (h - 1 - bh), 4, bh + 1, WHITE);
 		}
 		else
-			display.drawFastHLine(x + 2, y0 + h - 1, 4, WHITE); // baseline tick = no value
+			display.drawFastHLine(x + 2, y0 + h - 1, 4, WHITE); // baseline tick = no step
 		if (sel == (int8_t)(2 + i))
 		{
 			if (editing)
@@ -1107,7 +1111,7 @@ void OmxDisp::dispToolGenPage(const char *pLabels[], const char *pVals[], uint8_
 		bool inv = isSel && editing;
 		if (inv)
 		{
-			display.fillRect(x + 1, 0, pw - 2, 12, WHITE);
+			display.fillRect(x + 1, 0, pw - 2, 13, WHITE);
 			u8g2_display.setForegroundColor(BLACK);
 			u8g2_display.setBackgroundColor(WHITE);
 		}
@@ -1116,10 +1120,10 @@ void OmxDisp::dispToolGenPage(const char *pLabels[], const char *pVals[], uint8_
 			u8g2_display.setForegroundColor(WHITE);
 			u8g2_display.setBackgroundColor(BLACK);
 		}
-		u8g2centerText(pLabels[i], x, 5, pw, 6);
-		u8g2centerText(pVals[i], x, 12, pw, 6);
+		u8g2centerText(pLabels[i], x, 6, pw, 6);
+		u8g2centerText(pVals[i], x, 13, pw, 6);
 		if (isSel && !editing)
-			display.drawRect(x, 0, pw, 13, WHITE);
+			display.drawRect(x, 0, pw, 14, WHITE);
 	}
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
