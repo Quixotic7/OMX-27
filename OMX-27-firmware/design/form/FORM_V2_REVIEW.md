@@ -424,7 +424,16 @@ correctly, pattern-bank persistence round-trips (switch style survives reboot).
   `patterns_[]`/`kSwitchStyleNames[]`). **Fix:** read the fixed fields into locals and
   commit (clamped) only after the full body read succeeds.
 
-**LOW items still open** (deferred): stuck `mixHeldStepMask_`/hung audition note when a
-track key is pressed while a Mix low-row step is held; TOOLS encoder cursor lands on
-empty cells for tools with <4 params (fixed 4-cell stride); EUCLID rotation not reduced
-`mod pageLen`; two dead FRAM clamps (`potMode>1`/`channel>15` on 1/4-bit fields).
+**LOW items — all fixed 2026-08-29 (verified on device where observable):**
+- **Stuck `mixHeldStepMask_`/hung audition note**: a low-row step release whose audition
+  bit is still set now routes to `onKeyUpdateMixStep` (finishing the note-off + clearing
+  the mask) even after a track key went down mid-hold. *Verified:* MIDI monitor shows a
+  balanced NoteOn/NoteOff for the exact gesture.
+- **TOOLS encoder cursor stopped on empty cells**: replaced the fixed 4-cell stride
+  (`toolsCursor_/4`, `%4`) with `(toolIndex_, toolCell_)` walking a per-tool
+  `kToolCells[]` count — the cursor only rests on real cells and crosses tools cleanly.
+  *Verified:* one click advances ROTATE→MIRROR→SHUFFLE→TRANSPOSE, name popping each cross.
+- **EUCLID rotation**: `rot` is now reduced `mod pageLen` before `rotatePattern` (only
+  bit that mattered for short pages).
+- **Dead FRAM clamps**: dropped the `potMode>1`/`channel>15` clamps (1/4-bit fields can't
+  exceed range); `sanitizeSeq()` keeps only the meaningful `potBank`/`rate` clamps.

@@ -215,7 +215,8 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	notesCursor_ = 0; // open on the keyboard page, select mode
 	miCursor_ = 0; // MI opens on the keyboard, select mode
 	mixCursor_ = 0; // Mix opens on the track overview
-	toolsCursor_ = 0; // Tools opens on the first tool (ROTATE)
+	toolIndex_ = 0; // Tools opens on the first tool (ROTATE)
+	toolCell_ = 0;
 	mixHeldStepMask_ = 0;
 	mixHeldStepKey_ = -1;
 	// Clear the F1+page gesture state too: a page key still physically held across a view
@@ -1434,6 +1435,12 @@ static const char *kToolNames[TOOL_COUNT] = {
 	"ROTATE", "MIRROR", "SHUFFLE", "TRANSPOSE", "SCALE SNAP", "VEL RANDOM",
 	"CHANCE RND", "HUMANIZE", "QUANTIZE", "EUCLID", "GRIDS"};
 
+// Navigable encoder cells per tool (= editable param count, min 1 so the cursor can rest on
+// a param-less tool). Keeps the cursor off the blank cells of the fixed display grid.
+static const uint8_t kToolCells[TOOL_COUNT] = {
+	1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 4};
+//  ROT MIR SHF TRN SCL VEL CHN HUM QNT EUC GRD
+
 // Distinct hue per tool for the action keys.
 static const uint32_t kToolColors[TOOL_COUNT] = {
 	CYAN, LTCYAN, DKCYAN, ORANGE, DKORANGE, YELLOW, DKYELLOW, MAGENTA, ROSE, GREEN, BLUE};
@@ -1474,7 +1481,7 @@ void OmxModeForm::onKeyUpdateTools(OMXKeypadEvent e)
 		return;
 
 	auto omni = getSelectedMachine();
-	uint8_t tool = toolsCursor_ / 4;
+	uint8_t tool = toolIndex_;
 	switch (tool)
 	{
 	case TOOL_ROTATE:
@@ -1567,14 +1574,33 @@ bool OmxModeForm::onEncoderTools(int dir)
 		return true;
 	if (getEncoderSelect())
 	{
-		uint8_t prevTool = toolsCursor_ / 4;
-		toolsCursor_ = (uint8_t)constrain((int)toolsCursor_ + dir, 0, TOOL_COUNT * 4 - 1);
-		if (toolsCursor_ / 4 != prevTool)
-			omxDisp.displayMessage(kToolNames[toolsCursor_ / 4]); // page crossed: name the tool
+		uint8_t prevTool = toolIndex_;
+		if (dir > 0) // next cell, then cross into the next tool at its first cell
+		{
+			if (toolCell_ + 1 < kToolCells[toolIndex_])
+				toolCell_++;
+			else if (toolIndex_ + 1 < TOOL_COUNT)
+			{
+				toolIndex_++;
+				toolCell_ = 0;
+			}
+		}
+		else // previous cell, then cross into the previous tool at its last cell
+		{
+			if (toolCell_ > 0)
+				toolCell_--;
+			else if (toolIndex_ > 0)
+			{
+				toolIndex_--;
+				toolCell_ = kToolCells[toolIndex_] - 1;
+			}
+		}
+		if (toolIndex_ != prevTool)
+			omxDisp.displayMessage(kToolNames[toolIndex_]); // tool crossed: name it
 		omxDisp.setDirty();
 		return true;
 	}
-	uint8_t tool = toolsCursor_ / 4, cell = toolsCursor_ % 4;
+	uint8_t tool = toolIndex_, cell = toolCell_;
 	switch (tool)
 	{
 	case TOOL_ROTATE:
@@ -1614,7 +1640,7 @@ bool OmxModeForm::onEncoderTools(int dir)
 
 void OmxModeForm::updateToolsLEDs()
 {
-	uint8_t tool = toolsCursor_ / 4;
+	uint8_t tool = toolIndex_;
 	uint32_t c = kToolColors[tool];
 	// Light the tool's action keys; everything else on the top row stays dark.
 	switch (tool)
@@ -1645,7 +1671,7 @@ void OmxModeForm::onDisplayTools()
 		return;
 	}
 
-	uint8_t tool = toolsCursor_ / 4, cell = toolsCursor_ % 4;
+	uint8_t tool = toolIndex_, cell = toolCell_;
 	const char *labels[4] = {"", "", "", ""};
 	String vals[4];
 	switch (tool)
@@ -3506,6 +3532,14 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 		if (thisKey >= 3 && thisKey < 11 && omxFormGlobal.shortcutMode != FORMSHORTCUT_F3)
 		{
 			onKeyUpdateMix(e);
+			return;
+		}
+		// A low-row step that began an audition must finish it on release even if a track key
+		// went down meanwhile — otherwise the release routes to onKeyUpdateMixHold below and
+		// leaves the mask bit set with the audition note still ringing.
+		if (!e.down() && thisKey >= 11 && thisKey < 27 && (mixHeldStepMask_ & (1 << (thisKey - 11))))
+		{
+			onKeyUpdateMixStep(e);
 			return;
 		}
 		// Low-row per-track controls while a track is held.

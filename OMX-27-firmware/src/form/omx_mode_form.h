@@ -241,8 +241,10 @@ private:
 	void onDisplayMix();        // render the Mix view's encoder pages
 	// ---- Tools view (AUX+19): each menu page is a tool; keys 3-10 are that tool's
 	// action buttons; the low row auditions steps (like Mix). All tools act on the
-	// selected track. Flat cursor: page = toolsCursor_/4, param cell = toolsCursor_%4.
-	uint8_t toolsCursor_ = 0;
+	// selected track. The encoder walks (toolIndex_, toolCell_): the cursor only stops on
+	// a tool's real cells (kToolCells[]) and crossing a tool boundary pops its name.
+	uint8_t toolIndex_ = 0;
+	uint8_t toolCell_ = 0;
 	// Tool params (persist while in the mode):
 	bool toolScopeAll_ = false;              // ROTATE: whole loop vs active page
 	uint8_t toolVelMin_ = 64, toolVelMax_ = 127;

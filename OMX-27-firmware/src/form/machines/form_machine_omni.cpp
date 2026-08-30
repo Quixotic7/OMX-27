@@ -399,18 +399,17 @@ namespace FormOmni
     }
 
     // Clamp seq_ fields a raw pattern blit can't guarantee. Called from setSeq (bank load +
-    // pattern switch) and loadFromDisk (FRAM). An out-of-range rate indexes past kSeqRates[]
-    // (and feeds a `/ rate` divide); an out-of-range potBank indexes past pots[][].
+    // pattern switch) and loadFromDisk (FRAM). Only the two fields whose valid range is
+    // narrower than their bitfield width can go bad: potBank (:3 = 0-7, but NUM_CC_BANKS
+    // pots banks) indexes past pots[][]; rate (:5 = 0-31, but kNumSeqRates entries) indexes
+    // past kSeqRates[] and feeds a `/ rate` divide. channel (:4) and potMode (:1) already
+    // can't exceed their valid range, so they need no clamp.
     void FormMachineOmni::sanitizeSeq()
     {
         if (seq_.potBank >= NUM_CC_BANKS)
             seq_.potBank = 0;
-        if (seq_.potMode > 1)
-            seq_.potMode = 0;
         if (seq_.rate >= kNumSeqRates)
             seq_.rate = 9; // 1:16 default
-        if (seq_.channel > 15)
-            seq_.channel = 0;
     }
 
     // ---- Tools view operations ----
@@ -587,8 +586,9 @@ namespace FormOmni
         bool pattern[euclidean::EuclideanMath::kPatternSize];
         euclidean::EuclideanMath::clearPattern(pattern);
         euclidean::EuclideanMath::generateEuclidPattern(pattern, pulses > len ? len : pulses, len);
-        if (rot > 0)
-            euclidean::EuclideanMath::rotatePattern(pattern, len, rot);
+        uint8_t r = (len > 0) ? (rot % len) : 0; // rot is 0-15; reduce mod page length
+        if (r > 0)
+            euclidean::EuclideanMath::rotatePattern(pattern, len, r);
         applyRhythmToPage(pattern, len, nullptr);
     }
 
