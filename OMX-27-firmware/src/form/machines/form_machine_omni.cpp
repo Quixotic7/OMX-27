@@ -8,6 +8,8 @@
 #include "../../hardware/omx_disp.h"
 #include "../../hardware/omx_leds.h"
 #include "omni_note_editor.h"
+#include "../../modes/euclidean_sequencer.h" // EuclideanMath (static helpers) for the Euclid tool
+#include "../../modes/retro_grids.h"         // grids::GridsChannel for the Grids tool
 #include <U8g2_for_Adafruit_GFX.h>
 // #include <algorithm>
 
@@ -162,12 +164,6 @@ namespace FormOmni
     {
     }
 
-    FormMachineInterface *FormMachineOmni::getClone()
-    {
-        auto clone = new FormMachineOmni();
-        return clone;
-    }
-
     ParamManager *FormMachineOmni::getParams()
     {
         return &trackParams_;
@@ -231,9 +227,27 @@ namespace FormOmni
         return doesConsumeKeys();
     }
 
-    const char *FormMachineOmni::getF3shortcutName()
+    void FormMachineOmni::onEncoderChanged(Encoder::Update enc)
     {
-        return "LEN | RATE";
+        if (getEncoderSelect())
+            onEncoderChangedSelectParam(enc);
+        else
+            onEncoderChangedEditParam(enc);
+    }
+
+    void FormMachineOmni::seqNoteOn(MidiNoteGroup noteGroup, uint8_t midiFx)
+    {
+        if (context_ == nullptr || noteOnFuncPtr == nullptr)
+            return;
+        noteOnFuncPtr(context_, noteGroup, midiFx);
+    }
+
+    void FormMachineOmni::seqNoteOff(MidiNoteGroup noteGroup, uint8_t midiFx)
+    {
+        if (context_ == nullptr || noteOffFuncPtr == nullptr)
+            return;
+        noteGroup.noteOff = true;
+        noteOffFuncPtr(context_, noteGroup, midiFx);
     }
 
     bool FormMachineOmni::getEncoderSelect()
@@ -384,9 +398,194 @@ namespace FormOmni
         return &getTrack()->steps[selStep_];
     }
 
+    // ---- Tools view operations ----
+
+    // Shift steps by one position. wholeTrack = the whole playing loop (flat length);
+    // otherwise just the active page's steps (its own length — polymeter safe).
+    void FormMachineOmni::toolRotate(int8_t dir, bool wholeTrack)
+    {
+        auto track = getTrack();
+        uint8_t start = wholeTrack ? 0 : (uint8_t)(activePage_ * 16);
+        uint8_t len = wholeTrack ? track->getLength() : getPageLen(activePage_);
+        if (len < 2 || dir == 0)
+            return;
+        if (dir > 0) // shift right: last -> first
+        {
+            Step tmp = track->steps[start + len - 1];
+            for (uint8_t i = len - 1; i > 0; i--)
+                track->steps[start + i] = track->steps[start + i - 1];
+            track->steps[start] = tmp;
+        }
+        else // shift left: first -> last
+        {
+            Step tmp = track->steps[start];
+            for (uint8_t i = 0; i < (uint8_t)(len - 1); i++)
+                track->steps[start + i] = track->steps[start + i + 1];
+            track->steps[start + len - 1] = tmp;
+        }
+    }
+
+    void FormMachineOmni::toolMirror(bool wholeTrack)
+    {
+        auto track = getTrack();
+        uint8_t start = wholeTrack ? 0 : (uint8_t)(activePage_ * 16);
+        uint8_t len = wholeTrack ? track->getLength() : getPageLen(activePage_);
+        for (uint8_t i = 0; i < len / 2; i++)
+        {
+            Step tmp = track->steps[start + i];
+            track->steps[start + i] = track->steps[start + len - 1 - i];
+            track->steps[start + len - 1 - i] = tmp;
+        }
+    }
+
+    void FormMachineOmni::toolShuffle(bool wholeTrack)
+    {
+        auto track = getTrack();
+        uint8_t start = wholeTrack ? 0 : (uint8_t)(activePage_ * 16);
+        uint8_t len = wholeTrack ? track->getLength() : getPageLen(activePage_);
+        for (uint8_t i = len; i > 1; i--) // Fisher-Yates
+        {
+            uint8_t j = (uint8_t)random(0, i); // 0..i-1
+            Step tmp = track->steps[start + i - 1];
+            track->steps[start + i - 1] = track->steps[start + j];
+            track->steps[start + j] = tmp;
+        }
+    }
+
+    void FormMachineOmni::toolScaleRemap()
+    {
+        if (omxFormGlobal.musicScale == nullptr)
+            return;
+        auto track = getTrack();
+        for (uint8_t st = 0; st < 64; st++)
+            for (uint8_t n = 0; n < 6; n++)
+            {
+                int8_t note = track->steps[st].notes[n];
+                if (note >= 0)
+                    track->steps[st].notes[n] = omxFormGlobal.musicScale->remapNoteToScale((uint8_t)note);
+            }
+    }
+
+    void FormMachineOmni::toolQuantize(uint8_t amtPct)
+    {
+        amtPct = constrain(amtPct, 0, 100);
+        auto track = getTrack();
+        for (uint8_t st = 0; st < 64; st++)
+            track->steps[st].nudge = (int8_t)((int)track->steps[st].nudge * (100 - amtPct) / 100);
+    }
+
+    void FormMachineOmni::toolChanceRnd(uint8_t pmin, uint8_t pmax)
+    {
+        if (pmin > pmax)
+        {
+            uint8_t t = pmin; pmin = pmax; pmax = t;
+        }
+        auto track = getTrack();
+        for (uint8_t st = 0; st < 64; st++)
+            if (track->steps[st].isOn())
+                track->steps[st].prob = random(pmin, pmax + 1);
+    }
+
+    void FormMachineOmni::toolTranspose(int8_t semis)
+    {
+        auto track = getTrack();
+        for (uint8_t st = 0; st < 64; st++)
+            for (uint8_t n = 0; n < 6; n++)
+            {
+                int8_t note = track->steps[st].notes[n];
+                if (note >= 0)
+                    track->steps[st].notes[n] = (int8_t)constrain(note + semis, 0, 127);
+            }
+    }
+
+    void FormMachineOmni::toolRandomVel(uint8_t vmin, uint8_t vmax)
+    {
+        if (vmin > vmax)
+        {
+            uint8_t t = vmin; vmin = vmax; vmax = t;
+        }
+        auto track = getTrack();
+        for (uint8_t st = 0; st < 64; st++)
+            if (track->steps[st].hasNotes())
+                track->steps[st].vel = random(vmin, vmax + 1);
+    }
+
+    void FormMachineOmni::toolHumanize(uint8_t amtPct)
+    {
+        int range = (int)(60L * constrain(amtPct, 0, 100) / 100); // nudge is +/-60
+        auto track = getTrack();
+        for (uint8_t st = 0; st < 64; st++)
+            if (track->steps[st].isOn())
+                track->steps[st].nudge = (int8_t)random(-range, range + 1);
+    }
+
+    // Apply a boolean rhythm to the active page: on-steps trigger (empty ones are
+    // stamped with middle C), off-steps are silenced (notes + trig cleared).
+    void FormMachineOmni::applyRhythmToPage(const bool *pattern, uint8_t len, const uint8_t *vels)
+    {
+        auto track = getTrack();
+        uint8_t start = (uint8_t)(activePage_ * 16);
+        for (uint8_t i = 0; i < len && i < 16; i++)
+        {
+            Step *s = &track->steps[start + i];
+            if (pattern[i])
+            {
+                s->trig = 1;
+                if (!s->hasNotes())
+                    s->notes[0] = 60;
+                if (vels != nullptr)
+                    s->vel = vels[i];
+            }
+            else
+            {
+                for (uint8_t n = 0; n < 6; n++)
+                    s->notes[n] = -1;
+                s->trig = 0;
+            }
+        }
+    }
+
+    void FormMachineOmni::toolEuclid(uint8_t pulses, uint8_t rot)
+    {
+        uint8_t len = getPageLen(activePage_);
+        bool pattern[euclidean::EuclideanMath::kPatternSize];
+        euclidean::EuclideanMath::clearPattern(pattern);
+        euclidean::EuclideanMath::generateEuclidPattern(pattern, pulses > len ? len : pulses, len);
+        if (rot > 0)
+            euclidean::EuclideanMath::rotatePattern(pattern, len, rot);
+        applyRhythmToPage(pattern, len, nullptr);
+    }
+
+    void FormMachineOmni::toolGrids(uint8_t inst, uint8_t x, uint8_t y, uint8_t density)
+    {
+        uint8_t len = getPageLen(activePage_);
+        bool pattern[16];
+        uint8_t vels[16];
+        grids::GridsChannel channel;
+        const uint8_t threshold = (uint8_t)~density;
+        for (uint8_t i = 0; i < len && i < 16; i++)
+        {
+            channel.setStep(i * 2); // grids patterns are 32 steps; map a 16-step page to 8ths
+            uint8_t level = channel.level(inst, x, y);
+            pattern[i] = level > threshold;
+            // Velocity from how far above the threshold the level sits (like GridsWrapper).
+            vels[i] = pattern[i] ? (uint8_t)constrain(32 + (int)(95.f * float(level - threshold) / float(256 - threshold)), 32, 127) : 100;
+        }
+        applyRhythmToPage(pattern, len, vels);
+    }
+
     uint8_t FormMachineOmni::potLockCC(uint8_t slot)
     {
         return (slot < NUM_CC_POTS) ? pots[seq_.potBank][slot] : 0;
+    }
+
+    // Send one pot-bank slot's CC live on the track's channel (the Mix CC page's
+    // encoder edits go through here — same path a physical knob turn takes).
+    void FormMachineOmni::sendPotCC(uint8_t slot, uint8_t val)
+    {
+        if (slot >= NUM_CC_POTS || !seq_.sendMidi)
+            return;
+        MM::sendControlChange(pots[seq_.potBank][slot], val, seq_.channel + 1);
     }
 
     void FormMachineOmni::recordNoteToStep(uint8_t absStep, int8_t note)
@@ -2635,13 +2834,6 @@ namespace FormOmni
     // AUX + Top 2 = Reset
     // AUX + Top 3 = Flip play direction if forward or reverse
     // AUX + Top 4 = Increment play direction mode
-    void FormMachineOmni::onAUXFunc(uint8_t funcKey) {}
-
-    // Bump whenever the OmniSeq layout changes so old saves are skipped rather than
-    // blitted into a mismatched struct. (The global EEPROM_VERSION also gates loads,
-    // but this makes an OmniSeq change safe on its own.)
-    static const uint8_t kOmniSaveVersion = 8; // v8: default MIDI ch 1-8 + default velocity 100
-
     int FormMachineOmni::saveToDisk(int startingAddress, Storage *storage)
 	{
         int saveSize = sizeof(OmniSeq);
@@ -2679,6 +2871,16 @@ namespace FormOmni
                 *current = storage->read(startingAddress + j);
                 current++;
             }
+            // Sanitize ranges the blit can't guarantee (older saves within the same
+            // version have shipped out-of-range values, e.g. potBank 7 -> "Bank 8").
+            if (seq_.potBank >= NUM_CC_BANKS)
+                seq_.potBank = 0;
+            if (seq_.potMode > 1)
+                seq_.potMode = 0;
+            if (seq_.rate >= kNumSeqRates)
+                seq_.rate = 9; // 1:16 default
+            if (seq_.channel > 15)
+                seq_.channel = 0;
         }
         startingAddress += saveSize;
 

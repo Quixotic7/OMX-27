@@ -1,13 +1,24 @@
 #pragma once
-#include "form_machine_interface.h"
+#include "../../ClearUI/ClearUI_Input.h"
+#include "../../hardware/omx_keypad.h"
+#include "../../utils/param_manager.h"
+#include "../../config.h"
+#include "../omx_form_global.h"
+#include "../../hardware/storage.h"
 #include "omni_structs.h"
 #include "omni_transpose_pattern.h"
 
 namespace FormOmni
 {
+    // Bump whenever the OmniSeq layout changes so old saves are skipped rather than
+    // blitted into a mismatched struct. Also stamps the V3 pattern-bank file.
+    constexpr uint8_t kOmniSaveVersion = 8; // v8: default MIDI ch 1-8 + default velocity 100
 
-    // Very powerful step sequencer
-    class FormMachineOmni : public FormMachineInterface
+
+    // FORM's one (and only) track engine — the polyphonic step sequencer. The old
+    // FormMachineInterface machine abstraction is collapsed into this concrete class
+    // (FORM_V2_REVIEW.md §1.1): the shell owns 8 of these directly.
+    class FormMachineOmni
     {
     public:
         FormMachineOmni();
@@ -15,53 +26,50 @@ namespace FormOmni
 
 	    void onSelected();
 
-        FormMachineType getType() { return FORMMACH_OMNI; }
-        FormMachineInterface *getClone() override;
+        // Note-out callbacks into the shell (kept from the old interface).
+        void setContext(void *context) { context_ = context; }
+        void setNoteOnFptr(void (*fptr)(void *, MidiNoteGroup, uint8_t)) { noteOnFuncPtr = fptr; }
+        void setNoteOffFptr(void (*fptr)(void *, MidiNoteGroup, uint8_t)) { noteOffFuncPtr = fptr; }
 
-        bool getMute() override;
-        bool getSolo() override;
-        void setMute(bool isMuted) override;
-        void setSolo(bool isSoloed) override;
-	    bool didTriggerThisStep() override;
-
-
-        bool doesConsumePots() override;
-        bool doesConsumeDisplay() override;
-        bool doesConsumeKeys() override; 
-        bool doesConsumeLEDs() override; 
-
-	    const char* getF3shortcutName() override;
-	    bool getEncoderSelect() override;
+        bool getMute();
+        bool getSolo();
+        void setMute(bool isMuted);
+        void setSolo(bool isSoloed);
+	    bool didTriggerThisStep();
 
 
+        // Encoder turn: dispatch to select (navigate) or edit per getEncoderSelect().
+        void onEncoderChanged(Encoder::Update enc);
 
-	    void playBackStateChanged(bool newIsPlaying) override;
-	    void resetPlayback() override;
+        bool doesConsumePots();
+        bool doesConsumeDisplay();
+        bool doesConsumeKeys(); 
+        bool doesConsumeLEDs(); 
 
-	    void selectMidiFx(uint8_t mfxIndex, bool dispMsg) override;
-	    uint8_t getSelectedMidiFX() override;
+	    bool getEncoderSelect();
+
+
+
+	    void playBackStateChanged(bool newIsPlaying);
+	    void resetPlayback();
+
+	    void selectMidiFx(uint8_t mfxIndex, bool dispMsg);
+	    uint8_t getSelectedMidiFX();
 
 
         // Standard Updates
-        void onPotChanged(int potIndex, int prevValue, int newValue, int analogDelta) override;
-        void onClockTick() override;
-        void loopUpdate() override;
-        bool updateLEDs() override;
-        void onEncoderButtonDown() override;
-        bool onKeyUpdate(OMXKeypadEvent e) override;
-        bool onKeyHeldUpdate(OMXKeypadEvent e) override;
+        void onPotChanged(int potIndex, int prevValue, int newValue, int analogDelta);
+        void onClockTick();
+        void loopUpdate();
+        bool updateLEDs();
+        void onEncoderButtonDown();
+        bool onKeyUpdate(OMXKeypadEvent e);
+        bool onKeyHeldUpdate(OMXKeypadEvent e);
 
-        void onDisplayUpdate() override;
+        void onDisplayUpdate();
 
-        // AUX + Top 1 = Play Stop
-        // For Omni:
-        // AUX + Top 2 = Reset
-        // AUX + Top 3 = Flip play direction if forward or reverse
-        // AUX + Top 4 = Increment play direction mode
-        void onAUXFunc(uint8_t funcKey) override;
-
-        int saveToDisk(int startingAddress, Storage *storage) override;
-	    int loadFromDisk(int startingAddress, Storage *storage) override;
+        int saveToDisk(int startingAddress, Storage *storage);
+	    int loadFromDisk(int startingAddress, Storage *storage);
 
         // v2 shell: let the container drive the editor UI mode (silent — the container
         // shows the v2 view name).
@@ -248,7 +256,21 @@ namespace FormOmni
         {
             return (slot < 5) ? getTrack()->steps[key16toStep(key16)].potVals[slot] : (int8_t)-1;
         }
+        // ---- Tools view operations (FORM_V2_REVIEW.md; destructive, act on this track) ----
+        void toolRotate(int8_t dir, bool wholeTrack);           // shift steps left/right (page or whole loop)
+        void toolMirror(bool wholeTrack);                       // reverse step order (page or whole loop)
+        void toolShuffle(bool wholeTrack);                      // random permutation of steps (page or whole loop)
+        void toolScaleRemap();                                  // snap every note to the current scale
+        void toolQuantize(uint8_t amtPct);                      // pull every nudge toward the grid by amt%
+        void toolChanceRnd(uint8_t pmin, uint8_t pmax);         // randomize step probability of on-steps
+        void toolTranspose(int8_t semis);                       // transpose every note, clamped 0-127
+        void toolRandomVel(uint8_t vmin, uint8_t vmax);         // randomize velocity of note steps
+        void toolHumanize(uint8_t amtPct);                      // random nudge within +/- amt% of max
+        void toolEuclid(uint8_t pulses, uint8_t rot);           // euclidean rhythm onto the active page
+        void toolGrids(uint8_t inst, uint8_t x, uint8_t y, uint8_t density); // grids rhythm onto the active page
+
         uint8_t potLockCC(uint8_t slot); // the CC number a pot slot maps to (current pot bank)
+        void sendPotCC(uint8_t slot, uint8_t val); // live CC send on the track's bank/channel
 
         // Live recording: the absolute step (0-63) to record a played note into — the playing
         // step, quantized to nearest (past the step's midpoint rounds up to the next step).
@@ -293,6 +315,17 @@ namespace FormOmni
         }
 
     private:
+        // Tools: shared rhythm-apply for the Euclid/Grids generators.
+        void applyRhythmToPage(const bool *pattern, uint8_t len, const uint8_t *vels);
+
+        // Note-out into the shell (kept from the old interface).
+        void seqNoteOn(MidiNoteGroup noteGroup, uint8_t midiFx);
+        void seqNoteOff(MidiNoteGroup noteGroup, uint8_t midiFx);
+
+        void *context_ = nullptr;
+        void (*noteOnFuncPtr)(void *, MidiNoteGroup, uint8_t) = nullptr;
+        void (*noteOffFuncPtr)(void *, MidiNoteGroup, uint8_t) = nullptr;
+
         OmniSeq seq_;
         OmniSeqDynamic seqDynamic_;
 

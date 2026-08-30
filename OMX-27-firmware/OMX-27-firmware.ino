@@ -90,10 +90,17 @@ OmxModeInterface *activeOmxMode;
 //   0x01 ENC:  [6]=dir(0=CCW,1=none,2=CW) [7]=count [8]=speedup
 //   0x02 EBTN: [6]=action(0=down,1=up,2=upLong)
 //   0x03 POT:  [6]=pot(0-4) [7]=value(0-127)
+extern OmxScreensaver omxScreensaver; // defined below
+void saveToStorage(void);   // defined below
+
 void omxInjectInput(const uint8_t *d, unsigned n)
 {
 	if (activeOmxMode == nullptr || n < 6)
 		return;
+	// Injected input counts as user activity: without this the screensaver blanks the
+	// OLED mid-QA while injected events keep silently mutating mode state underneath.
+	omxScreensaver.resetCounter();
+	sysSettings.screenSaverMode = false;
 	switch (d[5])
 	{
 	case 0x00: // KEY
@@ -131,6 +138,13 @@ void omxInjectInput(const uint8_t *d, unsigned n)
 				activeOmxMode->onEncoderButtonUpLong();
 		}
 		break;
+	case 0x04: // SAVE — persist state exactly like the enc-edit + AUX gesture
+	{
+		omxDisp.displayMessage("Saving...");
+		saveToStorage();
+		omxDisp.displayMessage("Saved State");
+		break;
+	}
 	case 0x03: // POT
 		if (n >= 8 && d[6] < 5)
 		{

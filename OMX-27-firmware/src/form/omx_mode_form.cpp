@@ -12,6 +12,10 @@
 #include "machines/form_machine_omni.h"
 #include "omx_form_global.h"
 
+#if BOARDTYPE == OMX2040
+#include <LittleFS.h> // V3 pattern-bank persistence (see saveBankToFS)
+#endif
+
 
 
 
@@ -36,7 +40,7 @@ OmxModeForm::OmxModeForm()
 		machines_[i]->setContext(this);
 		machines_[i]->setNoteOnFptr(&OmxModeForm::seqNoteOnForwarder);
 		machines_[i]->setNoteOffFptr(&OmxModeForm::seqNoteOffForwarder);
-		static_cast<FormOmni::FormMachineOmni *>(machines_[i])->setChannel(i); // tracks default to MIDI ch 1-8
+		machines_[i]->setChannel(i); // tracks default to MIDI ch 1-8
 		trackHue_[i] = i * (256 / kNumMachines); // spread 8 hues around the wheel
 	}
 
@@ -92,7 +96,7 @@ void OmxModeForm::previewKeyOn(uint8_t key, int8_t note)
 	if (key >= 27 || note < 0 || note > 127)
 		return;
 	previewKeyOff(key); // never leak an earlier note still ringing on this key
-	static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine())->previewNote(note, true);
+	getSelectedMachine()->previewNote(note, true);
 	previewNote_[key] = note;
 	previewMach_[key] = selectedMachine_;
 }
@@ -104,7 +108,7 @@ int8_t OmxModeForm::previewKeyOff(uint8_t key)
 	int8_t note = previewNote_[key];
 	if (note >= 0)
 	{
-		static_cast<FormOmni::FormMachineOmni *>(machines_[previewMach_[key]])->previewNote(note, false);
+		machines_[previewMach_[key]]->previewNote(note, false);
 		previewNote_[key] = -1;
 	}
 	return note;
@@ -124,39 +128,9 @@ void OmxModeForm::selectMachine(uint8_t machineIndex)
 	machines_[machineIndex]->onSelected();
 }
 
-FormMachineInterface *OmxModeForm::getSelectedMachine()
+FormOmni::FormMachineOmni *OmxModeForm::getSelectedMachine()
 {
 	return machines_[selectedMachine_];
-}
-
-void OmxModeForm::changeMachineAtIndex(uint8_t machineIndex, uint8_t machineType)
-{
-	if (isMachineValid(machineIndex) == false)
-		return;
-
-	// v2 single-engine: every track is the OMNI engine. machineType is retained in the
-	// signature for save/load compatibility but no longer selects a type.
-	(void)machineType;
-	setMachineTo(machineIndex, new FormOmni::FormMachineOmni());
-}
-
-void OmxModeForm::setMachineTo(uint8_t machineIndex, FormMachineInterface *ptr)
-{
-	if (isMachineValid(machineIndex) == false)
-		return;
-
-	// v2: the machine cut/copy/paste/undo buffers are gone (patterns + the step buffer
-	// cover it), so the old machine is simply deleted.
-	if (machines_[machineIndex] != nullptr)
-	{
-		delete machines_[machineIndex];
-	}
-
-	machines_[machineIndex] = ptr;
-	machines_[machineIndex]->setContext(this);
-	machines_[machineIndex]->setMachineIndex(machineIndex);
-	machines_[machineIndex]->setNoteOnFptr(&OmxModeForm::seqNoteOnForwarder);
-	machines_[machineIndex]->setNoteOffFptr(&OmxModeForm::seqNoteOffForwarder);
 }
 
 // ---- Patterns (v2 data layer) ----
@@ -166,7 +140,7 @@ void OmxModeForm::snapshotActivePattern()
 {
 	for (uint8_t i = 0; i < kNumMachines; i++)
 	{
-		auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[i]);
+		auto omni = machines_[i];
 		patterns_[activePattern_].tracks[i] = omni->getSeq();
 	}
 }
@@ -175,7 +149,7 @@ void OmxModeForm::loadPatternIntoMachines(uint8_t index)
 {
 	for (uint8_t i = 0; i < kNumMachines; i++)
 	{
-		auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[i]);
+		auto omni = machines_[i];
 		omni->setSeq(patterns_[index].tracks[i]);
 	}
 }
@@ -241,6 +215,9 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	notesCursor_ = 0; // open on the keyboard page, select mode
 	miCursor_ = 0; // MI opens on the keyboard, select mode
 	mixCursor_ = 0; // Mix opens on the track overview
+	toolsCursor_ = 0; // Tools opens on the first tool (ROTATE)
+	mixHeldStepMask_ = 0;
+	mixHeldStepKey_ = -1;
 	// Clear the F1+page gesture state too: a page key still physically held across a view
 	// switch releases into the new view's handler, so its bit would otherwise stay stuck and
 	// fire a phantom loop-range on the next F1+page press.
@@ -253,6 +230,7 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	switch (view)
 	{
 	case FORMVIEW_MIX: uiMode = FormOmni::OMNIUIMODE_MIX; break;
+	case FORMVIEW_TOOLS: uiMode = FormOmni::OMNIUIMODE_MIX; break; // step-row LEDs + playhead
 	case FORMVIEW_STEP: uiMode = FormOmni::OMNIUIMODE_CONFIG; break;
 	case FORMVIEW_TRANSPOSE: uiMode = FormOmni::OMNIUIMODE_TRANSPOSE; break;
 	case FORMVIEW_NOTES: uiMode = FormOmni::OMNIUIMODE_NOTEEDIT; break;
@@ -261,12 +239,12 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	if (uiMode != 255)
 	{
 		for (uint8_t i = 0; i < kNumMachines; i++)
-			static_cast<FormOmni::FormMachineOmni *>(machines_[i])->setUiMode(uiMode);
+			machines_[i]->setUiMode(uiMode);
 	}
 
 	if (!silent)
 	{
-		static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI"};
+		static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI", "TOOLS"};
 		omxDisp.displayMessage(kViewNames[view]);
 	}
 	omxLeds.setDirty();
@@ -464,7 +442,7 @@ void OmxModeForm::onDisplayPatterns()
 			progress = (float)seqConfig.currentClockTick / 384.0f; // 1 bar = PPQ*4 ticks
 		else
 		{
-			auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+			auto omni = getSelectedMachine();
 			progress = omni->loopProgress();
 		}
 	}
@@ -568,7 +546,7 @@ bool OmxModeForm::onEncoderMI(int dir)
 		omxLeds.setDirty();
 		return true;
 	}
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	if (miCursor_ >= 1 && miCursor_ <= 4) // scale params
 		notesEditScaleParam(miCursor_ - 1, dir);
 	else if (miCursor_ == 5) // channel
@@ -598,7 +576,7 @@ bool OmxModeForm::onEncoderButtonMI()
 		// Confirm the Yes/No choice: YES clears the selected track's pattern, NO cancels.
 		if (clearSel_ == 1)
 		{
-			static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine())->clearTrackSteps();
+			getSelectedMachine()->clearTrackSteps();
 			omxDisp.displayMessage("CLEARED");
 		}
 		closeClearSub();
@@ -624,7 +602,7 @@ bool OmxModeForm::onEncoderButtonMI()
 
 void OmxModeForm::onDisplayMI()
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 
 	// Scale page (cursor 1-4): Root / Scale / Lock / Group.
 	if (miCursor_ >= 1 && miCursor_ <= 4)
@@ -712,7 +690,7 @@ static const int8_t kNotesKeyBase[27] = {
 // deduped, up to 6). A single held key writes a single note; holding several writes a chord.
 void OmxModeForm::notesSetChordFromHeld()
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	int8_t notes[6];
 	uint8_t cnt = 0;
 	for (uint8_t k = 3; k < 27; k++)
@@ -753,7 +731,7 @@ void OmxModeForm::recordPlayedNote(int8_t note)
 		return;
 	if (recHeldCount_ >= 8)
 		return; // full — don't clear a step's content for a note we can't record
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	int8_t nudge;
 	uint8_t step = omni->recordResolveStep(recQuantize_, nudge); // resolve step + nudge at play time
 	if (step >= 64)
@@ -776,7 +754,7 @@ void OmxModeForm::recordPlayedNote(int8_t note)
 // into the track it was recorded on, even if the selection changed while the note was held.
 void OmxModeForm::commitRecHeld(const RecHeld &h)
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[h.track]);
+	auto omni = machines_[h.track];
 	omni->recordNoteToStep(h.step, h.note); // add note (dedup, default vel if the step was empty)
 	omni->setStepNudge(h.step, h.nudge);
 	float sm = omni->stepMicros();
@@ -815,7 +793,7 @@ void OmxModeForm::flushRecHeld()
 // amount can be scrubbed and previewed live, then applied (click) or cancelled (AUX).
 void OmxModeForm::quantEnterSubmenu()
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	for (uint8_t s = 0; s < 64; s++)
 		quantOrigNudges_[s] = omni->trackPtr()->steps[s].nudge;
 	quantWork_ = recQuantize_;
@@ -829,7 +807,7 @@ void OmxModeForm::quantEnterSubmenu()
 // audible while playing). 0 = original timing, 100 = fully snapped.
 void OmxModeForm::quantMorphPreview()
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	for (uint8_t s = 0; s < 64; s++)
 	{
 		int16_t n = (int16_t)lroundf((float)quantOrigNudges_[s] * (float)(100 - quantWork_) / 100.0f);
@@ -843,7 +821,7 @@ void OmxModeForm::quantExitSubmenu(bool apply)
 		recQuantize_ = quantWork_; // keep the morphed nudges + remember the amount for live rec
 	else
 	{
-		auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		auto omni = getSelectedMachine();
 		for (uint8_t s = 0; s < 64; s++)
 			omni->setStepNudge(s, quantOrigNudges_[s]); // restore
 	}
@@ -927,7 +905,7 @@ bool OmxModeForm::onEncoderNotes(int dir)
 		omxLeds.setDirty();
 		return true;
 	}
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	if (notesCursor_ == 0) // keyboard: change the selected step
 		notesSelStep_ = (uint8_t)constrain((int)notesSelStep_ + dir, 0, 15);
 	else if (notesCursor_ <= 6) // seq notes page, note slots 0-5: edit that note's value
@@ -965,7 +943,7 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 
 	bool down = e.down();
 	bool held = e.held();
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 
 	// Any release delivers the key's pending preview note-off first (with the remembered note),
 	// so a modifier held over the release — or an octave/track change mid-hold — can't hang it.
@@ -1214,7 +1192,7 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 
 void OmxModeForm::updateNotesLEDs()
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	bool blink = omxLeds.getBlinkState();
 
 	for (uint8_t i = 1; i < 27; i++)
@@ -1313,7 +1291,7 @@ void OmxModeForm::updateNotesLEDs()
 
 void OmxModeForm::onDisplayNotes()
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 
 	uint8_t stepState[16];
 	for (uint8_t i = 0; i < 16; i++)
@@ -1432,6 +1410,304 @@ void OmxModeForm::onDisplayNotes()
 	omxDisp.dispStepNoteKeyboard(noteKeys, stepState, pageLen, notesSelStep_);
 }
 
+// ---- Tools view (AUX+19): destructive pattern tools on the selected track ----
+// Each menu page is one tool; keys 3-10 are that tool's action buttons; the low row
+// auditions the pattern (shared with Mix). Layout/LEDs mirror the Seq view's step row.
+
+enum ToolIndex
+{
+	TOOL_ROTATE,   // shift steps left/right (active page or whole loop)
+	TOOL_MIRROR,   // reverse step order (page or whole loop)
+	TOOL_SHUFFLE,  // random permutation of steps (page or whole loop)
+	TOOL_TRANS,    // transpose all notes (keys: -12 / -1 / +1 / +12)
+	TOOL_SCALE,    // snap every note to the current scale
+	TOOL_VEL,      // randomize velocities between MIN..MAX
+	TOOL_CHANCE,   // randomize step probability between MIN..MAX
+	TOOL_HUM,      // humanize: random nudge within a % range
+	TOOL_QUANT,    // pull every nudge toward the grid by AMT%
+	TOOL_EUC,      // euclidean rhythm generator (active page)
+	TOOL_GRIDS,    // grids (topographic drum) generator (active page)
+	TOOL_COUNT
+};
+
+static const char *kToolNames[TOOL_COUNT] = {
+	"ROTATE", "MIRROR", "SHUFFLE", "TRANSPOSE", "SCALE SNAP", "VEL RANDOM",
+	"CHANCE RND", "HUMANIZE", "QUANTIZE", "EUCLID", "GRIDS"};
+
+// Distinct hue per tool for the action keys.
+static const uint32_t kToolColors[TOOL_COUNT] = {
+	CYAN, LTCYAN, DKCYAN, ORANGE, DKORANGE, YELLOW, DKYELLOW, MAGENTA, ROSE, GREEN, BLUE};
+
+static const char *kGridsInstNames[4] = {"BD", "SD", "HH", "AC"};
+
+void OmxModeForm::onKeyUpdateTools(OMXKeypadEvent e)
+{
+	uint8_t k = e.key();
+	if (k == 0)
+		return;
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
+		return; // AUX layer owns the keys while held
+
+	// F1/F2/F3 behave exactly like the Seq view: pages / copy-paste (F1), track select +
+	// cut-paste (F2), rate + page length (F3) — delegate to its handler wholesale.
+	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
+	{
+		onKeyUpdateStep(e);
+		return;
+	}
+	// Release of an F2-held track key clears the hold even if F2 lifted first (as in Seq).
+	if (!e.down() && k >= 3 && k <= 10 && heldTrackKey_ == (int8_t)(k - 3))
+	{
+		heldTrackKey_ = -1;
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return;
+	}
+
+	// Low row auditions the selected track's steps, like Mix.
+	if (k >= 11 && k < 27)
+	{
+		onKeyUpdateMixStep(e);
+		return;
+	}
+	if (e.held() || !e.down() || k < 3 || k > 10)
+		return;
+
+	auto omni = getSelectedMachine();
+	uint8_t tool = toolsCursor_ / 4;
+	switch (tool)
+	{
+	case TOOL_ROTATE:
+		if (k == 3 || k == 4)
+		{
+			omni->toolRotate(k == 3 ? -1 : 1, toolScopeAll_);
+			omxDisp.displayMessage(k == 3 ? (toolScopeAll_ ? "ROTATE < TRK" : "ROTATE < PG")
+										  : (toolScopeAll_ ? "ROTATE > TRK" : "ROTATE > PG"));
+		}
+		break;
+	case TOOL_MIRROR:
+		if (k == 3)
+		{
+			omni->toolMirror(toolScopeAll_);
+			omxDisp.displayMessage(toolScopeAll_ ? "MIRROR TRK" : "MIRROR PG");
+		}
+		break;
+	case TOOL_SHUFFLE:
+		if (k == 3)
+		{
+			omni->toolShuffle(toolScopeAll_);
+			omxDisp.displayMessage(toolScopeAll_ ? "SHUFFLE TRK" : "SHUFFLE PG");
+		}
+		break;
+	case TOOL_SCALE:
+		if (k == 3)
+		{
+			omni->toolScaleRemap();
+			omxDisp.displayMessage("SCALE SNAP");
+		}
+		break;
+	case TOOL_CHANCE:
+		if (k == 3)
+		{
+			omni->toolChanceRnd(toolChanceMin_, toolChanceMax_);
+			omxDisp.displayMessage("CHANCE RND");
+		}
+		break;
+	case TOOL_QUANT:
+		if (k == 3)
+		{
+			omni->toolQuantize(toolQuantAmt_);
+			omxDisp.displayMessage("QUANTIZE " + String(toolQuantAmt_) + "%");
+		}
+		break;
+	case TOOL_TRANS:
+		if (k >= 3 && k <= 6)
+		{
+			static const int8_t kAmt[4] = {-12, -1, 1, 12};
+			omni->toolTranspose(kAmt[k - 3]);
+			omxDisp.displayMessage((kAmt[k - 3] > 0 ? "TRANS +" : "TRANS ") + String(kAmt[k - 3]));
+		}
+		break;
+	case TOOL_VEL:
+		if (k == 3)
+		{
+			omni->toolRandomVel(toolVelMin_, toolVelMax_);
+			omxDisp.displayMessage("VEL RANDOM");
+		}
+		break;
+	case TOOL_HUM:
+		if (k == 3)
+		{
+			omni->toolHumanize(toolHumAmt_);
+			omxDisp.displayMessage("HUMANIZE " + String(toolHumAmt_) + "%");
+		}
+		break;
+	case TOOL_EUC:
+		if (k == 3)
+		{
+			omni->toolEuclid(toolEucPulses_, toolEucRot_);
+			omxDisp.displayMessage("EUCLID " + String(toolEucPulses_));
+		}
+		break;
+	case TOOL_GRIDS:
+		if (k == 3)
+		{
+			omni->toolGrids(toolGridsInst_, toolGridsX_, toolGridsY_, toolGridsDens_);
+			omxDisp.displayMessage("GRIDS " + String(kGridsInstNames[toolGridsInst_ & 3]));
+		}
+		break;
+	}
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+}
+
+bool OmxModeForm::onEncoderTools(int dir)
+{
+	if (dir == 0)
+		return true;
+	if (getEncoderSelect())
+	{
+		uint8_t prevTool = toolsCursor_ / 4;
+		toolsCursor_ = (uint8_t)constrain((int)toolsCursor_ + dir, 0, TOOL_COUNT * 4 - 1);
+		if (toolsCursor_ / 4 != prevTool)
+			omxDisp.displayMessage(kToolNames[toolsCursor_ / 4]); // page crossed: name the tool
+		omxDisp.setDirty();
+		return true;
+	}
+	uint8_t tool = toolsCursor_ / 4, cell = toolsCursor_ % 4;
+	switch (tool)
+	{
+	case TOOL_ROTATE:
+	case TOOL_MIRROR:
+	case TOOL_SHUFFLE:
+		if (cell == 0)
+			toolScopeAll_ = dir > 0; // shared scope: active page vs whole loop
+		break;
+	case TOOL_CHANCE:
+		if (cell == 0) toolChanceMin_ = (uint8_t)constrain((int)toolChanceMin_ + dir, 0, 100);
+		if (cell == 1) toolChanceMax_ = (uint8_t)constrain((int)toolChanceMax_ + dir, 0, 100);
+		break;
+	case TOOL_QUANT:
+		if (cell == 0) toolQuantAmt_ = (uint8_t)constrain((int)toolQuantAmt_ + dir, 0, 100);
+		break;
+	case TOOL_VEL:
+		if (cell == 0) toolVelMin_ = (uint8_t)constrain((int)toolVelMin_ + dir, 0, 127);
+		if (cell == 1) toolVelMax_ = (uint8_t)constrain((int)toolVelMax_ + dir, 0, 127);
+		break;
+	case TOOL_HUM:
+		if (cell == 0) toolHumAmt_ = (uint8_t)constrain((int)toolHumAmt_ + dir, 0, 100);
+		break;
+	case TOOL_EUC:
+		if (cell == 0) toolEucPulses_ = (uint8_t)constrain((int)toolEucPulses_ + dir, 0, 16);
+		if (cell == 1) toolEucRot_ = (uint8_t)constrain((int)toolEucRot_ + dir, 0, 15);
+		break;
+	case TOOL_GRIDS:
+		if (cell == 0) toolGridsInst_ = (uint8_t)constrain((int)toolGridsInst_ + dir, 0, 3);
+		if (cell == 1) toolGridsX_ = (uint8_t)constrain((int)toolGridsX_ + dir * 4, 0, 255);
+		if (cell == 2) toolGridsY_ = (uint8_t)constrain((int)toolGridsY_ + dir * 4, 0, 255);
+		if (cell == 3) toolGridsDens_ = (uint8_t)constrain((int)toolGridsDens_ + dir * 4, 0, 255);
+		break;
+	}
+	omxDisp.setDirty();
+	return true;
+}
+
+void OmxModeForm::updateToolsLEDs()
+{
+	uint8_t tool = toolsCursor_ / 4;
+	uint32_t c = kToolColors[tool];
+	// Light the tool's action keys; everything else on the top row stays dark.
+	switch (tool)
+	{
+	case TOOL_ROTATE: strip.setPixelColor(3, c); strip.setPixelColor(4, c); break;
+	case TOOL_TRANS:  for (uint8_t k = 3; k <= 6; k++) strip.setPixelColor(k, c); break;
+	default:          strip.setPixelColor(3, c); break; // single "apply/generate" key
+	}
+	// Step row + playhead come from the machine's MIX-mode LED pass (uiMode is MIX here).
+}
+
+void OmxModeForm::onDisplayTools()
+{
+	auto omni = getSelectedMachine();
+
+	// F-layer screens, exactly as the Seq view shows them.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
+	{
+		uint8_t activeCount = omni->getPageLen(omni->activePage());
+		char rbuf[12];
+		snprintf(rbuf, sizeof(rbuf), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
+		omxDisp.dispTrackLength(rbuf, activeCount);
+		return;
+	}
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
+	{
+		onDisplaySeqTrackPage();
+		return;
+	}
+
+	uint8_t tool = toolsCursor_ / 4, cell = toolsCursor_ % 4;
+	const char *labels[4] = {"", "", "", ""};
+	String vals[4];
+	switch (tool)
+	{
+	case TOOL_ROTATE:
+	case TOOL_MIRROR:
+	case TOOL_SHUFFLE:
+		labels[0] = "SCOPE";
+		vals[0] = toolScopeAll_ ? "TR" : "PG"; // whole track loop vs active page
+		break;
+	case TOOL_SCALE:
+		labels[0] = "ROOT"; labels[1] = "SCALE";
+		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
+		vals[1] = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
+		break;
+	case TOOL_CHANCE:
+		labels[0] = "MIN"; labels[1] = "MAX";
+		vals[0] = String(toolChanceMin_); vals[1] = String(toolChanceMax_);
+		break;
+	case TOOL_QUANT:
+		labels[0] = "AMT%";
+		vals[0] = String(toolQuantAmt_);
+		break;
+	case TOOL_TRANS: // a legend for the action keys, not editable params
+		labels[0] = "K3"; labels[1] = "K4"; labels[2] = "K5"; labels[3] = "K6";
+		vals[0] = "-12"; vals[1] = "-1"; vals[2] = "+1"; vals[3] = "+12";
+		break;
+	case TOOL_VEL:
+		labels[0] = "MIN"; labels[1] = "MAX";
+		vals[0] = String(toolVelMin_); vals[1] = String(toolVelMax_);
+		break;
+	case TOOL_HUM:
+		labels[0] = "AMT%";
+		vals[0] = String(toolHumAmt_);
+		break;
+	case TOOL_EUC:
+		labels[0] = "PLS"; labels[1] = "ROT"; labels[2] = "LEN";
+		vals[0] = String(toolEucPulses_); vals[1] = String(toolEucRot_);
+		vals[2] = String(omni->getPageLen(omni->activePage()));
+		break;
+	case TOOL_GRIDS:
+		labels[0] = "INST"; labels[1] = "X"; labels[2] = "Y"; labels[3] = "DENS";
+		vals[0] = kGridsInstNames[toolGridsInst_ & 3];
+		vals[1] = String(toolGridsX_); vals[2] = String(toolGridsY_); vals[3] = String(toolGridsDens_);
+		break;
+	}
+	const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
+
+	// The shared 16-step row under the params, so step-modifying tools (rotate /
+	// generators) show their effect immediately — same data as the page-0 track pages.
+	uint8_t stepState[16];
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		bool m = omni->getStepMute(i);
+		stepState[i] = omni->stepHasNotes(i) ? (m ? 4 : 1) : (omni->stepIsOn(i) ? (m ? 3 : 2) : 0);
+	}
+	uint8_t pageLen = omni->getPageLen(omni->activePage());
+	int16_t pageStart = (int16_t)omni->activePage() * 16;
+	int8_t playhead = omxFormGlobal.isPlaying ? (int8_t)((int16_t)omni->playingStepIndex() - pageStart) : -1;
+	omxDisp.dispToolPage(labels, values, cell, !getEncoderSelect(), stepState, pageLen, playhead);
+}
+
 // ---- Step view (container-rendered v2 editor) ----
 
 static const char *kStepModeNames[STEPMODE_COUNT] = {
@@ -1461,7 +1737,7 @@ static void setTrackPlayModeIdx(FormOmni::Track *t, uint8_t idx)
 // Apply a palette value (or refresh the value message) to every held step.
 void OmxModeForm::stepApplyToHeld(uint8_t paletteIndex)
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	for (uint8_t s = 0; s < 16; s++)
 		if (heldStepMask_ & (1 << s))
 			omni->setStepPalette(s, stepEditMode_, paletteIndex);
@@ -1477,7 +1753,7 @@ void OmxModeForm::stepApplyToHeld(uint8_t paletteIndex)
 void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 {
 	uint8_t thisKey = e.key();
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 
 	// While step(s) are held on the overview page, the top row is the value palette. On a
 	// param page the menu (encoder) does the editing, so the palette is suppressed.
@@ -1729,7 +2005,7 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 
 void OmxModeForm::updateStepLEDs()
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	bool blink = omxLeds.getBlinkState();
 
 	// F1 / F2 keys lit in the track colour (brighter when that modifier is pressed). The
@@ -1921,7 +2197,7 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 	int dir = enc.dir();
 	if (dir == 0)
 		return true;
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 
 	// Machine menu (page 3+): let the machine navigate/edit (it reads getEncoderSelect() too),
 	// except turning left off its first page in SELECT mode returns to the custom TRIG page.
@@ -2020,7 +2296,7 @@ bool OmxModeForm::onEncoderButtonStep()
 	if (heldStepMask_ != 0 && stepMenuPage_ != 0)
 	{
 		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
-		auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		auto omni = getSelectedMachine();
 		for (uint8_t s = 0; s < 16; s++)
 			if (heldStepMask_ & (1 << s))
 				omni->clearStepParamLock(s, pid);
@@ -2040,7 +2316,7 @@ bool OmxModeForm::onEncoderButtonStep()
 // built-in defaults when no step is held.
 void OmxModeForm::onDisplayStepMenu()
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	bool holding = (heldStepMask_ != 0 && heldStepKey_ >= 0);
 	uint8_t base = (stepMenuPage_ - 1) * 4;
 
@@ -2070,7 +2346,7 @@ void OmxModeForm::onDisplayStepMenu()
 
 void OmxModeForm::onDisplayStep()
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 
 	// F3 structure layer: rate on top, the active page's length bar on the bottom.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
@@ -2142,7 +2418,7 @@ void OmxModeForm::onDisplayStep()
 // Render the page-1 track overview, with an F1/F2 hold overlay when a modifier is held.
 void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	int16_t pageStart = (int16_t)omni->activePage() * 16;
 	int8_t playhead = omxFormGlobal.isPlaying ? (int8_t)((int16_t)omni->playingStepIndex() - pageStart) : -1;
 
@@ -2214,7 +2490,7 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 		overlayLabel = nullptr;
 	}
 
-	static const char *kViewTags[FORMVIEW_COUNT] = {"MIX", "SEQ", "TRSP", "NOTE", "PTRN", "MI"};
+	static const char *kViewTags[FORMVIEW_COUNT] = {"MIX", "SEQ", "TRSP", "NOTE", "PTRN", "MI", "TOOL"};
 	const char *viewLabel = kViewTags[formView_]; // live switch: the tag is always the current view
 	bool viewLabelSel = viewEditActive();          // boxed while the selector is live
 	uint8_t transport = omxFormGlobal.recArm ? 2 : (omxFormGlobal.isPlaying ? 1 : 0);
@@ -2292,7 +2568,7 @@ void OmxModeForm::onKeyUpdateMixHold(OMXKeypadEvent e)
 	if (e.held() || !e.down())
 		return;
 	uint8_t k = e.key();
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
+	auto omni = machines_[heldTrackKey_];
 	auto trk = omni->trackPtr();
 
 	if (k == 11)
@@ -2325,8 +2601,24 @@ void OmxModeForm::onKeyUpdateMixStep(OMXKeypadEvent e)
 	if (e.held())
 		return;
 	uint8_t key16 = e.key() - 11;
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
+	if (e.down())
+	{
+		mixHeldStepMask_ |= (1 << key16);
+		mixHeldStepKey_ = (int8_t)key16;
+	}
+	else
+	{
+		mixHeldStepMask_ &= ~(1 << key16);
+		if (mixHeldStepKey_ == (int8_t)key16)
+		{
+			mixHeldStepKey_ = -1;
+			for (int8_t st = 15; st >= 0; st--)
+				if (mixHeldStepMask_ & (1 << st)) { mixHeldStepKey_ = st; break; }
+		}
+	}
 	omni->auditionStep(key16, e.down());
+	omxDisp.setDirty();
 	omxLeds.setDirty();
 }
 
@@ -2340,7 +2632,7 @@ void OmxModeForm::onKeyUpdateMixStepMute(OMXKeypadEvent e)
 	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_F1)
 		return; // F2 = fill (handled by holding F2); low-row does nothing
 	uint8_t key16 = e.key() - 11;
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+	auto omni = getSelectedMachine();
 	omni->toggleStepMute(key16);
 	omxDisp.setDirty(); // the MUTE page's step glyphs show the state; no popup
 	omxLeds.setDirty();
@@ -2348,7 +2640,7 @@ void OmxModeForm::onKeyUpdateMixStepMute(OMXKeypadEvent e)
 
 void OmxModeForm::updateMixHoldLEDs()
 {
-	auto omni = static_cast<FormOmni::FormMachineOmni *>(machines_[heldTrackKey_]);
+	auto omni = machines_[heldTrackKey_];
 	auto trk = omni->trackPtr();
 
 	for (uint8_t i = 11; i < 27; i++)
@@ -2430,7 +2722,7 @@ void OmxModeForm::updateShortcutMode()
 		// Mix: holding F2 activates FILL on all tracks (steps with a Fill condition play).
 		bool fillOn = (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F2);
 		for (uint8_t i = 0; i < kNumMachines; i++)
-			static_cast<FormOmni::FormMachineOmni *>(machines_[i])->setFill(fillOn);
+			machines_[i]->setFill(fillOn);
 
 		omxDisp.setDirty();
 		omxLeds.setDirty();
@@ -2574,11 +2866,25 @@ void OmxModeForm::onPotChanged(int potIndex, int prevValue, int newValue, int an
 		return;
 	}
 
+	// Mix view: hold a low-row step + turn a pot = CC P-Lock, same gesture as the Step view
+	// (the CC page shows the lock dots; auditioning and locking compose naturally).
+	if (formView_ == FORMVIEW_MIX && mixHeldStepMask_ != 0 && potIndex >= 0 && potIndex < 5)
+	{
+		auto omni = getSelectedMachine();
+		int8_t v = (int8_t)constrain(newValue, 0, 127);
+		for (uint8_t st = 0; st < 16; st++)
+			if (mixHeldStepMask_ & (1 << st))
+				omni->setStepPotLock(st, (uint8_t)potIndex, v);
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return;
+	}
+
 	// Step view: hold a step + turn a pot = P-Lock — lock that pot slot's CC to the pot value on
 	// every held step. Sent when the step fires (see triggerStep). Directly maps 0-127 (no pickup).
 	if (formView_ == FORMVIEW_STEP && heldStepMask_ != 0 && potIndex >= 0 && potIndex < 5)
 	{
-		auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		auto omni = getSelectedMachine();
 		int8_t v = (int8_t)constrain(newValue, 0, 127);
 		for (uint8_t s = 0; s < 16; s++)
 			if (heldStepMask_ & (1 << s))
@@ -2595,6 +2901,8 @@ void OmxModeForm::onPotChanged(int potIndex, int prevValue, int newValue, int an
 
 	if(selMachine->doesConsumePots())
 	{
+		if (potIndex >= 0 && potIndex < 5)
+			ccLastSent_[potIndex] = (uint8_t)constrain(newValue, 0, 127); // Mix CC page mirror
 		selMachine->onPotChanged(potIndex, prevValue, newValue, analogDelta);
 		return;
 	}
@@ -2659,7 +2967,7 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 	{
 		// Refresh the instant the selected track's step advances, so the playhead (LED + the
 		// under-step display marker) tracks each step exactly instead of jumping in coarse chunks.
-		auto selOmni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		auto selOmni = getSelectedMachine();
 		int16_t curStep = (int16_t)selOmni->playingStepIndex();
 		bool loopWrapped = false;
 		if (curStep != lastPlayheadStep_)
@@ -2744,6 +3052,11 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 		onEncoderMix(enc.dir());
 		return;
 	}
+	if (formView_ == FORMVIEW_TOOLS)
+	{
+		onEncoderTools(enc.dir());
+		return;
+	}
 
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderChanged(enc);
@@ -2753,14 +3066,38 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 //   0     = the track overview (edit-turn selects the track)
 //   1-8   = LEVELS: per-track default-velocity mixer (edit-turn adjusts that track;
 //           the change pushes to every step without its own velocity lock)
-//   9-12  = TRACK: Mute / Solo / Gate / Rate for the selected track
+//   9-14  = CC: the selected track's 5 pot-bank CC slots as bars (9-13) plus the big
+//           bank number (14). Edit-turn on a slot sends the CC live — or, while a
+//           low-row step is held, writes that step's CC P-Lock (lock dots mark locked
+//           slots; encoder click clears them). Editing the bank number switches the
+//           track's pot bank — the knobs and P-Locks follow it.
+//   15-18 = TRACK: Mute / Solo / Gate / Rate for the selected track
 bool OmxModeForm::onEncoderMix(int dir)
 {
 	if (dir == 0)
 		return true;
+	// A held low-row step on a CC slot is an edit gesture (like the Step view's
+	// hold-step): the turn always writes that step's P-Lock, regardless of
+	// select/edit mode — the encoder click stays free to clear the lock.
+	if (mixHeldStepMask_ != 0 && mixCursor_ >= 9 && mixCursor_ <= 13)
+	{
+		uint8_t slot = mixCursor_ - 9;
+		auto omni = getSelectedMachine();
+		for (uint8_t st = 0; st < 16; st++)
+			if (mixHeldStepMask_ & (1 << st))
+			{
+				int base = omni->getStepPotLock(st, slot);
+				if (base < 0)
+					base = ccLastSent_[slot];
+				omni->setStepPotLock(st, slot, (int8_t)constrain(base + dir, 0, 127));
+			}
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
 	if (getEncoderSelect())
 	{
-		mixCursor_ = (uint8_t)constrain((int)mixCursor_ + dir, 0, 12);
+		mixCursor_ = (uint8_t)constrain((int)mixCursor_ + dir, 0, 18);
 		omxDisp.setDirty();
 		return true;
 	}
@@ -2776,17 +3113,29 @@ bool OmxModeForm::onEncoderMix(int dir)
 	}
 	else if (mixCursor_ <= 8) // LEVELS: edits the bar under the cursor, not the selection
 	{
-		static_cast<FormOmni::FormMachineOmni *>(machines_[mixCursor_ - 1])->editParamDefault(0, dir);
+		machines_[mixCursor_ - 1]->editParamDefault(0, dir);
+	}
+	else if (mixCursor_ <= 13) // CC slots (9-13): live value + send (locks are the
+	{                          // held-step path above)
+		uint8_t slot = mixCursor_ - 9;
+		int v = constrain((int)ccLastSent_[slot] + dir, 0, 127);
+		ccLastSent_[slot] = (uint8_t)v;
+		getSelectedMachine()->sendPotCC(slot, (uint8_t)v);
+	}
+	else if (mixCursor_ == 14) // the big bank number: switch the track's pot bank
+	{
+		auto omni = getSelectedMachine();
+		omni->setPotBank((uint8_t)constrain((int)omni->getPotBank() + dir, 0, NUM_CC_BANKS - 1));
 	}
 	else
 	{
-		auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		auto omni = getSelectedMachine();
 		switch (mixCursor_)
 		{
-		case 9:  omni->setMute(!(dir < 0)); break;  // turn right = mute, left = unmute
-		case 10: omni->setSolo(!(dir < 0)); break;
-		case 11: omni->editGate(dir); break;
-		case 12:
+		case 15: omni->setMute(!(dir < 0)); break;  // turn right = mute, left = unmute
+		case 16: omni->setSolo(!(dir < 0)); break;
+		case 17: omni->editGate(dir); break;
+		case 18:
 			omni->editRate(dir);
 			// §4 label rule: the cell shows the bare divisor; the full form pops while turning.
 			omxDisp.displayMessage("RATE 1:" + String(kSeqRates[omni->getRate()]));
@@ -2805,16 +3154,47 @@ void OmxModeForm::onDisplayMix()
 	{
 		int8_t vals[8];
 		for (uint8_t i = 0; i < kNumMachines; i++)
-			vals[i] = (int8_t)static_cast<FormOmni::FormMachineOmni *>(machines_[i])->trackPtr()->paramDefaults[0];
+			vals[i] = (int8_t)machines_[i]->trackPtr()->paramDefaults[0];
 		uint8_t sel = mixCursor_ - 1;
 		char vbuf[12];
 		snprintf(vbuf, sizeof(vbuf), "T%u %u", (unsigned)(sel + 1), (unsigned)vals[sel]);
-		omxDisp.dispMixLevels("LEVELS", vbuf, vals, sel, !getEncoderSelect());
+		omxDisp.dispMixLevels("LEVELS", vbuf, vals, 8, sel, !getEncoderSelect());
 		return;
 	}
-	if (mixCursor_ >= 9) // TRACK: Mute / Solo / Gate / Rate (selected track)
+	if (mixCursor_ >= 9 && mixCursor_ <= 14) // CC: 5 pot-bank slots + the bank number
 	{
-		auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+		auto omni = getSelectedMachine();
+		bool held = (mixHeldStepMask_ != 0);
+		int8_t vals[5];
+		bool locked[5];
+		for (uint8_t i = 0; i < 5; i++)
+		{
+			int8_t lockVal = held && mixHeldStepKey_ >= 0 ? omni->getStepPotLock(mixHeldStepKey_, i) : (int8_t)-1;
+			locked[i] = lockVal >= 0;
+			// Holding a step shows THAT step's locks (no bar = unlocked slot);
+			// otherwise the live last-sent values.
+			vals[i] = held ? lockVal : (int8_t)ccLastSent_[i];
+		}
+		uint8_t sel = mixCursor_ - 9; // 0-4 slots, 5 = the bank number
+		char tbuf[12], vbuf[14];
+		snprintf(tbuf, sizeof(tbuf), held ? "CC LOCK" : "CC");
+		if (sel < 5)
+		{
+			int v = held ? vals[sel] : (int)ccLastSent_[sel];
+			if (v < 0)
+				snprintf(vbuf, sizeof(vbuf), "C%u --", (unsigned)omni->potLockCC(sel));
+			else
+				snprintf(vbuf, sizeof(vbuf), "C%u %d", (unsigned)omni->potLockCC(sel), v);
+		}
+		else
+			snprintf(vbuf, sizeof(vbuf), "BANK %u", (unsigned)(omni->getPotBank() + 1));
+		omxDisp.dispMixLevels(tbuf, vbuf, vals, 5, sel, !getEncoderSelect(),
+							  held ? locked : nullptr, (int8_t)(omni->getPotBank() + 1));
+		return;
+	}
+	if (mixCursor_ >= 15) // TRACK: Mute / Solo / Gate / Rate (selected track)
+	{
+		auto omni = getSelectedMachine();
 		const char *labels[4] = {"MUTE", "SOLO", "GATE", "RATE"};
 		String vals[4];
 		vals[0] = omni->getMute() ? "On" : "--";
@@ -2823,7 +3203,7 @@ void OmxModeForm::onDisplayMix()
 		vals[3] = String(kSeqRates[omni->getRate()]); // full "1:n" pops while turning
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, mixCursor_ - 9, !getEncoderSelect());
+		omxDisp.dispStepParams(labels, values, locked, mixCursor_ - 15, !getEncoderSelect());
 		return;
 	}
 	onDisplaySeqTrackPage(); // cursor 0: the shared track/page overview
@@ -2839,6 +3219,20 @@ void OmxModeForm::onEncoderButtonDown()
 
 	if (formView_ == FORMVIEW_MI && onEncoderButtonMI())
 		return;
+
+	// Mix CC page: click while holding step(s) on a slot = clear that slot's P-Lock
+	// (the same click-clears-a-lock convention as the Step view's param pages).
+	if (formView_ == FORMVIEW_MIX && mixHeldStepMask_ != 0 && mixCursor_ >= 9 && mixCursor_ <= 13)
+	{
+		uint8_t slot = mixCursor_ - 9;
+		auto omni = getSelectedMachine();
+		for (uint8_t st = 0; st < 16; st++)
+			if (mixHeldStepMask_ & (1 << st))
+				omni->setStepPotLock(st, slot, -1);
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return;
+	}
 
 	if (onEncoderButtonStep())
 		return;
@@ -2942,7 +3336,7 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			{
 				if (e.down() && !e.held())
 				{
-					auto omni = static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine());
+					auto omni = getSelectedMachine();
 					bool note = (stepEditMode_ == STEPMODE_NOTE);
 					for (uint8_t s = 0; s < 16; s++)
 						if (heldStepMask_ & (1 << s))
@@ -3022,9 +3416,9 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 				omxDisp.displayMessage(omxFormGlobal.recReplace ? "REPLACE" : "OVERDUB");
 				keyConsumed = true;
 			}
-			else if (thisKey >= 13 && thisKey <= 18) // v2 shell: preview view (commit on AUX release)
+			else if (thisKey >= 13 && thisKey <= 19) // v2 shell: preview view (commit on AUX release)
 			{
-				static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI"};
+				static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI", "TOOLS"};
 				pendingView_ = thisKey - 13;
 				omxDisp.displayMessage(kViewNames[pendingView_]);
 				omxLeds.setDirty();
@@ -3072,7 +3466,7 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			}
 			if (e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 			{
-				static_cast<FormOmni::FormMachineOmni *>(getSelectedMachine())->setSelStepByKey(thisKey - 11);
+				getSelectedMachine()->setSelStepByKey(thisKey - 11);
 				omxLeds.setDirty();
 				omxDisp.setDirty();
 			}
@@ -3097,6 +3491,12 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	{
 		if (!keyConsumed)
 			onKeyUpdateMI(e);
+		return;
+	}
+	if (formView_ == FORMVIEW_TOOLS)
+	{
+		if (!keyConsumed)
+			onKeyUpdateTools(e);
 		return;
 	}
 	// Mix view routing.
@@ -3250,6 +3650,17 @@ void OmxModeForm::updateLEDs()
 		updateMILEDs();
 		return;
 	}
+	if (formView_ == FORMVIEW_TOOLS)
+	{
+		if (omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
+		{
+			updateStepLEDs(); // F1/F2/F3 layers light exactly like the Seq view
+			return;
+		}
+		getSelectedMachine()->updateLEDs(); // step row + playhead (machine MIX pass)
+		updateToolsLEDs();                  // tool action keys on the top row
+		return;
+	}
 
 	auto selMachine = getSelectedMachine();
 
@@ -3348,6 +3759,11 @@ void OmxModeForm::onDisplayUpdate()
 		onDisplayMI();
 		return;
 	}
+	if (formView_ == FORMVIEW_TOOLS)
+	{
+		onDisplayTools();
+		return;
+	}
 
 	auto selMachine = getSelectedMachine();
 
@@ -3361,7 +3777,7 @@ void OmxModeForm::onDisplayUpdate()
 	// a 16-cell bar on the bottom (full boxes for steps within length, dashes past it).
 	if (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
 	{
-		auto omni = static_cast<FormOmni::FormMachineOmni *>(selMachine);
+		auto omni = selMachine;
 		uint16_t pageStart = (uint16_t)omni->activePage() * 16;
 		uint16_t trackLen = omni->trackPtr()->getLength(); // 1-64
 		uint16_t rem = trackLen <= pageStart ? 0 : (trackLen - pageStart);
@@ -3678,65 +4094,130 @@ int OmxModeForm::saveToDisk(int startingAddress, Storage *storage)
 
 	for (uint8_t i = 0; i < kNumMachines; i++)
 	{
-		// Serial.println((String)"startingAddress: " + startingAddress);
-
-		auto machine = machines_[i];
-
-		if(machine == nullptr || machine->getType() == FORMMACH_NULL)
-		{
-			Serial.println("machine is null");
-			storage->write(startingAddress, FORMMACH_NULL);
-			startingAddress++;
-		}
-		else
-		{
-			uint8_t machineType = machine->getType();
-
-			// Serial.println("machine type is: " + String(machineType));
-
-			storage->write(startingAddress, machineType);
-			startingAddress++;
-
-			startingAddress = machine->saveToDisk(startingAddress, storage);
-		}
+		// Single-engine: the per-slot type byte stays in the format (always OMNI) so
+		// existing saves keep loading, but no machine picker exists any more.
+		storage->write(startingAddress, 1); // 1 = the old FORMMACH_OMNI
+		startingAddress++;
+		startingAddress = machines_[i]->saveToDisk(startingAddress, storage);
 	}
 
 	int totalSize = startingAddress - initStart;
-
 	Serial.println("FORM Size = " + String(totalSize));
+
+	// V3: the full pattern bank goes to the flash filesystem alongside the FRAM copy
+	// of the active pattern (no-op on Teensy).
+	saveBankToFS();
 
 	return startingAddress;
 }
 
 int OmxModeForm::loadFromDisk(int startingAddress, Storage *storage)
 {
-	// Serial.println((String)"startingAddress: " + startingAddress);
-
 	for (uint8_t i = 0; i < kNumMachines; i++)
 	{
-		uint8_t machineType = storage->read(startingAddress);
+		startingAddress++; // skip the legacy machine-type byte (every track is OMNI)
 
-		// Serial.println("machine type is: " + String(machineType));
-		startingAddress++;
+		// Load in place (no machine re-creation): reset to defaults first so a
+		// version-mismatched save leaves a clean track, then re-apply the default
+		// channel (track index -> MIDI ch 1-8); a valid load overrides it.
+		machines_[i]->setSeq(FormOmni::OmniSeq());
+		machines_[i]->setChannel(i);
+		startingAddress = machines_[i]->loadFromDisk(startingAddress, storage);
+	}
 
-		changeMachineAtIndex(i, machineType);
-
-		auto machine = machines_[i];
-
-		if (machine != nullptr)
-		{
-			// changeMachineAtIndex re-created the machine, so re-apply the default channel (track
-			// index -> MIDI ch 1-8). A valid on-disk load below overrides it with the saved channel.
-			static_cast<FormOmni::FormMachineOmni *>(machine)->setChannel(i);
-			startingAddress = machine->loadFromDisk(startingAddress, storage);
-		}
-		else
-		{
-			Serial.println("machine is null");
-		}
-
-		// Serial.println((String)"startingAddress: " + startingAddress);
+	// V3: restore the full pattern bank from flash. The machines just loaded from FRAM
+	// are the freshest copy of the active pattern, so re-snapshot them into the bank.
+	if (loadBankFromFS())
+	{
+		snapshotActivePattern();
+		omxDisp.setDirty();
+		omxLeds.setDirty();
 	}
 
 	return startingAddress;
 }
+
+// ---- Pattern-bank persistence (V3/RP2040: LittleFS; see the header note) ----
+#if BOARDTYPE == OMX2040
+
+static const char *kFormBankPath = "/formbank.dat";
+
+struct FormBankHeader
+{
+	uint8_t magic0, magic1; // 'F','B'
+	uint8_t version;        // couples to the OmniSeq layout (FormOmni::kOmniSaveVersion)
+	uint8_t numPatterns;
+	uint8_t numTracks;
+	uint16_t seqSize;       // sizeof(OmniSeq) sanity check
+};
+
+void OmxModeForm::saveBankToFS()
+{
+	snapshotActivePattern(); // fold live edits into the bank before writing
+	if (!LittleFS.begin())
+	{
+		Serial.println("FORM bank: LittleFS begin failed");
+		return;
+	}
+	File f = LittleFS.open(kFormBankPath, "w");
+	if (!f)
+	{
+		Serial.println("FORM bank: open for write failed");
+		return;
+	}
+	FormBankHeader h = {'F', 'B', FormOmni::kOmniSaveVersion,
+						FORM_NUM_PATTERNS, FORM_NUM_TRACKS, (uint16_t)sizeof(FormOmni::OmniSeq)};
+	f.write((uint8_t *)&h, sizeof(h));
+	f.write(&activePattern_, 1);
+	f.write(&switchStyle_, 1);
+	f.write(&recQuantize_, 1);
+	f.write(trackHue_, sizeof(trackHue_));
+	f.write((uint8_t *)patterns_, sizeof(patterns_));
+	f.close();
+	Serial.println("FORM bank saved (" + String((unsigned)sizeof(patterns_)) + " bytes)");
+}
+
+bool OmxModeForm::loadBankFromFS()
+{
+	if (!LittleFS.begin())
+		return false;
+	File f = LittleFS.open(kFormBankPath, "r");
+	if (!f)
+		return false; // no bank saved yet
+	FormBankHeader h;
+	bool headerOk = f.read((uint8_t *)&h, sizeof(h)) == (int)sizeof(h) &&
+					h.magic0 == 'F' && h.magic1 == 'B' &&
+					h.version == FormOmni::kOmniSaveVersion &&
+					h.numPatterns == FORM_NUM_PATTERNS && h.numTracks == FORM_NUM_TRACKS &&
+					h.seqSize == (uint16_t)sizeof(FormOmni::OmniSeq);
+	if (!headerOk)
+	{
+		f.close();
+		Serial.println("FORM bank: header mismatch, skipping");
+		return false;
+	}
+	f.read(&activePattern_, 1);
+	f.read(&switchStyle_, 1);
+	f.read(&recQuantize_, 1);
+	f.read(trackHue_, sizeof(trackHue_));
+	bool ok = f.read((uint8_t *)patterns_, sizeof(patterns_)) == (int)sizeof(patterns_);
+	f.close();
+	if (!ok)
+	{
+		Serial.println("FORM bank: short read, skipping");
+		return false;
+	}
+	if (activePattern_ >= FORM_NUM_PATTERNS)
+		activePattern_ = 0;
+	if (switchStyle_ > 3)
+		switchStyle_ = 0;
+	Serial.println("FORM bank loaded");
+	return true;
+}
+
+#else // Teensy: no filesystem — only the active pattern persists (FRAM/EEPROM blit above).
+
+void OmxModeForm::saveBankToFS() {}
+bool OmxModeForm::loadBankFromFS() { return false; }
+
+#endif

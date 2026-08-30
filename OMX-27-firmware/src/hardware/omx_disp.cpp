@@ -833,11 +833,13 @@ void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const
 	}
 }
 
-// FORM Mix LEVELS page: 8 per-track bars (default velocity as a mixer). sel = 0-7.
-// Title top-left, the selected track + value top-right; the selected slot is boxed and
-// inverts while the encoder is editing it.
-void OmxDisp::dispMixLevels(const char *title, const char *valText, const int8_t vals[8], uint8_t sel, bool editing)
+// FORM Mix bar pages (LEVELS: 8 per-track velocity bars; CC: 5 live CC values).
+// Title top-left, the selected item + value top-right; the selected slot is boxed and
+// inverts while the encoder is editing it. count = number of bars (128/count px each).
+void OmxDisp::dispMixLevels(const char *title, const char *valText, const int8_t *vals, uint8_t count, uint8_t sel, bool editing, const bool *locked, int8_t bigNum)
 {
+	if (count == 0 || count > 16)
+		return;
 	if (isMessageActive())
 	{
 		renderMessage();
@@ -851,13 +853,19 @@ void OmxDisp::dispMixLevels(const char *title, const char *valText, const int8_t
 	u8g2centerText(title, 0, 9, 64, 8);
 	u8g2centerText(valText, 64, 9, 64, 8);
 
-	const uint8_t slotW = 16, y0 = 11, h = 21; // bars area y 11..31
-	for (uint8_t i = 0; i < 8; i++)
+	// With a big number on the right, the bars squeeze into the left 100px.
+	const uint8_t barsW = (bigNum >= 0) ? 100 : 128;
+	const uint8_t slotW = barsW / count, y0 = 11, h = 21; // bars area y 11..31
+	for (uint8_t i = 0; i < count; i++)
 	{
 		int x = i * slotW;
-		int v = vals[i] < 0 ? 0 : vals[i];
-		uint8_t bh = (uint8_t)((v * (h - 3)) / 127);
-		display.fillRect(x + 4, y0 + (h - 2 - bh), slotW - 8, bh + 1, WHITE);
+		if (vals[i] >= 0) // negative = no bar (an unlocked slot while a step is held)
+		{
+			uint8_t bh = (uint8_t)((vals[i] * (h - 3)) / 127);
+			display.fillRect(x + 4, y0 + (h - 2 - bh), slotW - 8, bh + 1, WHITE);
+		}
+		if (locked != nullptr && locked[i]) // P-Lock marker: dot at the slot's top-right
+			display.fillRect(x + slotW - 6, y0 + 1, 3, 3, WHITE);
 		if (i == sel)
 		{
 			display.drawRect(x + 1, y0, slotW - 2, h, WHITE);
@@ -865,6 +873,67 @@ void OmxDisp::dispMixLevels(const char *title, const char *valText, const int8_t
 				display.fillRect(x + 2, y0 + 1, slotW - 4, h - 2, INVERSE);
 		}
 	}
+
+	// Big TENFAT number on the right (the pot bank); sel == count selects it.
+	if (bigNum >= 0)
+	{
+		char nbuf[4];
+		snprintf(nbuf, sizeof(nbuf), "%d", bigNum);
+		bool numSel = (sel == count);
+		if (numSel && editing)
+		{
+			display.fillRect(barsW + 2, y0 + 1, 128 - barsW - 4, h - 2, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		u8g2_display.setFont(FONT_TENFAT);
+		u8g2centerText(nbuf, barsW, 28, 128 - barsW, 8);
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+		if (numSel && !editing)
+			display.drawRect(barsW + 1, y0, 128 - barsW - 2, h, WHITE);
+	}
+}
+
+// FORM Tools page: a compact 4-cell param strip (small font) over the shared 16-step
+// row, so step-modifying tools show their effect live — the same row page-0 track
+// pages draw. sel/editing follow the dispStepParams conventions.
+void OmxDisp::dispToolPage(const char *labels[4], const char *values[4], uint8_t sel, bool editing, const uint8_t *stepState, uint8_t pageLen, int8_t playhead)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_LABELS);
+
+	const int cw = 32;
+	for (uint8_t i = 0; i < 4; i++)
+	{
+		int x = i * cw;
+		bool inv = (i == sel) && editing;
+		if (inv)
+		{
+			display.fillRect(x + 1, 10, cw - 2, 10, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		u8g2centerText(labels[i], x, 8, cw, 8);
+		u8g2centerText(values[i], x, 18, cw, 8);
+		if (i == sel && !editing)
+			display.drawRect(x + 1, 0, cw - 2, 20, WHITE);
+	}
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+
+	drawStepRow(23, stepState, pageLen, playhead);
 }
 
 void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus)

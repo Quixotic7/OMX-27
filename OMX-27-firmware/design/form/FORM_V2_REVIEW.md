@@ -307,14 +307,91 @@ Ordered; each step is independently landable.
      lock) · **9–12** = **TRACK** grid: Mute / Solo / Gate / Rate for the selected track
      (label rules apply; rate pops "RATE 1:n" while turning). The blind machine-menu
      walk from Mix is gone — the menu is reached from the Step view.
-4. **Interface collapse** (§1.1) + **view-handler table** (§1.2) — mechanical but wide;
-   much smaller after step 2. Save-format change rides the existing version byte.
+     **CC page** (user request, revised same day): now sits at cursor **9–14, between
+     LEVELS and the TRACK grid**. Five bars = the selected track's pot-bank CC slots
+     (readout "C21 115" from the track's bank; values are a last-sent shadow
+     `ccLastSent_[5]` — synced from knob turns, nudged by the encoder, sent live via
+     `sendPotCC`; `analogValues` can't hold encoder edits, the pot scan rewrites it
+     every loop). A **big TENFAT bank number** sits right of the bars (cell 14):
+     editing it switches the track's pot bank, which the knobs and P-Locks follow.
+     **P-Locks**: holding a low-row step flips the page to that step's locks ("CC
+     LOCK": lock dots, no bar = unlocked); a hold is an edit gesture — turning always
+     writes the held step's lock (seeded from the live value), the encoder click
+     clears it, and pot turns lock too (same gesture as the Step view). Lock state,
+     set, clear, bank switch, and page order all verified on device.
+     `dispMixLevels` gained bar-count, lock-marker, and big-number parameters.
+4. **Interface collapse** (§1.1). ✅ **Done 2026-08-29** (all three targets build).
+   `FormMachineInterface` is gone (both files deleted): `FormMachineOmni` is a plain
+   concrete class holding the note-out callback plumbing itself, the shell owns
+   `FormOmni::FormMachineOmni *machines_[8]` directly, and **all 38 downcasts are
+   removed**. `FormMachineType`/`getClone`/`changeMachineAtIndex`/`setMachineTo` are
+   deleted; `loadFromDisk` now loads **in place** (reset seq → default channel → blit),
+   and the save format is unchanged (the per-slot type byte is kept, always OMNI, so
+   existing saves still load). `kOmniSaveVersion` moved to the namespace header.
+   _The §1.2 view-handler table remains open (the six dispatch sites still exist)._
 5. **Extraction pass** (§1.4) — opportunistic; the page-gesture and quick-copy/paste
    helpers alone remove ~150 duplicated lines.
-6. **Persistence decision** (§1.5) — bank save/load via the V3 flash-FS backend, or
-   explicitly deferred with the limitation noted in the PR description. Re-measure RAM
-   against real `sizeof(FormPattern)` and reconfirm the Teensy trims.
-7. **Spec sync** — update `FORM_REDESIGN.md` for the drift in §3 and the decisions in
+6. **Persistence** (§1.5). ✅ **Done 2026-08-29**: on the **RP2040 (V3)** the full
+   pattern bank persists to the board's **LittleFS** flash filesystem (1 MB partition,
+   `/formbank.dat`): a validated header (magic + `kOmniSaveVersion` + pattern/track
+   counts + `sizeof(OmniSeq)`) followed by `activePattern_`/`switchStyle_`/
+   `recQuantize_`/`trackHue_[8]` and the raw bank. Saving rides the existing device
+   save flow (`saveToDisk` → `saveBankToFS`); loading runs at boot after the FRAM
+   active-pattern load and re-snapshots the live machines into the bank so FRAM stays
+   authoritative for the active pattern. **Teensy builds persist only the active
+   pattern** (no filesystem) — the documented per-platform limitation. A version/layout
+   mismatch skips the file cleanly.
+7. **On-device QA pass** (2026-08-29, RP2040 V3 via the SysEx remote-control rig): ✅
+   - Mix encoder pages: LEVELS bars + readout render and edit (T1 100→120, propagates
+     to the track's velocity default); TRACK grid (MUTE/SOLO/GATE/RATE) renders; the
+     "RATE 1:n" popup fires while turning and reverts cleanly.
+   - Full Step encoder chain verified on hardware: both shell param grids, the kept
+     STEPNOTES/STEPPOTS/TPAT editors, and all seven modernized grid pages.
+   - **Persistence round-trip verified**: content in patterns 1 and 2 + Next Bar switch
+     style, remote save, reboot → pattern 1 (FRAM), pattern 2's steps and the switch
+     style (LittleFS bank-only data) all restored.
+   - QA-rig fixes shipped: `omxInjectInput` now resets the screensaver (injected input
+     previously let the saver blank the OLED mid-QA while events kept mutating state)
+     and gained a remote **SAVE** subcommand (0x04) since the physical save gesture
+     lives in .ino hardware handlers that injection bypasses; `omxctl.save_state()`
+     added. Machine `loadFromDisk` now sanitizes blitted ranges (a stale save showed
+     "Bank 8" — potBank 7 of 5; potBank/potMode/rate/channel are clamped).
+8. **TOOLS view** (user request, 2026-08-29): a 7th view on **AUX+19**
+   (`FORMVIEW_TOOLS`, container-rendered; the machine stays in MIX uiMode so the step
+   row + playhead LEDs come free). Layout mirrors the Seq view: low row auditions the
+   selected track's steps; **keys 3-10 are the current tool's action buttons**; the
+   encoder menu is one page per tool (flat cursor, page-cross pops the tool name;
+   params in the `dispStepParams` grid, §4 label rules). Tools (all destructive, on
+   the selected track; machine-side `tool*` methods):
+   - **ROTATE** — keys 3/4 shift left/right; SCOPE param = active page (`PG`, its own
+     polymeter length) or the whole playing loop (`TR`).
+   - **TRANSPOSE** — keys 3-6 = −12/−1/+1/+12 semitones on every note (the param grid
+     doubles as the key legend).
+   - **VEL RANDOM** — MIN/MAX params, key 3 randomizes note-step velocities.
+   - **HUMANIZE** (suggested addition) — AMT% param, key 3 randomizes nudge within it.
+   - **EUCLID** — PLS/ROT params (LEN cell shows the page length), key 3 generates onto
+     the active page via `euclidean::EuclideanMath` (static helpers — the Euclidean
+     mode itself is untouched).
+   - **GRIDS** — INST (BD/SD/HH/AC), X, Y, DENS params, key 3 generates onto the
+     active page via `grids::GridsChannel::level` with GridsWrapper's threshold +
+     velocity-from-level logic (retro_grids untouched; a 16-step page maps to the
+     32-step drum map at 8th resolution).
+   Generators stamp middle C on empty on-steps and clear off-steps.
+   **Revisions (same day, user feedback):**
+   - **F1/F2/F3 work exactly like the Seq view** — keys, LEDs, and screens delegate
+     wholesale to the Step view's handlers (pages/copy-paste, track select/cut-paste,
+     rate/length, with the same track-page overlays).
+   - Tool pages render a **compact param strip over the shared 16-step row**
+     (`dispToolPage`) — same row as the page-0 track pages, with the live playhead —
+     so step-modifying tools show their effect immediately.
+   - **Five more tools** (user request): **MIRROR** and **SHUFFLE** (Fisher-Yates),
+     both sharing ROTATE's PG/TR scope; **SCALE SNAP** (`remapNoteToScale` on every
+     note; page shows current root/scale); **CHANCE RND** (probability MIN..MAX on
+     on-steps); **QUANTIZE** (pull all nudges toward the grid by AMT%, the destructive
+     counterpart of the MI submenu's live morph). 11 tools total.
+   Verified on device: euclid 4-over-16, rotate shift live on the tool page's step
+   row, mirror flip, F1 overlay identical to Seq, grids BD topology.
+9. **Spec sync** — update `FORM_REDESIGN.md` for the drift in §3 and the decisions in
    §4, so the doc matches what the PR ships.
 
 Open UI proposals (§4.4) come **after** the PR, alongside the planned new features.

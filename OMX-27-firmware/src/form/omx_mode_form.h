@@ -7,7 +7,7 @@
 #include "../modes/submodes/submode_potconfig.h"
 #include "../modes/submodes/submode_preset.h"
 #include "../midifx/midifx_interface.h"
-#include "machines/form_machine_interface.h"
+#include "machines/form_machine_omni.h"
 #include "form_patterns.h"
 
 // FORM v2: an 8-track polyphonic step sequencer (single engine — the OMNI machine),
@@ -25,6 +25,8 @@ enum FormView
 	FORMVIEW_NOTES,     // AUX+16
 	FORMVIEW_PATTERNS,  // AUX+17 (container-rendered)
 	FORMVIEW_MI,        // AUX+18 (container-rendered live-play keyboard)
+	FORMVIEW_TOOLS,     // AUX+19 (container-rendered pattern tools: rotate/transpose/
+	                    //         vel-randomize/humanize/euclid/grids generators)
 	FORMVIEW_COUNT
 };
 
@@ -82,12 +84,18 @@ public:
 
 	// ---- Patterns (v2 data layer) ----
 	uint8_t getActivePattern() const { return activePattern_; }
+	FormOmni::FormMachineOmni *getSelectedMachine();
 	uint8_t getPatternCount() const { return FORM_NUM_PATTERNS; }
 	// Snapshot the current pattern, then make `index` active and load it into the machines.
 	void switchPattern(uint8_t index);
 	void copyPatternTo(uint8_t from, uint8_t to);
 	void clearPattern(uint8_t index);
 	bool patternHasContent(uint8_t index); // any track has any step with notes (snapshots if active)
+	// Pattern-bank persistence. The bank (~165 KB) exceeds FRAM (32 KB), so on the
+	// RP2040 (V3) it lives in the LittleFS flash filesystem; Teensy builds persist only
+	// the active pattern (via the Storage blit) — a known per-platform limitation.
+	void saveBankToFS();     // no-op off-RP2040
+	bool loadBankFromFS();   // false when absent/mismatched/off-RP2040
 
 private:
 	// ---- v2 shell: view router ----
@@ -221,8 +229,32 @@ private:
 	// Mix encoder pages (flat cursor): 0 = track overview, 1-8 = LEVELS (per-track
 	// default-velocity mixer), 9-12 = TRACK (Mute/Solo/Gate/Rate). Click = select/edit.
 	uint8_t mixCursor_ = 0;
+	// Last CC value sent per pot slot (by a knob turn or the Mix CC page's encoder).
+	// The CC page edits/shows this — potSettings.analogValues can't hold an encoder
+	// edit because the physical pot scan rewrites it every loop.
+	uint8_t ccLastSent_[5] = {0, 0, 0, 0, 0};
+	// Low-row steps held in Mix (audition): while held, the CC page shows/edits that
+	// step's CC P-Locks (knob turns lock too, like the Step view's hold-step gesture).
+	uint16_t mixHeldStepMask_ = 0;
+	int8_t mixHeldStepKey_ = -1; // most recent held step (focus for the lock display)
 	bool onEncoderMix(int dir); // encoder turn in the Mix view. consumed?
 	void onDisplayMix();        // render the Mix view's encoder pages
+	// ---- Tools view (AUX+19): each menu page is a tool; keys 3-10 are that tool's
+	// action buttons; the low row auditions steps (like Mix). All tools act on the
+	// selected track. Flat cursor: page = toolsCursor_/4, param cell = toolsCursor_%4.
+	uint8_t toolsCursor_ = 0;
+	// Tool params (persist while in the mode):
+	bool toolScopeAll_ = false;              // ROTATE: whole loop vs active page
+	uint8_t toolVelMin_ = 64, toolVelMax_ = 127;
+	uint8_t toolEucPulses_ = 4, toolEucRot_ = 0;
+	uint8_t toolGridsInst_ = 0, toolGridsX_ = 128, toolGridsY_ = 128, toolGridsDens_ = 128;
+	uint8_t toolHumAmt_ = 15;                // HUMANIZE: % of max nudge
+	uint8_t toolChanceMin_ = 50, toolChanceMax_ = 100; // CHANCE RND: probability range
+	uint8_t toolQuantAmt_ = 100;             // QUANTIZE: % pull toward the grid
+	void onKeyUpdateTools(OMXKeypadEvent e);
+	bool onEncoderTools(int dir);
+	void updateToolsLEDs();
+	void onDisplayTools();
 
 	static const uint8_t kNumMachines = 8;
 
@@ -247,7 +279,7 @@ private:
 	// uint8_t copiedMachineIndex_;
 
 
-	FormMachineInterface *machines_[kNumMachines];
+	FormOmni::FormMachineOmni *machines_[kNumMachines];
 
 	// Per-track colour (hue): hold a track + turn K5 in Mix. Container-level for now
 	// (not yet persisted with the pattern).
@@ -269,11 +301,8 @@ private:
 
 	void selectMachine(uint8_t machineIndex);
 
-	FormMachineInterface* getSelectedMachine();
 
-	void changeMachineAtIndex(uint8_t machineIndex, uint8_t machineType);
 
-	void setMachineTo(uint8_t machineIndex, FormMachineInterface *ptr);
 
 	// char foo[sizeof(auxMacroManager_)]
 
