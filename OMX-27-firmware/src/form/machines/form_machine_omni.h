@@ -309,12 +309,20 @@ namespace FormOmni
         void setSeq(const OmniSeq &s)
         {
             seq_ = s;
+            sanitizeSeq();        // clamp ranges a raw pattern blit can't guarantee (bank/switch load)
             seqDynamic_.Reset();  // loaded pattern starts from a clean playback state
             ratchetDivs_ = 0;     // and no ratchet carried over from the old pattern
             ratchetStepIdx_ = -1;
         }
 
     private:
+        // Clamp seq_ fields that a raw blit (FRAM load, LittleFS bank, pattern switch) can't
+        // guarantee in range — an out-of-range rate/potBank OOB-reads kSeqRates[]/pots[].
+        void sanitizeSeq();
+        // Tools: gather the absolute step indices of a tool's scope (whole played loop or the
+        // active page) in play order, into idx[<=64]. Returns the count. The whole-loop scope is
+        // non-contiguous (disabled pages / short-page tails are skipped) — must go via positionToStep.
+        uint8_t toolScopeIndices(bool wholeTrack, uint8_t *idx);
         // Tools: shared rhythm-apply for the Euclid/Grids generators.
         void applyRhythmToPage(const bool *pattern, uint8_t len, const uint8_t *vels);
 

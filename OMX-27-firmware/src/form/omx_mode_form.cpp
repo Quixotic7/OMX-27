@@ -4196,21 +4196,27 @@ bool OmxModeForm::loadBankFromFS()
 		Serial.println("FORM bank: header mismatch, skipping");
 		return false;
 	}
-	f.read(&activePattern_, 1);
-	f.read(&switchStyle_, 1);
-	f.read(&recQuantize_, 1);
-	f.read(trackHue_, sizeof(trackHue_));
-	bool ok = f.read((uint8_t *)patterns_, sizeof(patterns_)) == (int)sizeof(patterns_);
+	// Read the fixed fields into locals first: a truncated body (e.g. power loss mid-write —
+	// the ~165 KB write is not atomic) must not leave activePattern_/switchStyle_ half-written
+	// and unclamped, since they index patterns_[]/kSwitchStyleNames[] elsewhere.
+	uint8_t activePat = 0, swStyle = 0, recQ = 0;
+	uint8_t hues[sizeof(trackHue_)]; // matches the write's sizeof(trackHue_) exactly
+	bool ok = f.read(&activePat, 1) == 1 &&
+			  f.read(&swStyle, 1) == 1 &&
+			  f.read(&recQ, 1) == 1 &&
+			  f.read(hues, sizeof(hues)) == (int)sizeof(hues) &&
+			  f.read((uint8_t *)patterns_, sizeof(patterns_)) == (int)sizeof(patterns_);
 	f.close();
 	if (!ok)
 	{
 		Serial.println("FORM bank: short read, skipping");
 		return false;
 	}
-	if (activePattern_ >= FORM_NUM_PATTERNS)
-		activePattern_ = 0;
-	if (switchStyle_ > 3)
-		switchStyle_ = 0;
+	// Commit, clamped.
+	activePattern_ = (activePat >= FORM_NUM_PATTERNS) ? 0 : activePat;
+	switchStyle_ = (swStyle > 3) ? 0 : swStyle;
+	recQuantize_ = recQ;
+	memcpy(trackHue_, hues, sizeof(trackHue_));
 	Serial.println("FORM bank loaded");
 	return true;
 }

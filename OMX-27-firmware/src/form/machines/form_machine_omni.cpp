@@ -398,57 +398,93 @@ namespace FormOmni
         return &getTrack()->steps[selStep_];
     }
 
+    // Clamp seq_ fields a raw pattern blit can't guarantee. Called from setSeq (bank load +
+    // pattern switch) and loadFromDisk (FRAM). An out-of-range rate indexes past kSeqRates[]
+    // (and feeds a `/ rate` divide); an out-of-range potBank indexes past pots[][].
+    void FormMachineOmni::sanitizeSeq()
+    {
+        if (seq_.potBank >= NUM_CC_BANKS)
+            seq_.potBank = 0;
+        if (seq_.potMode > 1)
+            seq_.potMode = 0;
+        if (seq_.rate >= kNumSeqRates)
+            seq_.rate = 9; // 1:16 default
+        if (seq_.channel > 15)
+            seq_.channel = 0;
+    }
+
     // ---- Tools view operations ----
 
-    // Shift steps by one position. wholeTrack = the whole playing loop (flat length);
-    // otherwise just the active page's steps (its own length — polymeter safe).
+    // Gather the absolute step indices of a tool's scope in play order. The whole-loop scope is
+    // NOT contiguous in steps[]: pages live at p*16 and disabled pages / short-page tails are
+    // skipped, so it must map each loop position through positionToStep. The active-page scope is
+    // the page's own contiguous block. idx must hold up to 64 entries; returns the count.
+    uint8_t FormMachineOmni::toolScopeIndices(bool wholeTrack, uint8_t *idx)
+    {
+        auto track = getTrack();
+        if (wholeTrack)
+        {
+            uint8_t len = (uint8_t)track->getLength(); // <= 64
+            for (uint8_t i = 0; i < len; i++)
+                idx[i] = track->positionToStep(i);
+            return len;
+        }
+        uint8_t start = (uint8_t)(activePage_ * 16);
+        uint8_t len = getPageLen(activePage_);
+        for (uint8_t i = 0; i < len; i++)
+            idx[i] = start + i;
+        return len;
+    }
+
+    // Shift steps by one position. wholeTrack = the whole playing loop; otherwise just the active
+    // page. Operates over the scope's mapped indices so polymeter / disabled pages stay correct.
     void FormMachineOmni::toolRotate(int8_t dir, bool wholeTrack)
     {
         auto track = getTrack();
-        uint8_t start = wholeTrack ? 0 : (uint8_t)(activePage_ * 16);
-        uint8_t len = wholeTrack ? track->getLength() : getPageLen(activePage_);
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
         if (len < 2 || dir == 0)
             return;
         if (dir > 0) // shift right: last -> first
         {
-            Step tmp = track->steps[start + len - 1];
+            Step tmp = track->steps[idx[len - 1]];
             for (uint8_t i = len - 1; i > 0; i--)
-                track->steps[start + i] = track->steps[start + i - 1];
-            track->steps[start] = tmp;
+                track->steps[idx[i]] = track->steps[idx[i - 1]];
+            track->steps[idx[0]] = tmp;
         }
         else // shift left: first -> last
         {
-            Step tmp = track->steps[start];
+            Step tmp = track->steps[idx[0]];
             for (uint8_t i = 0; i < (uint8_t)(len - 1); i++)
-                track->steps[start + i] = track->steps[start + i + 1];
-            track->steps[start + len - 1] = tmp;
+                track->steps[idx[i]] = track->steps[idx[i + 1]];
+            track->steps[idx[len - 1]] = tmp;
         }
     }
 
     void FormMachineOmni::toolMirror(bool wholeTrack)
     {
         auto track = getTrack();
-        uint8_t start = wholeTrack ? 0 : (uint8_t)(activePage_ * 16);
-        uint8_t len = wholeTrack ? track->getLength() : getPageLen(activePage_);
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
         for (uint8_t i = 0; i < len / 2; i++)
         {
-            Step tmp = track->steps[start + i];
-            track->steps[start + i] = track->steps[start + len - 1 - i];
-            track->steps[start + len - 1 - i] = tmp;
+            Step tmp = track->steps[idx[i]];
+            track->steps[idx[i]] = track->steps[idx[len - 1 - i]];
+            track->steps[idx[len - 1 - i]] = tmp;
         }
     }
 
     void FormMachineOmni::toolShuffle(bool wholeTrack)
     {
         auto track = getTrack();
-        uint8_t start = wholeTrack ? 0 : (uint8_t)(activePage_ * 16);
-        uint8_t len = wholeTrack ? track->getLength() : getPageLen(activePage_);
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
         for (uint8_t i = len; i > 1; i--) // Fisher-Yates
         {
             uint8_t j = (uint8_t)random(0, i); // 0..i-1
-            Step tmp = track->steps[start + i - 1];
-            track->steps[start + i - 1] = track->steps[start + j];
-            track->steps[start + j] = tmp;
+            Step tmp = track->steps[idx[i - 1]];
+            track->steps[idx[i - 1]] = track->steps[idx[j]];
+            track->steps[idx[j]] = tmp;
         }
     }
 
@@ -2873,14 +2909,7 @@ namespace FormOmni
             }
             // Sanitize ranges the blit can't guarantee (older saves within the same
             // version have shipped out-of-range values, e.g. potBank 7 -> "Bank 8").
-            if (seq_.potBank >= NUM_CC_BANKS)
-                seq_.potBank = 0;
-            if (seq_.potMode > 1)
-                seq_.potMode = 0;
-            if (seq_.rate >= kNumSeqRates)
-                seq_.rate = 9; // 1:16 default
-            if (seq_.channel > 15)
-                seq_.channel = 0;
+            sanitizeSeq();
         }
         startingAddress += saveSize;
 

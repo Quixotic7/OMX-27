@@ -395,3 +395,36 @@ Ordered; each step is independently landable.
    §4, so the doc matches what the PR ships.
 
 Open UI proposals (§4.4) come **after** the PR, alongside the planned new features.
+
+---
+
+## 6. Independent QA pass (2026-08-29) — review of steps 2–8 + bug fixes
+
+A second reviewer re-verified fable's steps 2/3/4/6/8 (three parallel code audits + a
+SysEx-rig hardware pass, RP2040 V3). Build clean on both targets; interface-collapse
+claims all confirmed true against the tree; on-device: all 7 views render, MIX
+LEVELS/CC/TRACK grid render+edit, EUCLID generates E(4,16), ROTATE (PG **and** TR) shift
+correctly, pattern-bank persistence round-trips (switch style survives reboot).
+
+**Bugs found. HIGH/MEDIUM fixed 2026-08-29; verified on device:**
+- **[HIGH] Bank patterns weren't range-sanitized** → an out-of-range `rate` (16–31)
+  indexes past `kSeqRates[16]` and feeds `stepMicros_ = … / rate` (possible divide-by-
+  zero); `potBank` (5–7) OOB-reads `pots[5][5]`. The clamp lived only on the FRAM path
+  (`loadFromDisk`); the LittleFS bank load and `switchPattern`→`setSeq` blitted raw.
+  **Fix:** extracted `sanitizeSeq()` and call it from `setSeq` (the choke point every
+  pattern passes through to become live) + `loadFromDisk`.
+- **[HIGH] TOOLS ROTATE/MIRROR/SHUFFLE "TR" (whole-loop) scope edited the wrong steps.**
+  They walked contiguous `steps[0..len-1]`, but pages live at `steps[p*16..]` and the
+  played loop skips disabled pages / short-page tails — so a non-default layout silently
+  scrambled a non-playing page. **Fix:** new `toolScopeIndices()` maps each loop position
+  through `positionToStep` (the same mapping playback uses); the three tools now permute
+  over those indices. PG scope was already correct.
+- **[MEDIUM] `loadBankFromFS` truncated-read path** overwrote `activePattern_`/
+  `switchStyle_` then returned before the clamps, leaving them unclamped (they index
+  `patterns_[]`/`kSwitchStyleNames[]`). **Fix:** read the fixed fields into locals and
+  commit (clamped) only after the full body read succeeds.
+
+**LOW items still open** (deferred): stuck `mixHeldStepMask_`/hung audition note when a
+track key is pressed while a Mix low-row step is held; TOOLS encoder cursor lands on
+empty cells for tools with <4 params (fixed 4-cell stride); EUCLID rotation not reduced
+`mod pageLen`; two dead FRAM clamps (`potMode>1`/`channel>15` on 1/4-bit fields).
