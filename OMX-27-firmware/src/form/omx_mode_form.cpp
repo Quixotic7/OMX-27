@@ -2928,7 +2928,7 @@ void OmxModeForm::onPotChanged(int potIndex, int prevValue, int newValue, int an
 	if(selMachine->doesConsumePots())
 	{
 		if (potIndex >= 0 && potIndex < 5)
-			ccLastSent_[potIndex] = (uint8_t)constrain(newValue, 0, 127); // Mix CC page mirror
+			ccBankRow()[potIndex] = (uint8_t)constrain(newValue, 0, 127); // Mix CC page mirror
 		selMachine->onPotChanged(potIndex, prevValue, newValue, analogDelta);
 		return;
 	}
@@ -3114,7 +3114,7 @@ bool OmxModeForm::onEncoderMix(int dir)
 			{
 				int base = omni->getStepPotLock(st, slot);
 				if (base < 0)
-					base = ccLastSent_[slot];
+					base = ccBankRow()[slot];
 				omni->setStepPotLock(st, slot, (int8_t)constrain(base + dir, 0, 127));
 			}
 		omxDisp.setDirty();
@@ -3144,8 +3144,8 @@ bool OmxModeForm::onEncoderMix(int dir)
 	else if (mixCursor_ <= 13) // CC slots (9-13): live value + send (locks are the
 	{                          // held-step path above)
 		uint8_t slot = mixCursor_ - 9;
-		int v = constrain((int)ccLastSent_[slot] + dir, 0, 127);
-		ccLastSent_[slot] = (uint8_t)v;
+		int v = constrain((int)ccBankRow()[slot] + dir, 0, 127);
+		ccBankRow()[slot] = (uint8_t)v;
 		getSelectedMachine()->sendPotCC(slot, (uint8_t)v);
 	}
 	else if (mixCursor_ == 14) // the big bank number: switch the track's pot bank
@@ -3199,14 +3199,14 @@ void OmxModeForm::onDisplayMix()
 			locked[i] = lockVal >= 0;
 			// Holding a step shows THAT step's locks (no bar = unlocked slot);
 			// otherwise the live last-sent values.
-			vals[i] = held ? lockVal : (int8_t)ccLastSent_[i];
+			vals[i] = held ? lockVal : (int8_t)ccBankRow()[i];
 		}
 		uint8_t sel = mixCursor_ - 9; // 0-4 slots, 5 = the bank number
 		char tbuf[12], vbuf[14];
 		snprintf(tbuf, sizeof(tbuf), held ? "CC LOCK" : "CC");
 		if (sel < 5)
 		{
-			int v = held ? vals[sel] : (int)ccLastSent_[sel];
+			int v = held ? vals[sel] : (int)ccBankRow()[sel];
 			if (v < 0)
 				snprintf(vbuf, sizeof(vbuf), "C%u --", (unsigned)omni->potLockCC(sel));
 			else

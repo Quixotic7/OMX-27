@@ -229,10 +229,13 @@ private:
 	// Mix encoder pages (flat cursor): 0 = track overview, 1-8 = LEVELS (per-track
 	// default-velocity mixer), 9-12 = TRACK (Mute/Solo/Gate/Rate). Click = select/edit.
 	uint8_t mixCursor_ = 0;
-	// Last CC value sent per pot slot (by a knob turn or the Mix CC page's encoder).
-	// The CC page edits/shows this — potSettings.analogValues can't hold an encoder
-	// edit because the physical pot scan rewrites it every loop.
-	uint8_t ccLastSent_[5] = {0, 0, 0, 0, 0};
+	// Last CC value sent, per track x pot bank x slot (by a knob turn or the Mix CC
+	// page's encoder). Per-track-per-bank so every track's banks remember their own
+	// values — switching track or bank shows that combination's last-sent state.
+	// (potSettings.analogValues can't hold encoder edits: the pot scan rewrites it.)
+	uint8_t ccLastSent_[8][NUM_CC_BANKS][5] = {};
+	// The selected track's current bank row of that table.
+	uint8_t *ccBankRow() { return ccLastSent_[selectedMachine_][getSelectedMachine()->getPotBank()]; }
 	// Low-row steps held in Mix (audition): while held, the CC page shows/edits that
 	// step's CC P-Locks (knob turns lock too, like the Step view's hold-step gesture).
 	uint16_t mixHeldStepMask_ = 0;

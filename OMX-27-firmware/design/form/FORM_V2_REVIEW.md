@@ -320,6 +320,11 @@ Ordered; each step is independently landable.
      clears it, and pot turns lock too (same gesture as the Step view). Lock state,
      set, clear, bank switch, and page order all verified on device.
      `dispMixLevels` gained bar-count, lock-marker, and big-number parameters.
+     **Per-track-per-bank values** (user fix request, same day): the last-sent shadow
+     is now `ccLastSent_[8][NUM_CC_BANKS][5]` (`ccBankRow()` = the selected track's
+     current bank row), so every track × bank combination remembers its own values —
+     track 1 on bank 1 and track 2 on bank 2 no longer show each other's state.
+     Verified on device (T1/B1 vs T2/B2 isolation round-trip).
 4. **Interface collapse** (§1.1). ✅ **Done 2026-08-29** (all three targets build).
    `FormMachineInterface` is gone (both files deleted): `FormMachineOmni` is a plain
    concrete class holding the note-out callback plumbing itself, the shell owns
@@ -391,7 +396,29 @@ Ordered; each step is independently landable.
      counterpart of the MI submenu's live morph). 11 tools total.
    Verified on device: euclid 4-over-16, rotate shift live on the tool page's step
    row, mirror flip, F1 overlay identical to Seq, grids BD topology.
-9. **Spec sync** — update `FORM_REDESIGN.md` for the drift in §3 and the decisions in
+9. **Full on-device QA pass #2** (2026-08-29, after the Mix/CC/Tools/persistence
+   work): ✅ all green.
+   - **Transport + MIDI**: play/stop via AUX; 3 s capture showed balanced note-on/off
+     pairs (C4 vel 100, ch 1), no stuck notes, playhead advancing.
+   - **Mix**: overview, F1 mute (track squares update), F2 SOLO/Fill split, F3
+     LEN|RATE, hold-track ("MUTE / PLAY MODE"), LEVELS, CC page, TRACK grid.
+   - **Step**: create/clear toggle, hold-step velocity palette (VEL 100 → 88 via
+     key 7), pot P-Lock, param pages, machine menu (prior pass).
+   - **Notes**: piano render, chord entry onto the selected step, hold-11 velocity
+     palette. **Transpose**: renders + edits. **MI**: keyboard page, menu, QUANTIZE
+     submenu open/AUX-exit.
+   - **Patterns**: switching + progress bar while playing; queued switching under
+     Next Bar (prior pass).
+   - **Live recording**: AUX+3 arm (record dot in the transport widget),
+     start-on-note from stopped, played notes landed in steps, stop committed +
+     disarmed.
+   - **Persistence**: fresh save → reboot → switch style and both patterns' content
+     restored. (One observation: the switch style had drifted from the qa2-saved
+     NEXT BAR to INSTANT at runtime across the many QA sessions — the bank file
+     itself was intact and both round-trips passed, so this was almost certainly a
+     stray injected tap on a style key during blind QA driving, not a firmware bug.
+     Watch for it recurring in normal use.)
+10. **Spec sync** — update `FORM_REDESIGN.md` for the drift in §3 and the decisions in
    §4, so the doc matches what the PR ships.
 
 Open UI proposals (§4.4) come **after** the PR, alongside the planned new features.
