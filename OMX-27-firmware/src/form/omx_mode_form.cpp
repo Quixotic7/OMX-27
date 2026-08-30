@@ -217,6 +217,8 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	mixCursor_ = 0; // Mix opens on the track overview
 	toolIndex_ = 0; // Tools opens on the first tool (ROTATE)
 	toolCell_ = 0;
+	if (view == FORMVIEW_TOOLS)
+		stepEditMode_ = STEPMODE_NOTE; // ROTATE's hold-step mode (VEL/CHANCE tools switch it)
 	mixHeldStepMask_ = 0;
 	mixHeldStepKey_ = -1;
 	// Clear the F1+page gesture state too: a page key still physically held across a view
@@ -305,6 +307,8 @@ void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
 {
 	uint8_t k = e.key();
 	bool down = e.down(), held = e.held();
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
+		return; // the AUX layer owns the keys while held
 
 	// ---- Keys 1/2: quick tap = copy/paste the whole pattern; held = F1/F2 modifier ----
 	if (k == 1)
@@ -1417,35 +1421,76 @@ void OmxModeForm::onDisplayNotes()
 
 enum ToolIndex
 {
-	TOOL_ROTATE,   // shift steps left/right (active page or whole loop)
-	TOOL_MIRROR,   // reverse step order (page or whole loop)
-	TOOL_SHUFFLE,  // random permutation of steps (page or whole loop)
-	TOOL_TRANS,    // transpose all notes (keys: -12 / -1 / +1 / +12)
-	TOOL_SCALE,    // snap every note to the current scale
+	TOOL_ROTATE,   // shift steps left/right
+	TOOL_MIRROR,   // reverse step order
+	TOOL_SHUFFLE,  // random permutation of steps
+	TOOL_HUM,      // humanize: random nudge within a % range
+	TOOL_QUANT,    // pull nudges toward the grid by AMT%
+	TOOL_TRANS,    // transpose notes (Oct-/Oct+/Semi-/Semi+ buttons)
+	TOOL_SCALE,    // snap notes to the current scale
 	TOOL_VEL,      // randomize velocities between MIN..MAX
 	TOOL_CHANCE,   // randomize step probability between MIN..MAX
-	TOOL_HUM,      // humanize: random nudge within a % range
-	TOOL_QUANT,    // pull every nudge toward the grid by AMT%
-	TOOL_EUC,      // euclidean rhythm generator (active page)
-	TOOL_GRIDS,    // grids (topographic drum) generator (active page)
+	TOOL_EUC,      // euclidean rhythm generator
+	TOOL_GRIDS,    // grids (topographic drum) generator
 	TOOL_COUNT
 };
 
 static const char *kToolNames[TOOL_COUNT] = {
-	"ROTATE", "MIRROR", "SHUFFLE", "TRANSPOSE", "SCALE SNAP", "VEL RANDOM",
-	"CHANCE RND", "HUMANIZE", "QUANTIZE", "EUCLID", "GRIDS"};
+	"ROTATE", "MIRROR", "SHUFFLE", "HUMANIZE", "QUANTIZE", "TRANSPOSE",
+	"SCALE SNAP", "VEL RANDOM", "CHANCE RND", "EUCLID", "GRIDS"};
 
-// Navigable encoder cells per tool (= editable param count, min 1 so the cursor can rest on
-// a param-less tool). Keeps the cursor off the blank cells of the fixed display grid.
-static const uint8_t kToolCells[TOOL_COUNT] = {
-	1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 4};
-//  ROT MIR SHF TRN SCL VEL CHN HUM QNT EUC GRD
+// Encoder cells per tool: params first, then action buttons. The cursor walks these.
+static const uint8_t kToolParams[TOOL_COUNT] = {1, 1, 1, 2, 2, 1, 3, 18, 18, 3, 5};
+static const uint8_t kToolBtns[TOOL_COUNT]   = {2, 1, 1, 1, 1, 4, 1, 0, 0, 0, 0};
 
 // Distinct hue per tool for the action keys.
 static const uint32_t kToolColors[TOOL_COUNT] = {
-	CYAN, LTCYAN, DKCYAN, ORANGE, DKORANGE, YELLOW, DKYELLOW, MAGENTA, ROSE, GREEN, BLUE};
+	CYAN, LTCYAN, DKCYAN, MAGENTA, ROSE, ORANGE, DKORANGE, YELLOW, DKYELLOW, GREEN, BLUE};
 
 static const char *kGridsInstNames[4] = {"BD", "SD", "HH", "AC"};
+
+// Every tool's hold-a-step editing mode (the Seq-view palette machinery is reused
+// wholesale): VEL/CHANCE tools edit their own value, everything else edits notes.
+static uint8_t toolStepMode(uint8_t tool)
+{
+	if (tool == TOOL_VEL) return STEPMODE_VEL;
+	if (tool == TOOL_CHANCE) return STEPMODE_CHANCE;
+	return STEPMODE_NOTE;
+}
+
+// Which tools carry the shared SCOPE param (keys 9 = page / 10 = track everywhere).
+static bool toolHasScope(uint8_t tool)
+{
+	return tool != TOOL_VEL && tool != TOOL_CHANCE;
+}
+
+// Perform a tool's action button (shared by the top-row keys and the encoder click).
+// No popups — the step row / bars show the result (per the Tools UI spec).
+void OmxModeForm::toolAction(uint8_t tool, uint8_t action)
+{
+	auto omni = getSelectedMachine();
+	switch (tool)
+	{
+	case TOOL_ROTATE:  omni->toolRotate(action == 0 ? -1 : 1, toolScopeAll_); break;
+	case TOOL_MIRROR:  omni->toolMirror(toolScopeAll_); break;
+	case TOOL_SHUFFLE: omni->toolShuffle(toolScopeAll_); break;
+	case TOOL_HUM:     omni->toolHumanize(toolHumAmt_, toolScopeAll_); break;
+	case TOOL_QUANT:   omni->toolQuantize(toolQuantAmt_, toolScopeAll_); break;
+	case TOOL_TRANS:
+	{
+		static const int8_t kAmt[4] = {-12, 12, -1, 1}; // Oct- Oct+ Semi- Semi+
+		omni->toolTranspose(kAmt[action & 3], toolScopeAll_);
+		break;
+	}
+	case TOOL_SCALE:   omni->toolScaleRemap(toolScopeAll_); break;
+	case TOOL_VEL:     omni->toolRandomVel(toolVelMin_, toolVelMax_); break;
+	case TOOL_CHANCE:  omni->toolChanceRnd(toolChanceMin_, toolChanceMax_); break;
+	case TOOL_EUC:     omni->toolEuclid(toolEucPulses_, toolEucRot_, toolScopeAll_); break;
+	case TOOL_GRIDS:   omni->toolGrids(toolGridsInst_, toolGridsX_, toolGridsY_, toolGridsDens_, toolScopeAll_); break;
+	}
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+}
 
 void OmxModeForm::onKeyUpdateTools(OMXKeypadEvent e)
 {
@@ -1455,8 +1500,7 @@ void OmxModeForm::onKeyUpdateTools(OMXKeypadEvent e)
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
 		return; // AUX layer owns the keys while held
 
-	// F1/F2/F3 behave exactly like the Seq view: pages / copy-paste (F1), track select +
-	// cut-paste (F2), rate + page length (F3) — delegate to its handler wholesale.
+	// F1/F2/F3 behave exactly like the Seq view — delegate to its handler wholesale.
 	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
 	{
 		onKeyUpdateStep(e);
@@ -1471,113 +1515,53 @@ void OmxModeForm::onKeyUpdateTools(OMXKeypadEvent e)
 		return;
 	}
 
-	// Low row auditions the selected track's steps, like Mix.
-	if (k >= 11 && k < 27)
+	// The low row and the hold-step value palette are the Seq view's, with the tool's
+	// step-edit mode (notes for most tools, velocity/chance for their random tools).
+	if ((k >= 11 && k < 27) || heldStepMask_ != 0)
 	{
-		onKeyUpdateMixStep(e);
+		stepEditMode_ = toolStepMode(toolIndex_);
+		onKeyUpdateStep(e);
 		return;
 	}
 	if (e.held() || !e.down() || k < 3 || k > 10)
 		return;
 
-	auto omni = getSelectedMachine();
-	uint8_t tool = toolIndex_;
-	switch (tool)
+	// Shared SCOPE shortcuts: 9 = page, 10 = track (tools that have a scope).
+	if (toolHasScope(toolIndex_) && (k == 9 || k == 10))
+	{
+		toolScopeAll_ = (k == 10);
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return;
+	}
+	// Per-tool action keys.
+	switch (toolIndex_)
 	{
 	case TOOL_ROTATE:
-		if (k == 3 || k == 4)
-		{
-			omni->toolRotate(k == 3 ? -1 : 1, toolScopeAll_);
-			omxDisp.displayMessage(k == 3 ? (toolScopeAll_ ? "ROTATE < TRK" : "ROTATE < PG")
-										  : (toolScopeAll_ ? "ROTATE > TRK" : "ROTATE > PG"));
-		}
-		break;
-	case TOOL_MIRROR:
-		if (k == 3)
-		{
-			omni->toolMirror(toolScopeAll_);
-			omxDisp.displayMessage(toolScopeAll_ ? "MIRROR TRK" : "MIRROR PG");
-		}
-		break;
-	case TOOL_SHUFFLE:
-		if (k == 3)
-		{
-			omni->toolShuffle(toolScopeAll_);
-			omxDisp.displayMessage(toolScopeAll_ ? "SHUFFLE TRK" : "SHUFFLE PG");
-		}
-		break;
-	case TOOL_SCALE:
-		if (k == 3)
-		{
-			omni->toolScaleRemap();
-			omxDisp.displayMessage("SCALE SNAP");
-		}
-		break;
-	case TOOL_CHANCE:
-		if (k == 3)
-		{
-			omni->toolChanceRnd(toolChanceMin_, toolChanceMax_);
-			omxDisp.displayMessage("CHANCE RND");
-		}
-		break;
-	case TOOL_QUANT:
-		if (k == 3)
-		{
-			omni->toolQuantize(toolQuantAmt_);
-			omxDisp.displayMessage("QUANTIZE " + String(toolQuantAmt_) + "%");
-		}
+		if (k == 6) toolAction(TOOL_ROTATE, 0); // left
+		if (k == 7) toolAction(TOOL_ROTATE, 1); // right
 		break;
 	case TOOL_TRANS:
-		if (k >= 3 && k <= 6)
-		{
-			static const int8_t kAmt[4] = {-12, -1, 1, 12};
-			omni->toolTranspose(kAmt[k - 3]);
-			omxDisp.displayMessage((kAmt[k - 3] > 0 ? "TRANS +" : "TRANS ") + String(kAmt[k - 3]));
-		}
+		if (k >= 5 && k <= 8) toolAction(TOOL_TRANS, k - 5); // Oct- Oct+ Semi- Semi+
 		break;
-	case TOOL_VEL:
-		if (k == 3)
-		{
-			omni->toolRandomVel(toolVelMin_, toolVelMax_);
-			omxDisp.displayMessage("VEL RANDOM");
-		}
-		break;
-	case TOOL_HUM:
-		if (k == 3)
-		{
-			omni->toolHumanize(toolHumAmt_);
-			omxDisp.displayMessage("HUMANIZE " + String(toolHumAmt_) + "%");
-		}
-		break;
-	case TOOL_EUC:
-		if (k == 3)
-		{
-			omni->toolEuclid(toolEucPulses_, toolEucRot_);
-			omxDisp.displayMessage("EUCLID " + String(toolEucPulses_));
-		}
-		break;
-	case TOOL_GRIDS:
-		if (k == 3)
-		{
-			omni->toolGrids(toolGridsInst_, toolGridsX_, toolGridsY_, toolGridsDens_);
-			omxDisp.displayMessage("GRIDS " + String(kGridsInstNames[toolGridsInst_ & 3]));
-		}
+	default:
+		if (k == 7) toolAction(toolIndex_, 0); // single apply/action key
 		break;
 	}
-	omxDisp.setDirty();
-	omxLeds.setDirty();
 }
 
 bool OmxModeForm::onEncoderTools(int dir)
 {
 	if (dir == 0)
 		return true;
+	auto omni = getSelectedMachine();
+	uint8_t cells = kToolParams[toolIndex_] + kToolBtns[toolIndex_];
 	if (getEncoderSelect())
 	{
 		uint8_t prevTool = toolIndex_;
-		if (dir > 0) // next cell, then cross into the next tool at its first cell
+		if (dir > 0)
 		{
-			if (toolCell_ + 1 < kToolCells[toolIndex_])
+			if (toolCell_ + 1 < cells)
 				toolCell_++;
 			else if (toolIndex_ + 1 < TOOL_COUNT)
 			{
@@ -1585,69 +1569,113 @@ bool OmxModeForm::onEncoderTools(int dir)
 				toolCell_ = 0;
 			}
 		}
-		else // previous cell, then cross into the previous tool at its last cell
+		else
 		{
 			if (toolCell_ > 0)
 				toolCell_--;
 			else if (toolIndex_ > 0)
 			{
 				toolIndex_--;
-				toolCell_ = kToolCells[toolIndex_] - 1;
+				toolCell_ = kToolParams[toolIndex_] + kToolBtns[toolIndex_] - 1;
 			}
 		}
 		if (toolIndex_ != prevTool)
+		{
+			stepEditMode_ = toolStepMode(toolIndex_); // hold-step palette follows the tool
 			omxDisp.displayMessage(kToolNames[toolIndex_]); // tool crossed: name it
+		}
 		omxDisp.setDirty();
 		return true;
 	}
-	uint8_t tool = toolIndex_, cell = toolCell_;
-	switch (tool)
+	// EDIT mode: change the param under the cursor (buttons don't edit — they click).
+	uint8_t cell = toolCell_;
+	if (cell >= kToolParams[toolIndex_])
+		return true;
+	switch (toolIndex_)
 	{
 	case TOOL_ROTATE:
 	case TOOL_MIRROR:
 	case TOOL_SHUFFLE:
-		if (cell == 0)
-			toolScopeAll_ = dir > 0; // shared scope: active page vs whole loop
+		toolScopeAll_ = dir > 0; // shared scope: page (left) / track (right)
 		break;
-	case TOOL_CHANCE:
-		if (cell == 0) toolChanceMin_ = (uint8_t)constrain((int)toolChanceMin_ + dir, 0, 100);
-		if (cell == 1) toolChanceMax_ = (uint8_t)constrain((int)toolChanceMax_ + dir, 0, 100);
+	case TOOL_HUM:
+		if (cell == 0) toolScopeAll_ = dir > 0;
+		if (cell == 1) toolHumAmt_ = (uint8_t)constrain((int)toolHumAmt_ + dir, 0, 100);
 		break;
 	case TOOL_QUANT:
-		if (cell == 0) toolQuantAmt_ = (uint8_t)constrain((int)toolQuantAmt_ + dir, 0, 100);
+		if (cell == 0) toolScopeAll_ = dir > 0;
+		if (cell == 1) toolQuantAmt_ = (uint8_t)constrain((int)toolQuantAmt_ + dir, 0, 100);
+		break;
+	case TOOL_TRANS:
+		toolScopeAll_ = dir > 0;
+		break;
+	case TOOL_SCALE:
+		if (cell == 0 || cell == 1)
+			notesEditScaleParam(cell, dir); // root/scale — pops the scale name like elsewhere
+		if (cell == 2) toolScopeAll_ = dir > 0;
 		break;
 	case TOOL_VEL:
 		if (cell == 0) toolVelMin_ = (uint8_t)constrain((int)toolVelMin_ + dir, 0, 127);
-		if (cell == 1) toolVelMax_ = (uint8_t)constrain((int)toolVelMax_ + dir, 0, 127);
+		else if (cell == 1) toolVelMax_ = (uint8_t)constrain((int)toolVelMax_ + dir, 0, 127);
+		else omni->editStepParam(cell - 2, 0, dir); // per-step velocity bar
 		break;
-	case TOOL_HUM:
-		if (cell == 0) toolHumAmt_ = (uint8_t)constrain((int)toolHumAmt_ + dir, 0, 100);
+	case TOOL_CHANCE:
+		if (cell == 0) toolChanceMin_ = (uint8_t)constrain((int)toolChanceMin_ + dir, 0, 100);
+		else if (cell == 1) toolChanceMax_ = (uint8_t)constrain((int)toolChanceMax_ + dir, 0, 100);
+		else omni->editStepParam(cell - 2, 4, dir); // per-step chance bar
 		break;
 	case TOOL_EUC:
-		if (cell == 0) toolEucPulses_ = (uint8_t)constrain((int)toolEucPulses_ + dir, 0, 16);
-		if (cell == 1) toolEucRot_ = (uint8_t)constrain((int)toolEucRot_ + dir, 0, 15);
+		if (cell == 0) toolEucPulses_ = (uint8_t)constrain((int)toolEucPulses_ + dir, 0, 64);
+		if (cell == 1) toolEucRot_ = (uint8_t)constrain((int)toolEucRot_ + dir, 0, 31);
+		if (cell == 2) toolScopeAll_ = dir > 0;
 		break;
 	case TOOL_GRIDS:
 		if (cell == 0) toolGridsInst_ = (uint8_t)constrain((int)toolGridsInst_ + dir, 0, 3);
 		if (cell == 1) toolGridsX_ = (uint8_t)constrain((int)toolGridsX_ + dir * 4, 0, 255);
 		if (cell == 2) toolGridsY_ = (uint8_t)constrain((int)toolGridsY_ + dir * 4, 0, 255);
 		if (cell == 3) toolGridsDens_ = (uint8_t)constrain((int)toolGridsDens_ + dir * 4, 0, 255);
+		if (cell == 4) toolScopeAll_ = dir > 0;
 		break;
 	}
 	omxDisp.setDirty();
 	return true;
 }
 
+// Encoder click in Tools: on an action-button cell it FIRES the action; on a param cell
+// it falls through to the usual select/edit toggle. Returns true when consumed.
+bool OmxModeForm::onEncoderButtonTools()
+{
+	if (formView_ != FORMVIEW_TOOLS)
+		return false;
+	if (toolCell_ >= kToolParams[toolIndex_])
+	{
+		toolAction(toolIndex_, toolCell_ - kToolParams[toolIndex_]);
+		return true;
+	}
+	return false;
+}
+
 void OmxModeForm::updateToolsLEDs()
 {
-	uint8_t tool = toolIndex_;
-	uint32_t c = kToolColors[tool];
-	// Light the tool's action keys; everything else on the top row stays dark.
-	switch (tool)
+	// Hold-step palette: the Seq view's LED pass owns the board.
+	if (heldStepMask_ != 0)
 	{
-	case TOOL_ROTATE: strip.setPixelColor(3, c); strip.setPixelColor(4, c); break;
-	case TOOL_TRANS:  for (uint8_t k = 3; k <= 6; k++) strip.setPixelColor(k, c); break;
-	default:          strip.setPixelColor(3, c); break; // single "apply/generate" key
+		stepEditMode_ = toolStepMode(toolIndex_);
+		updateStepLEDs();
+		return;
+	}
+	uint32_t c = kToolColors[toolIndex_];
+	// Action keys lit in the tool colour; scope keys 9/10 show the current scope.
+	switch (toolIndex_)
+	{
+	case TOOL_ROTATE: strip.setPixelColor(6, c); strip.setPixelColor(7, c); break;
+	case TOOL_TRANS:  for (uint8_t k = 5; k <= 8; k++) strip.setPixelColor(k, c); break;
+	default:          strip.setPixelColor(7, c); break;
+	}
+	if (toolHasScope(toolIndex_))
+	{
+		strip.setPixelColor(9, toolScopeAll_ ? LOWWHITE : WHITE);  // page
+		strip.setPixelColor(10, toolScopeAll_ ? WHITE : LOWWHITE); // track
 	}
 	// Step row + playhead come from the machine's MIX-mode LED pass (uiMode is MIX here).
 }
@@ -1670,58 +1698,14 @@ void OmxModeForm::onDisplayTools()
 		onDisplaySeqTrackPage();
 		return;
 	}
-
-	uint8_t tool = toolIndex_, cell = toolCell_;
-	const char *labels[4] = {"", "", "", ""};
-	String vals[4];
-	switch (tool)
+	// Hold-step palette UI, exactly as the Seq view shows it.
+	if (heldStepMask_ != 0 && (stepHoldUIShown_ || stepEdited_))
 	{
-	case TOOL_ROTATE:
-	case TOOL_MIRROR:
-	case TOOL_SHUFFLE:
-		labels[0] = "SCOPE";
-		vals[0] = toolScopeAll_ ? "TR" : "PG"; // whole track loop vs active page
-		break;
-	case TOOL_SCALE:
-		labels[0] = "ROOT"; labels[1] = "SCALE";
-		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
-		vals[1] = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
-		break;
-	case TOOL_CHANCE:
-		labels[0] = "MIN"; labels[1] = "MAX";
-		vals[0] = String(toolChanceMin_); vals[1] = String(toolChanceMax_);
-		break;
-	case TOOL_QUANT:
-		labels[0] = "AMT%";
-		vals[0] = String(toolQuantAmt_);
-		break;
-	case TOOL_TRANS: // a legend for the action keys, not editable params
-		labels[0] = "K3"; labels[1] = "K4"; labels[2] = "K5"; labels[3] = "K6";
-		vals[0] = "-12"; vals[1] = "-1"; vals[2] = "+1"; vals[3] = "+12";
-		break;
-	case TOOL_VEL:
-		labels[0] = "MIN"; labels[1] = "MAX";
-		vals[0] = String(toolVelMin_); vals[1] = String(toolVelMax_);
-		break;
-	case TOOL_HUM:
-		labels[0] = "AMT%";
-		vals[0] = String(toolHumAmt_);
-		break;
-	case TOOL_EUC:
-		labels[0] = "PLS"; labels[1] = "ROT"; labels[2] = "LEN";
-		vals[0] = String(toolEucPulses_); vals[1] = String(toolEucRot_);
-		vals[2] = String(omni->getPageLen(omni->activePage()));
-		break;
-	case TOOL_GRIDS:
-		labels[0] = "INST"; labels[1] = "X"; labels[2] = "Y"; labels[3] = "DENS";
-		vals[0] = kGridsInstNames[toolGridsInst_ & 3];
-		vals[1] = String(toolGridsX_); vals[2] = String(toolGridsY_); vals[3] = String(toolGridsDens_);
-		break;
+		onDisplayStep();
+		return;
 	}
-	const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 
-	// The shared 16-step row under the params, so step-modifying tools (rotate /
-	// generators) show their effect immediately — same data as the page-0 track pages.
+	// Shared step-row data.
 	uint8_t stepState[16];
 	for (uint8_t i = 0; i < 16; i++)
 	{
@@ -1731,7 +1715,95 @@ void OmxModeForm::onDisplayTools()
 	uint8_t pageLen = omni->getPageLen(omni->activePage());
 	int16_t pageStart = (int16_t)omni->activePage() * 16;
 	int8_t playhead = omxFormGlobal.isPlaying ? (int8_t)((int16_t)omni->playingStepIndex() - pageStart) : -1;
-	omxDisp.dispToolPage(labels, values, cell, !getEncoderSelect(), stepState, pageLen, playhead);
+
+	int8_t sel = (int8_t)toolCell_;
+	bool editing = !getEncoderSelect();
+	const char *scopeVal = toolScopeAll_ ? "TRACK" : "PAGE";
+
+	switch (toolIndex_)
+	{
+	case TOOL_ROTATE:
+	{
+		const char *pl[1] = {"SCOPE"};
+		const char *pv[1] = {scopeVal};
+		const char *btns[2] = {"<", ">"};
+		omxDisp.dispToolActionPage(pl, pv, 1, btns, 2, sel, editing, stepState, pageLen, playhead);
+		return;
+	}
+	case TOOL_MIRROR:
+	case TOOL_SHUFFLE:
+	{
+		const char *pl[1] = {"SCOPE"};
+		const char *pv[1] = {scopeVal};
+		const char *btns[1] = {toolIndex_ == TOOL_MIRROR ? "MIRROR" : "SHUFFLE"};
+		omxDisp.dispToolActionPage(pl, pv, 1, btns, 1, sel, editing, stepState, pageLen, playhead);
+		return;
+	}
+	case TOOL_HUM:
+	case TOOL_QUANT:
+	{
+		String amt = String(toolIndex_ == TOOL_HUM ? toolHumAmt_ : toolQuantAmt_);
+		const char *pl[2] = {"SCOPE", "AMT%"};
+		const char *pv[2] = {scopeVal, amt.c_str()};
+		const char *btns[1] = {toolIndex_ == TOOL_HUM ? "HUMANIZE" : "QUANTIZE"};
+		omxDisp.dispToolActionPage(pl, pv, 2, btns, 1, sel, editing, stepState, pageLen, playhead);
+		return;
+	}
+	case TOOL_TRANS:
+	{
+		const char *pl[1] = {"SCOPE"};
+		const char *pv[1] = {scopeVal};
+		const char *btns[4] = {"OCT-", "OCT+", "SEMI-", "SEMI+"};
+		omxDisp.dispToolActionPage(pl, pv, 1, btns, 4, sel, editing, stepState, pageLen, playhead);
+		return;
+	}
+	case TOOL_SCALE:
+	{
+		String scaleV = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
+		const char *pl[3] = {"ROOT", "SCALE", "SCOPE"};
+		const char *pv[3] = {MusicScales::getNoteName(scaleConfig.scaleRoot), scaleV.c_str(), scopeVal};
+		const char *btns[1] = {"SNAP"};
+		omxDisp.dispToolActionPage(pl, pv, 3, btns, 1, sel, editing, nullptr, 0, -1);
+		return;
+	}
+	case TOOL_VEL:
+	case TOOL_CHANCE:
+	{
+		bool isVel = toolIndex_ == TOOL_VEL;
+		int16_t bars[16];
+		for (uint8_t i = 0; i < 16; i++)
+		{
+			bool has = isVel ? omni->stepHasNotes(i) : omni->stepIsOn(i);
+			bars[i] = has ? (int16_t)omni->stepParamValue(i, isVel ? 0 : 4) : (int16_t)-1;
+		}
+		omxDisp.dispToolBarsPage(isVel ? toolVelMin_ : toolChanceMin_,
+								 isVel ? toolVelMax_ : toolChanceMax_,
+								 isVel ? 127 : 100,
+								 bars, isVel ? 127 : 100, sel, editing, playhead);
+		return;
+	}
+	case TOOL_EUC:
+	{
+		bool preview[64];
+		uint8_t plen = omni->buildEuclidPattern(toolEucPulses_, toolEucRot_, toolScopeAll_, preview);
+		String p0 = String(toolEucPulses_), p1 = String(toolEucRot_);
+		const char *pl[3] = {"PLS", "ROT", "SCOPE"};
+		const char *pv[3] = {p0.c_str(), p1.c_str(), scopeVal};
+		omxDisp.dispToolGenPage(pl, pv, 3, sel, editing, preview, plen, stepState, pageLen, playhead);
+		return;
+	}
+	case TOOL_GRIDS:
+	{
+		bool preview[64];
+		uint8_t vels[64];
+		uint8_t plen = omni->buildGridsPattern(toolGridsInst_, toolGridsX_, toolGridsY_, toolGridsDens_, toolScopeAll_, preview, vels);
+		String px = String(toolGridsX_), py = String(toolGridsY_), pd = String(toolGridsDens_);
+		const char *pl[5] = {"INST", "X", "Y", "DENS", "SCOPE"};
+		const char *pv[5] = {kGridsInstNames[toolGridsInst_ & 3], px.c_str(), py.c_str(), pd.c_str(), scopeVal};
+		omxDisp.dispToolGenPage(pl, pv, 5, sel, editing, preview, plen, stepState, pageLen, playhead);
+		return;
+	}
+	}
 }
 
 // ---- Step view (container-rendered v2 editor) ----
@@ -2701,7 +2773,7 @@ void OmxModeForm::updateShortcutMode()
 
 	// Step view: while a step is held the top row 1-10 is the value palette, so keys 1/2
 	// must not become the F1/F2 shortcut. Freeze the shortcut mode at NONE.
-	if (formView_ == FORMVIEW_STEP && heldStepMask_ != 0)
+	if ((formView_ == FORMVIEW_STEP || formView_ == FORMVIEW_TOOLS) && heldStepMask_ != 0)
 	{
 		omxFormGlobal.shortcutMode = FORMSHORTCUT_NONE;
 		return;
@@ -3083,6 +3155,10 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 		onEncoderTools(enc.dir());
 		return;
 	}
+	// Patterns view: the encoder has no job yet — swallow it rather than letting it
+	// fall through to the machine and walk its param menu blind (invisible edits).
+	if (formView_ == FORMVIEW_PATTERNS)
+		return;
 
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderChanged(enc);
@@ -3246,6 +3322,10 @@ void OmxModeForm::onEncoderButtonDown()
 	if (formView_ == FORMVIEW_MI && onEncoderButtonMI())
 		return;
 
+	// Tools: click on an action-button cell fires the action.
+	if (onEncoderButtonTools())
+		return;
+
 	// Mix CC page: click while holding step(s) on a slot = clear that slot's P-Lock
 	// (the same click-clears-a-lock convention as the Step view's param pages).
 	if (formView_ == FORMVIEW_MIX && mixHeldStepMask_ != 0 && mixCursor_ >= 9 && mixCursor_ <= 13)
@@ -3357,8 +3437,8 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 				}
 				return;
 			}
-			// Step view: AUX while holding step(s) resets their value (no view browsing).
-			if (formView_ == FORMVIEW_STEP && heldStepMask_ != 0)
+			// Step/Tools views: AUX while holding step(s) resets their value (no view browsing).
+			if ((formView_ == FORMVIEW_STEP || formView_ == FORMVIEW_TOOLS) && heldStepMask_ != 0)
 			{
 				if (e.down() && !e.held())
 				{
@@ -3473,6 +3553,13 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			omxLeds.setDirty();
 			keyConsumed = true;
 		}
+
+		// The AUX layer is modal: swallow every remaining key-down so the layer's FREE
+		// keys can't fall through into the active view (AUX+5 was silently setting the
+		// Patterns switch style, AUX+20-26 were switching pattern slots). Releases still
+		// route so views can finish note-offs and clear held-key masks.
+		if (e.down())
+			keyConsumed = true;
 	}
 
 
@@ -4169,6 +4256,19 @@ int OmxModeForm::loadFromDisk(int startingAddress, Storage *storage)
 	}
 
 	return startingAddress;
+}
+
+// Recover the bank after an FRAM header failure: the flash file is independent of
+// FRAM, so a wiped/glitched header must not cost the patterns. Loads the bank and
+// makes its active pattern live (the FRAM per-machine load never ran on this path).
+void OmxModeForm::restoreBankFromFS()
+{
+	if (!loadBankFromFS())
+		return;
+	loadPatternIntoMachines(activePattern_);
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+	Serial.println("FORM bank recovered from flash");
 }
 
 // ---- Pattern-bank persistence (V3/RP2040: LittleFS; see the header note) ----

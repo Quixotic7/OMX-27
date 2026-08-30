@@ -138,6 +138,15 @@ void omxInjectInput(const uint8_t *d, unsigned n)
 				activeOmxMode->onEncoderButtonUpLong();
 		}
 		break;
+	case 0x05: // MODE — switch the active OMX mode (QA: injection can't reach the
+	           // hardware-only enc-DownLong mode-select path)
+		if (n >= 7 && d[6] < NUM_OMX_MODES)
+		{
+			changeOmxMode((OMXMode)d[6]);
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		break;
 	case 0x04: // SAVE — persist state exactly like the enc-edit + AUX gesture
 	{
 		omxDisp.displayMessage("Saving...");
@@ -469,6 +478,14 @@ void saveHeader()
 bool loadHeader(void)
 {
 	uint8_t version = storage->read(EEPROM_HEADER_ADDRESS + 0);
+	// A transient read glitch here (e.g. FRAM/I2C not settled right after a reboot)
+	// used to look like "uninitialized" and trigger a full reinit + re-save, wiping
+	// every saved setting AND the FORM pattern bank. Re-read before believing it.
+	if (version == 0xFF || version != EEPROM_VERSION)
+	{
+		delay(10);
+		version = storage->read(EEPROM_HEADER_ADDRESS + 0);
+	}
 
 	char buf[64];
 	snprintf(buf, sizeof(buf), "EEPROM Header Version is %d\n", version);
@@ -1305,6 +1322,10 @@ void setup()
 
 		changeOmxMode(DEFAULT_MODE);
 		// initPatterns();
+		// The FORM pattern bank lives in LittleFS and survives an FRAM wipe — pull it
+		// back BEFORE the reinit save below, so saveToStorage() re-persists the real
+		// bank instead of overwriting the flash file with empty defaults.
+		omxModeForm.restoreBankFromFS();
 		saveToStorage();
 	}
 

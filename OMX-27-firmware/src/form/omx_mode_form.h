@@ -96,6 +96,11 @@ public:
 	// the active pattern (via the Storage blit) — a known per-platform limitation.
 	void saveBankToFS();     // no-op off-RP2040
 	bool loadBankFromFS();   // false when absent/mismatched/off-RP2040
+public:
+	// Recover the bank from flash after an FRAM header failure (the .ino reinit path):
+	// loads the bank file and brings its active pattern live in the machines.
+	void restoreBankFromFS();
+private:
 
 private:
 	// ---- v2 shell: view router ----
@@ -256,6 +261,8 @@ private:
 	uint8_t toolHumAmt_ = 15;                // HUMANIZE: % of max nudge
 	uint8_t toolChanceMin_ = 50, toolChanceMax_ = 100; // CHANCE RND: probability range
 	uint8_t toolQuantAmt_ = 100;             // QUANTIZE: % pull toward the grid
+	void toolAction(uint8_t tool, uint8_t action); // fire a tool's action button (keys + encoder click)
+	bool onEncoderButtonTools();                   // click on a button cell fires it. consumed?
 	void onKeyUpdateTools(OMXKeypadEvent e);
 	bool onEncoderTools(int dir);
 	void updateToolsLEDs();

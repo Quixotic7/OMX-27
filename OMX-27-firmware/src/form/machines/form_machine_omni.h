@@ -260,14 +260,18 @@ namespace FormOmni
         void toolRotate(int8_t dir, bool wholeTrack);           // shift steps left/right (page or whole loop)
         void toolMirror(bool wholeTrack);                       // reverse step order (page or whole loop)
         void toolShuffle(bool wholeTrack);                      // random permutation of steps (page or whole loop)
-        void toolScaleRemap();                                  // snap every note to the current scale
-        void toolQuantize(uint8_t amtPct);                      // pull every nudge toward the grid by amt%
+        void toolScaleRemap(bool wholeTrack);                   // snap the scope's notes to the current scale
+        void toolQuantize(uint8_t amtPct, bool wholeTrack);     // pull the scope's nudges toward the grid by amt%
         void toolChanceRnd(uint8_t pmin, uint8_t pmax);         // randomize step probability of on-steps
-        void toolTranspose(int8_t semis);                       // transpose every note, clamped 0-127
+        void toolTranspose(int8_t semis, bool wholeTrack);      // transpose the scope's notes, clamped 0-127
         void toolRandomVel(uint8_t vmin, uint8_t vmax);         // randomize velocity of note steps
-        void toolHumanize(uint8_t amtPct);                      // random nudge within +/- amt% of max
-        void toolEuclid(uint8_t pulses, uint8_t rot);           // euclidean rhythm onto the active page
-        void toolGrids(uint8_t inst, uint8_t x, uint8_t y, uint8_t density); // grids rhythm onto the active page
+        void toolHumanize(uint8_t amtPct, bool wholeTrack);     // random nudge within +/- amt% of max
+        void toolEuclid(uint8_t pulses, uint8_t rot, bool wholeTrack);       // euclidean rhythm onto the scope
+        void toolGrids(uint8_t inst, uint8_t x, uint8_t y, uint8_t density, bool wholeTrack); // grids rhythm onto the scope
+        // Pattern builders shared with the Tools view's live preview (return the scope length).
+        uint8_t buildEuclidPattern(uint8_t pulses, uint8_t rot, bool wholeTrack, bool *pattern);
+        uint8_t buildGridsPattern(uint8_t inst, uint8_t x, uint8_t y, uint8_t density, bool wholeTrack, bool *pattern, uint8_t *vels);
+        int stepParamValue(uint8_t key16, uint8_t pid); // numeric step param (pid as editStepParam)
 
         uint8_t potLockCC(uint8_t slot); // the CC number a pot slot maps to (current pot bank)
         void sendPotCC(uint8_t slot, uint8_t val); // live CC send on the track's bank/channel
@@ -323,8 +327,8 @@ namespace FormOmni
         // active page) in play order, into idx[<=64]. Returns the count. The whole-loop scope is
         // non-contiguous (disabled pages / short-page tails are skipped) — must go via positionToStep.
         uint8_t toolScopeIndices(bool wholeTrack, uint8_t *idx);
-        // Tools: shared rhythm-apply for the Euclid/Grids generators.
-        void applyRhythmToPage(const bool *pattern, uint8_t len, const uint8_t *vels);
+        // Tools: shared rhythm-apply for the Euclid/Grids generators (scope-mapped).
+        void applyRhythmScope(const bool *pattern, const uint8_t *vels, bool wholeTrack);
 
         // Note-out into the shell (kept from the old interface).
         void seqNoteOn(MidiNoteGroup noteGroup, uint8_t midiFx);

@@ -936,6 +936,200 @@ void OmxDisp::dispToolPage(const char *labels[4], const char *values[4], uint8_t
 	drawStepRow(23, stepState, pageLen, playhead);
 }
 
+// FORM Tools: action-tool page. Params (label+value pairs) on top, action "buttons"
+// beneath, the step row at the bottom. sel walks params (0..pCount-1) then buttons.
+// stepState == nullptr = the no-steps variant (taller cells + full-width button row).
+void OmxDisp::dispToolActionPage(const char *pLabels[], const char *pVals[], uint8_t pCount,
+								 const char *btnLabels[], uint8_t btnCount, int8_t sel, bool editing,
+								 const uint8_t *stepState, uint8_t pageLen, int8_t playhead)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_LABELS);
+
+	bool withSteps = stepState != nullptr;
+	uint8_t pRowH = withSteps ? 10 : 19;   // param row height
+	uint8_t bY = withSteps ? 11 : 21;      // buttons top
+	uint8_t bH = withSteps ? 10 : 10;      // buttons height
+
+	// Params: label left, value right inside each region.
+	uint8_t pw = pCount > 0 ? 128 / pCount : 128;
+	for (uint8_t i = 0; i < pCount; i++)
+	{
+		int x = i * pw;
+		bool isSel = (sel == (int8_t)i);
+		bool inv = isSel && editing;
+		if (inv)
+		{
+			display.fillRect(x + 1, 0, pw - 2, pRowH - 1, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		if (withSteps)
+		{
+			// One line: label left, value right.
+			u8g2_display.setCursor(x + 4, 8);
+			u8g2_display.print(pLabels[i]);
+			int vw = (int)strlen(pVals[i]) * 5; // crude width (FONT_LABELS ~5px/char)
+			u8g2_display.setCursor(x + pw - 4 - vw, 8);
+			u8g2_display.print(pVals[i]);
+		}
+		else
+		{
+			// Taller cells: label over value, both centered.
+			u8g2centerText(pLabels[i], x, 8, pw, 8);
+			u8g2centerText(pVals[i], x, 17, pw, 8);
+		}
+		if (isSel && !editing)
+			display.drawRect(x, 0, pw, pRowH, WHITE);
+	}
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+
+	// Buttons: centered labels in boxes; the selected button renders inverted.
+	if (btnCount > 0)
+	{
+		uint8_t bw = 128 / btnCount;
+		for (uint8_t i = 0; i < btnCount; i++)
+		{
+			int x = i * bw;
+			bool isSel = (sel == (int8_t)(pCount + i));
+			if (isSel)
+			{
+				display.fillRect(x + 2, bY, bw - 4, bH, WHITE);
+				u8g2_display.setForegroundColor(BLACK);
+				u8g2_display.setBackgroundColor(WHITE);
+			}
+			else
+			{
+				display.drawRect(x + 2, bY, bw - 4, bH, WHITE);
+				u8g2_display.setForegroundColor(WHITE);
+				u8g2_display.setBackgroundColor(BLACK);
+			}
+			u8g2centerText(btnLabels[i], x, bY + bH - 3, bw, 8);
+		}
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+	}
+
+	if (withSteps)
+		drawStepRow(23, stepState, pageLen, playhead);
+}
+
+// FORM Tools: VEL/CHANCE RANDOM page. A min/max range bar on top (sel 0 = min handle,
+// 1 = max handle), 16 tall per-step value bars beneath (sel 2+i = bar i; value < 0 = no
+// bar). No text — the layout is the interface.
+void OmxDisp::dispToolBarsPage(uint8_t vmin, uint8_t vmax, uint8_t vRange,
+							   const int16_t bars[16], int16_t barMax, int8_t sel, bool editing,
+							   int8_t playhead)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// Range bar: baseline + the filled min..max span + two handles.
+	int minX = 2 + ((int)vmin * 123) / vRange;
+	int maxX = 2 + ((int)vmax * 123) / vRange;
+	if (maxX < minX) { int t = minX; minX = maxX; maxX = t; }
+	display.drawFastHLine(2, 3, 124, WHITE);
+	display.fillRect(minX, 2, maxX - minX + 1, 3, WHITE);
+	for (uint8_t h = 0; h < 2; h++)
+	{
+		int hx = h == 0 ? minX : maxX;
+		bool isSel = (sel == (int8_t)h);
+		if (isSel && editing)
+			display.fillRect(hx - 2, 0, 5, 7, WHITE);
+		else
+		{
+			display.drawFastVLine(hx, 0, 7, WHITE);
+			if (isSel)
+				display.drawRect(hx - 2, 0, 5, 7, WHITE);
+		}
+	}
+
+	// Per-step bars.
+	const uint8_t y0 = 9, h = 23;
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		int x = i * 8;
+		if (bars[i] >= 0)
+		{
+			uint8_t bh = (uint8_t)(((int32_t)bars[i] * (h - 2)) / barMax);
+			display.fillRect(x + 2, y0 + (h - 1 - bh), 4, bh + 1, WHITE);
+		}
+		else
+			display.drawFastHLine(x + 2, y0 + h - 1, 4, WHITE); // baseline tick = no value
+		if (sel == (int8_t)(2 + i))
+		{
+			if (editing)
+				display.fillRect(x, y0, 8, h, INVERSE);
+			else
+				display.drawRect(x, y0, 8, h, WHITE);
+		}
+		if (playhead == (int8_t)i)
+			display.fillRect(x + 3, 31, 2, 1, INVERSE);
+	}
+}
+
+// FORM Tools: generator page (EUCLID/GRIDS). Compact params on top, the live pattern
+// preview in the middle (the Euclidean mode's own tick rendering), the step row below.
+void OmxDisp::dispToolGenPage(const char *pLabels[], const char *pVals[], uint8_t pCount,
+							  int8_t sel, bool editing, bool *preview, uint8_t previewLen,
+							  const uint8_t *stepState, uint8_t pageLen, int8_t playhead)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_LABELS);
+
+	uint8_t pw = pCount > 0 ? 128 / pCount : 128;
+	for (uint8_t i = 0; i < pCount; i++)
+	{
+		int x = i * pw;
+		bool isSel = (sel == (int8_t)i);
+		bool inv = isSel && editing;
+		if (inv)
+		{
+			display.fillRect(x + 1, 0, pw - 2, 12, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		u8g2centerText(pLabels[i], x, 5, pw, 6);
+		u8g2centerText(pVals[i], x, 12, pw, 6);
+		if (isSel && !editing)
+			display.drawRect(x, 0, pw, 13, WHITE);
+	}
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+
+	// Live pattern preview, drawn with the Euclidean mode's renderer (ticks above y=22).
+	drawEuclidPattern(true, preview, previewLen, 22, false, false, 0);
+
+	drawStepRow(23, stepState, pageLen, playhead);
+}
+
 void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus)
 {
 	if (isMessageActive())

@@ -487,26 +487,30 @@ namespace FormOmni
         }
     }
 
-    void FormMachineOmni::toolScaleRemap()
+    void FormMachineOmni::toolScaleRemap(bool wholeTrack)
     {
         if (omxFormGlobal.musicScale == nullptr)
             return;
         auto track = getTrack();
-        for (uint8_t st = 0; st < 64; st++)
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = 0; i < len; i++)
             for (uint8_t n = 0; n < 6; n++)
             {
-                int8_t note = track->steps[st].notes[n];
+                int8_t note = track->steps[idx[i]].notes[n];
                 if (note >= 0)
-                    track->steps[st].notes[n] = omxFormGlobal.musicScale->remapNoteToScale((uint8_t)note);
+                    track->steps[idx[i]].notes[n] = omxFormGlobal.musicScale->remapNoteToScale((uint8_t)note);
             }
     }
 
-    void FormMachineOmni::toolQuantize(uint8_t amtPct)
+    void FormMachineOmni::toolQuantize(uint8_t amtPct, bool wholeTrack)
     {
         amtPct = constrain(amtPct, 0, 100);
         auto track = getTrack();
-        for (uint8_t st = 0; st < 64; st++)
-            track->steps[st].nudge = (int8_t)((int)track->steps[st].nudge * (100 - amtPct) / 100);
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = 0; i < len; i++)
+            track->steps[idx[i]].nudge = (int8_t)((int)track->steps[idx[i]].nudge * (100 - amtPct) / 100);
     }
 
     void FormMachineOmni::toolChanceRnd(uint8_t pmin, uint8_t pmax)
@@ -521,15 +525,17 @@ namespace FormOmni
                 track->steps[st].prob = random(pmin, pmax + 1);
     }
 
-    void FormMachineOmni::toolTranspose(int8_t semis)
+    void FormMachineOmni::toolTranspose(int8_t semis, bool wholeTrack)
     {
         auto track = getTrack();
-        for (uint8_t st = 0; st < 64; st++)
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = 0; i < len; i++)
             for (uint8_t n = 0; n < 6; n++)
             {
-                int8_t note = track->steps[st].notes[n];
+                int8_t note = track->steps[idx[i]].notes[n];
                 if (note >= 0)
-                    track->steps[st].notes[n] = (int8_t)constrain(note + semis, 0, 127);
+                    track->steps[idx[i]].notes[n] = (int8_t)constrain(note + semis, 0, 127);
             }
     }
 
@@ -545,24 +551,28 @@ namespace FormOmni
                 track->steps[st].vel = random(vmin, vmax + 1);
     }
 
-    void FormMachineOmni::toolHumanize(uint8_t amtPct)
+    void FormMachineOmni::toolHumanize(uint8_t amtPct, bool wholeTrack)
     {
         int range = (int)(60L * constrain(amtPct, 0, 100) / 100); // nudge is +/-60
         auto track = getTrack();
-        for (uint8_t st = 0; st < 64; st++)
-            if (track->steps[st].isOn())
-                track->steps[st].nudge = (int8_t)random(-range, range + 1);
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = 0; i < len; i++)
+            if (track->steps[idx[i]].isOn())
+                track->steps[idx[i]].nudge = (int8_t)random(-range, range + 1);
     }
 
-    // Apply a boolean rhythm to the active page: on-steps trigger (empty ones are
-    // stamped with middle C), off-steps are silenced (notes + trig cleared).
-    void FormMachineOmni::applyRhythmToPage(const bool *pattern, uint8_t len, const uint8_t *vels)
+    // Apply a boolean rhythm over the current scope's steps (page or whole loop, via
+    // toolScopeIndices): on-steps trigger (empty ones are stamped with middle C),
+    // off-steps are silenced (notes + trig cleared).
+    void FormMachineOmni::applyRhythmScope(const bool *pattern, const uint8_t *vels, bool wholeTrack)
     {
         auto track = getTrack();
-        uint8_t start = (uint8_t)(activePage_ * 16);
-        for (uint8_t i = 0; i < len && i < 16; i++)
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = 0; i < len; i++)
         {
-            Step *s = &track->steps[start + i];
+            Step *s = &track->steps[idx[i]];
             if (pattern[i])
             {
                 s->trig = 1;
@@ -580,34 +590,59 @@ namespace FormOmni
         }
     }
 
-    void FormMachineOmni::toolEuclid(uint8_t pulses, uint8_t rot)
+    // Build the euclidean rhythm for the current scope. Fills pattern[0..len-1] (len is the
+    // scope length, <= 64; generation caps at EuclideanMath's 32 and tiles beyond). Also the
+    // shell's live preview source, so what applies is exactly what previews.
+    uint8_t FormMachineOmni::buildEuclidPattern(uint8_t pulses, uint8_t rot, bool wholeTrack, bool *pattern)
     {
-        uint8_t len = getPageLen(activePage_);
-        bool pattern[euclidean::EuclideanMath::kPatternSize];
-        euclidean::EuclideanMath::clearPattern(pattern);
-        euclidean::EuclideanMath::generateEuclidPattern(pattern, pulses > len ? len : pulses, len);
-        uint8_t r = (len > 0) ? (rot % len) : 0; // rot is 0-15; reduce mod page length
-        if (r > 0)
-            euclidean::EuclideanMath::rotatePattern(pattern, len, r);
-        applyRhythmToPage(pattern, len, nullptr);
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        uint8_t genLen = len > euclidean::EuclideanMath::kPatternSize ? euclidean::EuclideanMath::kPatternSize : len;
+        bool gen[euclidean::EuclideanMath::kPatternSize];
+        euclidean::EuclideanMath::clearPattern(gen);
+        if (genLen > 0)
+        {
+            euclidean::EuclideanMath::generateEuclidPattern(gen, pulses > genLen ? genLen : pulses, genLen);
+            uint8_t r = rot % genLen;
+            if (r > 0)
+                euclidean::EuclideanMath::rotatePattern(gen, genLen, r);
+        }
+        for (uint8_t i = 0; i < len; i++)
+            pattern[i] = genLen > 0 ? gen[i % genLen] : false;
+        return len;
     }
 
-    void FormMachineOmni::toolGrids(uint8_t inst, uint8_t x, uint8_t y, uint8_t density)
+    // Build the grids rhythm (+ level-derived velocities) for the current scope.
+    uint8_t FormMachineOmni::buildGridsPattern(uint8_t inst, uint8_t x, uint8_t y, uint8_t density, bool wholeTrack, bool *pattern, uint8_t *vels)
     {
-        uint8_t len = getPageLen(activePage_);
-        bool pattern[16];
-        uint8_t vels[16];
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
         grids::GridsChannel channel;
         const uint8_t threshold = (uint8_t)~density;
-        for (uint8_t i = 0; i < len && i < 16; i++)
+        for (uint8_t i = 0; i < len; i++)
         {
-            channel.setStep(i * 2); // grids patterns are 32 steps; map a 16-step page to 8ths
+            channel.setStep((uint8_t)((i * 2) % 32)); // 32-step drum map at 8th resolution
             uint8_t level = channel.level(inst, x, y);
             pattern[i] = level > threshold;
             // Velocity from how far above the threshold the level sits (like GridsWrapper).
             vels[i] = pattern[i] ? (uint8_t)constrain(32 + (int)(95.f * float(level - threshold) / float(256 - threshold)), 32, 127) : 100;
         }
-        applyRhythmToPage(pattern, len, vels);
+        return len;
+    }
+
+    void FormMachineOmni::toolEuclid(uint8_t pulses, uint8_t rot, bool wholeTrack)
+    {
+        bool pattern[64];
+        buildEuclidPattern(pulses, rot, wholeTrack, pattern);
+        applyRhythmScope(pattern, nullptr, wholeTrack);
+    }
+
+    void FormMachineOmni::toolGrids(uint8_t inst, uint8_t x, uint8_t y, uint8_t density, bool wholeTrack)
+    {
+        bool pattern[64];
+        uint8_t vels[64];
+        buildGridsPattern(inst, x, y, density, wholeTrack, pattern, vels);
+        applyRhythmScope(pattern, vels, wholeTrack);
     }
 
     uint8_t FormMachineOmni::potLockCC(uint8_t slot)
@@ -937,6 +972,14 @@ namespace FormOmni
         case 7: return s->accumTPat;
         default: return 0;
         }
+    }
+
+    int FormMachineOmni::stepParamValue(uint8_t key16, uint8_t pid)
+    {
+        if (key16 >= 16)
+            return 0;
+        Step *st = &getTrack()->steps[key16toStep(key16)];
+        return stepParamRawValue(st, pid);
     }
 
     String FormMachineOmni::stepParamBox(uint8_t key16, uint8_t pid)

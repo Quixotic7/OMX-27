@@ -59,6 +59,11 @@ public:
 	void dispMixLevels(const char *title, const char *valText, const int8_t *vals, uint8_t count, uint8_t sel, bool editing, const bool *locked = nullptr, int8_t bigNum = -1);
 	// FORM Tools page: compact param strip over the shared 16-step row.
 	void dispToolPage(const char *labels[4], const char *values[4], uint8_t sel, bool editing, const uint8_t *stepState, uint8_t pageLen, int8_t playhead);
+	// FORM Tools v2 layouts: action tools (params + buttons + steps; stepState=nullptr =
+	// no-steps variant), the VEL/CHANCE bars page, and the generator page w/ live preview.
+	void dispToolActionPage(const char *pLabels[], const char *pVals[], uint8_t pCount, const char *btnLabels[], uint8_t btnCount, int8_t sel, bool editing, const uint8_t *stepState, uint8_t pageLen, int8_t playhead);
+	void dispToolBarsPage(uint8_t vmin, uint8_t vmax, uint8_t vRange, const int16_t bars[16], int16_t barMax, int8_t sel, bool editing, int8_t playhead);
+	void dispToolGenPage(const char *pLabels[], const char *pVals[], uint8_t pCount, int8_t sel, bool editing, bool *preview, uint8_t previewLen, const uint8_t *stepState, uint8_t pageLen, int8_t playhead);
 	// Step F2 view: the current play-direction icon + its name on top, a bottom label below.
 	// Step view Note hold: a compact piano keyboard (chord = notesAsKeys[6]) on top, with the
 	// 16 step-marker cells beneath (filled = has content; `focus` step gets a tick). No text.

@@ -425,6 +425,62 @@ Open UI proposals (§4.4) come **after** the PR, alongside the planned new featu
 
 ---
 
+## 7.5 TOOLS view v2 (2026-08-30, user UI spec)
+
+Full rework of the Tools pages to the user's spec; all verified on device:
+- **Tool order**: ROTATE, MIRROR, SHUFFLE, HUMANIZE, QUANTIZE, TRANSPOSE, SCALE SNAP,
+  VEL RANDOM, CHANCE RND, EUCLID, GRIDS.
+- **Shared SCOPE** param (`toolScopeAll_`) on every tool except VEL/CHANCE, rendered
+  label-left/value-right ("SCOPE … PAGE/TRACK"); **keys 9 = page, 10 = track**
+  everywhere (LEDs show the current scope on 9/10). All machine tools take the scope
+  and act through `toolScopeIndices` (polymeter/disabled-page safe).
+- **On-screen action buttons** (new `dispToolActionPage`): selectable boxes fired by
+  **encoder click** (`onEncoderButtonTools`) or their keys — ROTATE `<`/`>` on keys
+  6/7; MIRROR/SHUFFLE/HUMANIZE/QUANTIZE/SCALE/VEL/CHANCE/EUCLID/GRIDS apply on key 7;
+  TRANSPOSE has OCT−/OCT+/SEMI−/SEMI+ buttons on keys 5-8. **No action popups.**
+- **SCALE SNAP**: no step row — tall ROOT/SCALE/SCOPE cells + a full-width SNAP
+  button; ROOT/SCALE edit via `notesEditScaleParam` (scale-name popup as elsewhere).
+- **VEL/CHANCE RANDOM** (new `dispToolBarsPage`): a min/max range bar with selectable
+  handles on top, 16 selectable/editable per-step value bars beneath (encoder edits
+  through `editStepParam`, so edits lock like all v2 step edits); no text.
+- **EUCLID/GRIDS** (new `dispToolGenPage`): params + a **live pattern preview** drawn
+  with the Euclidean mode's own `drawEuclidPattern` renderer, updating as params
+  change, over the step row. Preview and apply share one source
+  (`buildEuclidPattern`/`buildGridsPattern`, scope-aware: whole-loop generation tiles
+  the 32-step euclid cap / maps the grids drum map at 8ths).
+- **Hold-step = the Seq view's palette machinery**, with the tool's edit mode: VEL
+  tool → velocity palette, CHANCE tool → chance palette, everything else → NOTE
+  (chord entry); the hold UI/LEDs/AUX-reset/shortcut-freeze all delegate to the Step
+  view's implementations.
+
+## 7. QA follow-up fixes (2026-08-29, after QA pass #2)
+
+**The switch-style "drift" from QA pass #2 is solved — it was a real bug.**
+`onKeyUpdatePatterns` had no AUX guard and the AUX layer did not consume its FREE
+keys, so while AUX was held in the Patterns view, key **5** fell through and set the
+switch style to INSTANT (6 = CHAINED), and keys **20–26** fell through and switched
+pattern slots. Fixes (all verified on device — AUX+5/AUX+21 now inert, plain style
+keys still work):
+- The **AUX layer is modal**: the router consumes every remaining key-*down* while
+  AUX is held (releases still route so views can finish note-offs / clear held
+  masks).
+- `onKeyUpdatePatterns` gained the same explicit AUX guard as every other view.
+- The Patterns view also **swallows the encoder** — it previously fell through to the
+  machine and walked its param menu blind (the same class of bug fixed in Mix).
+
+**Boot-time data-loss hardening** (found when a boot came up in MIDI mode with FORM
+wiped): a single bad FRAM header read (transient I2C right after a reboot) made
+`loadHeader()` report "uninitialized", and the reinit path re-saved defaults — which
+also **overwrote the LittleFS pattern bank** via `saveBankToFS`. Two fixes:
+- `loadHeader()` **re-reads the version byte** (10 ms later) before believing an
+  invalid value — a transient glitch no longer wipes state.
+- The reinit path calls the new `OmxModeForm::restoreBankFromFS()` **before** its
+  re-save: the flash bank is independent of FRAM, so the patterns come back and the
+  reinit save re-persists the real bank instead of clobbering it with defaults.
+  (No-op on Teensy.)
+- QA rig: new injection subcommand **0x05 = set OMX mode** (`omxctl.set_mode`), since
+  the hardware-only enc-DownLong path is unreachable by injection.
+
 ## 6. Independent QA pass (2026-08-29) — review of steps 2–8 + bug fixes
 
 A second reviewer re-verified fable's steps 2/3/4/6/8 (three parallel code audits + a
