@@ -146,15 +146,24 @@ This is the classic step programmer for the selected track.
 
 - The **16-step row** is the current page. A lit step has notes; the green step is the
   playhead.
-- **Hold one or more steps**, then use the **top row (keys 3–10)** as a value palette for the
-  current **edit mode**: **Note, Velocity, Length, Repeat (ratchet), Chance, Math, Function,
+- **Hold one or more steps**, then use the **top row** as a value palette for the current
+  **edit mode**: **Note, Velocity, Length, Repeat (ratchet), Chance, Math, Function,
   MIDI FX**. Tap a top-row key while no step is held to switch which edit mode is active.
 - In **Note** mode, holding a step and tapping keys 1–10 builds its chord (auditioned while
   stopped).
-- **Turn the encoder** to walk the menu: the step **param pages** (a 4-cell grid of the same
-  params, editing the track defaults), then the **machine menu** (the per-step **Notes
-  editor**), and finally a **POTS** action (click to open the CC-number editor).
-- Holding a step on a param page and turning writes that step's **P-Lock**; clicking clears it.
+- **Hold a step and turn the encoder** to fine-edit the current mode's value directly
+  (velocity/chance sweep with acceleration; in Note mode the turn shifts the chord by
+  semitones).
+- **Turn the encoder** (nothing held) to walk the menu: the step **param pages** (a 4-cell
+  grid: Vel/Nudge/Len/MFX and Prob/Cond/Func/Accum), then the per-step **Notes editor**,
+  and finally a **POTS** action (click to open the CC-number editor).
+- On a **param page**, the top row becomes the **selected param's value palette** — every
+  param has one, including Nudge (9 keys, zero in the middle) and Accum (5 keys). With
+  steps **held** it sets those steps (and P-Locks them); with nothing held it sets the
+  **track default**. Keys 1/2 join in via a *quick tap* (holding them stays F1/F2). The
+  top-row **LEDs mirror the palette**, lighting up to the current value.
+- Holding a step on a param page and turning the encoder writes that step's **P-Lock**;
+  clicking the encoder clears it.
 
 ---
 
@@ -195,30 +204,54 @@ bank number).
 
 ## 11. PATTERNS, TRANSPOSE, NOTES, TOOLS
 
-**PATTERNS** — 16 pattern slots per track. Tap a slot to switch/queue it. **Switch style**
+**PATTERNS** — 16 slots, each a snapshot of the **whole sequencer** (all 8 tracks' steps
+and settings) — switch patterns to build song sections. Tap a slot to switch/queue it. **Switch style**
 (keys 3–6) decides *when* a queued switch happens: **Finish Loop**, **Next Bar**, **Instant**,
 or **Chained** (build a chain of patterns). A progress bar shows when the switch will land.
 Copy/paste with the F1/F2 quick-tap + hold idiom.
 
 **TRANSPOSE** — a 16-slot lane that transposes the track's notes per step (hold a step, pick a
 value; the encoder covers the full ±48 range while the palette keys are quick 0–9 shortcuts).
+Turning the encoder **past the lane's end** opens the track's **live-transpose params**:
+**TPOS** (track transpose amount), **TYPE** (semitones, or scale-degree intervals that stay
+in key), and **TPAT** (apply this lane to playback). Back off the first cell — or press any
+key — to return to the lane. Per-step **Accum** (Seq param page 2) makes individual steps
+*walk* through this lane over successive loops for evolving, Metropolis-style lines.
 
 **NOTES** — a focused chord editor: pick a step, edit its up-to-6 notes as names or numbers,
 with the scale params and full step params on the same encoder walk.
 
-**TOOLS** — **11 one-shot pattern operations** on the selected track. Turn the encoder to pick
-a tool (its name pops as you cross to it) and set its params; the tool's **action keys (3–10)**
-apply it. F1/F2/F3 behave exactly like the Seq view, and the live step row shows the effect
-immediately:
+**TOOLS** — **11 one-shot pattern operations** on the selected track. Turn the encoder to move
+through the tools (a tool's name pops as you cross into it); each tool's page shows its params
+and **on-screen action buttons** — fire a button with an **encoder click** on it, or with its
+key. Actions are silent: the step row (and the step **LEDs**, which here light *only* actual
+triggers) show the result immediately. F1/F2/F3 behave exactly like the Seq view.
 
-- **ROTATE / MIRROR / SHUFFLE** — reorder steps (scope = active page or the whole loop).
-- **TRANSPOSE** — ±1 / ±12 semitones on every note (keys 3–6).
-- **SCALE SNAP** — snap every note to the current scale.
-- **VEL RANDOM / CHANCE RND** — randomize velocity / probability between MIN..MAX.
-- **HUMANIZE** — random nudge within a % amount.
-- **QUANTIZE** — pull every nudge toward the grid by a %.
-- **EUCLID** — generate a Euclidean rhythm (pulses / rotation) onto the active page.
-- **GRIDS** — generate a topographic drum pattern (instrument / X / Y / density) onto the page.
+**Shared conventions:**
+- **SCOPE** (on most tools) — act on the **active page** or the **whole loop**. Keys **9 =
+  page, 10 = track**, everywhere; the 9/10 LEDs show the current setting.
+- **Key 7** fires the single action button (ROTATE uses **6 = left, 7 = right**; TRANSPOSE
+  uses **5–8**).
+- **Hold a low-row step** and the top row becomes the Seq view's editor for that tool —
+  chord entry for most tools, the **velocity palette** in VEL RANDOM, the **chance palette**
+  in CHANCE RND (the encoder edits the held value too).
+
+**The tools**, in order:
+- **ROTATE / MIRROR / SHUFFLE** — shift, reverse, or randomly permute the steps (scoped).
+- **HUMANIZE** — random micro-timing (nudge) within an amount %, on triggering steps.
+- **QUANTIZE** — pull every nudge toward the grid by a % (the destructive twin of the MI
+  menu's live quantize morph).
+- **TRANSPOSE** — **OCT− / OCT+ / SEMI− / SEMI+** buttons (keys 5–8) on the scope's notes.
+- **SCALE SNAP** — snap the scope's notes to the current scale (Root/Scale editable right on
+  the page; the scale name pops as you change it).
+- **VEL RANDOM / CHANCE RND** — a graphical page: a **min/max range bar** on top and **16
+  per-step value bars** below, all selectable and encoder-editable. Filled bar = a step with
+  notes, **outlined bar = a ghost trigger**, baseline tick = empty (editing an empty slot
+  *creates* a ghost). Key 7 randomizes every step within the range.
+- **EUCLID** — pulses / rotation / scope, with a **live pattern preview** (the Euclidean
+  mode's own rendering) that updates as you turn — key 7 applies exactly what you see.
+- **GRIDS** — a topographic drum generator (instrument BD/SD/HH/AC, X, Y, density), same
+  live preview, hit velocities derived from the drum-map levels.
 
 Generators stamp a middle-C on new on-steps and clear off-steps, so you get an audible pattern
 to edit.
@@ -246,6 +279,9 @@ clear · key 4 = overdub/replace · keys 11/12 = octave.
 
 **In a view:** hold F1 (key 1) = pages · hold F2 (key 2) = track select · hold F3 (keys 1+2) =
 rate & length.
+
+**Tools:** key 7 = apply (ROTATE 6/7 = left/right · TRANSPOSE 5–8 = Oct−/Oct+/Semi−/Semi+) ·
+keys 9/10 = scope page/track · encoder click on a button also fires it.
 
 > **Heads-up on Macros:** selecting an AUX macro (M8/NRN/DEL) on the MI **MIDI** page hands the
 > knobs to that macro — even before you enter it (double-click AUX) — so the CC-page bars won't
