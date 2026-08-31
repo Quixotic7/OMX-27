@@ -9,7 +9,7 @@
 #
 # Usage:
 #   ./build-release.sh              # version auto-read from config.h
-#   ./build-release.sh 1.15.1     # explicit version
+#   ./build-release.sh 1.15.2     # explicit version
 #   CLEAN=1 ./build-release.sh      # wipe build dirs first (reproducible release build)
 #
 # NOTE: builds whatever is currently checked out -- check out your release
