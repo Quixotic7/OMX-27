@@ -26,10 +26,12 @@
 #endif
 
 #if BOARDTYPE == TEENSY32
-// Teensy 3.1 — 64 KB total; baseline firmware already ~34 KB. At ~9.3 KB/pattern only a
-// couple fit alongside the live (active) copy in the machines. Conservative; tune to the
-// real build size line.
-#define FORM_NUM_PATTERNS 2
+// Teensy 3.1 — only 64 KB RAM. The resident bank `patterns_[N]` is the single biggest static
+// object (~10.6 KB/pattern), and the 8 track machines are heap-allocated at boot on top of it;
+// 2 patterns left too little free RAM for that allocation, so the device wouldn't start. Keep
+// exactly ONE resident pattern here (no in-RAM pattern switching on Teensy 3.1) to leave heap
+// headroom. RP2040/Teensy 4 keep the full 16-pattern bank below.
+#define FORM_NUM_PATTERNS 1
 #else
 // RP2040 (V3) and Teensy 4 — 16 patterns fit in RAM (~145 KB).
 #define FORM_NUM_PATTERNS 16
