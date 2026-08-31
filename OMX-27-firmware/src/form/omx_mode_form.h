@@ -254,6 +254,13 @@ private:
 	// Reusable pot-config action (Mix/Seq/Notes/MI POTS item): open the shared pot-config
 	// submode on the selected track's current bank.
 	void openPotConfig();
+	// Fill out[16] with the display state of the active page's 16 steps: 0 empty, 1 has-notes,
+	// 2 on, 3 on+muted, 4 has-notes+muted. Shared by the step-row renderers.
+	void fillStepStates(FormOmni::FormMachineOmni *omni, uint8_t out[16]);
+	// The gamma-corrected RGB for a track's colour (trackHue_[idx]).
+	uint32_t trackHueColor(uint8_t idx);
+	// The shared F3 rate|length screen ("1:<rate>" over a length bar of activeCount steps).
+	void dispF3RateLength(FormOmni::FormMachineOmni *omni, uint8_t activeCount);
 	// ---- Tools view (AUX+19): each menu page is a tool; keys 3-10 are that tool's
 	// action buttons; the low row auditions steps (like Mix). All tools act on the
 	// selected track. The encoder walks (toolIndex_, toolCell_): the cursor only stops on

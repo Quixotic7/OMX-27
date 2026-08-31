@@ -1297,7 +1297,7 @@ void OmxModeForm::updateNotesLEDs()
 	{
 		for (uint8_t t = 0; t < kNumMachines; t++)
 		{
-			uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[t] << 8, 255, 255));
+			uint32_t hue = trackHueColor(t);
 			uint32_t c = (t == selectedMachine_) ? (uint32_t)WHITE : (machines_[t]->getMute() ? (uint32_t)RED : hue);
 			strip.setPixelColor(3 + t, c);
 		}
@@ -1339,11 +1339,7 @@ void OmxModeForm::onDisplayNotes()
 	auto omni = getSelectedMachine();
 
 	uint8_t stepState[16];
-	for (uint8_t i = 0; i < 16; i++)
-	{
-		bool m = omni->getStepMute(i);
-		stepState[i] = omni->stepHasNotes(i) ? (m ? 4 : 1) : (omni->stepIsOn(i) ? (m ? 3 : 2) : 0);
-	}
+	fillStepStates(omni, stepState);
 	uint8_t pageLen = omni->getPageLen(omni->activePage());
 
 	// Param-palette hold (vel / length / math / chance): the value + strip, after the popup delay.
@@ -1365,9 +1361,7 @@ void OmxModeForm::onDisplayNotes()
 		// F3: the exact same LEN | RATE screen as holding F3 on the Seq page.
 		if (sm == FORMSHORTCUT_F3)
 		{
-			char rbuf[12];
-			snprintf(rbuf, sizeof(rbuf), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
-			omxDisp.dispTrackLength(rbuf, omni->getPageLen(omni->activePage()));
+			dispF3RateLength(omni, omni->getPageLen(omni->activePage()));
 			return;
 		}
 		// Hold F1: "JUMP" + the page-1 page icons on the right; the low row is the jump selector.
@@ -1782,10 +1776,7 @@ void OmxModeForm::onDisplayTools()
 	// F-layer screens, exactly as the Seq view shows them.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
 	{
-		uint8_t activeCount = omni->getPageLen(omni->activePage());
-		char rbuf[12];
-		snprintf(rbuf, sizeof(rbuf), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
-		omxDisp.dispTrackLength(rbuf, activeCount);
+		dispF3RateLength(omni, omni->getPageLen(omni->activePage()));
 		return;
 	}
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
@@ -1802,11 +1793,7 @@ void OmxModeForm::onDisplayTools()
 
 	// Shared step-row data.
 	uint8_t stepState[16];
-	for (uint8_t i = 0; i < 16; i++)
-	{
-		bool m = omni->getStepMute(i);
-		stepState[i] = omni->stepHasNotes(i) ? (m ? 4 : 1) : (omni->stepIsOn(i) ? (m ? 3 : 2) : 0);
-	}
+	fillStepStates(omni, stepState);
 	uint8_t pageLen = omni->getPageLen(omni->activePage());
 	int16_t pageStart = (int16_t)omni->activePage() * 16;
 	int8_t playhead = omxFormGlobal.isPlaying ? (int8_t)((int16_t)omni->playingStepIndex() - pageStart) : -1;
@@ -2327,7 +2314,7 @@ void OmxModeForm::updateStepLEDs()
 	// hold-a-step palette overrides keys 1-2, so this is skipped there.
 	if (heldStepMask_ == 0)
 	{
-		uint32_t hueFull = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
+		uint32_t hueFull = trackHueColor(selectedMachine_);
 		uint32_t hueDim = (hueFull >> 3) & 0x1f1f1f;
 		bool f1 = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F3);
 		bool f2 = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F3);
@@ -2340,7 +2327,7 @@ void OmxModeForm::updateStepLEDs()
 	// currently-playing page = flashing YELLOW.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && heldStepMask_ == 0)
 	{
-		uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
+		uint32_t hue = trackHueColor(selectedMachine_);
 		for (uint8_t k = 3; k <= 10; k++)
 			strip.setPixelColor(k, LEDOFF);
 		uint8_t en = omni->getEnabledPages();
@@ -2370,7 +2357,7 @@ void OmxModeForm::updateStepLEDs()
 	{
 		for (uint8_t t = 0; t < kNumMachines; t++)
 		{
-			uint32_t tc = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[t] << 8, 255, 255));
+			uint32_t tc = trackHueColor(t);
 			uint32_t c = machines_[t]->getMute() ? (uint32_t)RED : tc;
 			if (t == selectedMachine_)
 				c = (uint32_t)WHITE;
@@ -2382,7 +2369,7 @@ void OmxModeForm::updateStepLEDs()
 		}
 		else
 		{
-			uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
+			uint32_t hue = trackHueColor(selectedMachine_);
 			for (uint8_t i = 0; i < 16; i++)
 				strip.setPixelColor(11 + i, omni->stepIsOn(i) ? hue : (uint32_t)LEDOFF);
 		}
@@ -2414,7 +2401,7 @@ void OmxModeForm::updateStepLEDs()
 	if (stepMenuPage_ == 1 || stepMenuPage_ == 2)
 	{
 		// Step row: held steps blink white; the rest show content.
-		uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
+		uint32_t hue = trackHueColor(selectedMachine_);
 		for (uint8_t i = 0; i < 16; i++)
 		{
 			if (heldStepMask_ & (1 << i))
@@ -2546,7 +2533,7 @@ void OmxModeForm::updateStepLEDs()
 		strip.setPixelColor(3 + m, (m == stepEditMode_) ? kStepModeColors[m] : LOWWHITE);
 
 	// Step row 11-26 = the current page's 16 steps.
-	uint32_t hue = strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[selectedMachine_] << 8, 255, 255));
+	uint32_t hue = trackHueColor(selectedMachine_);
 	int16_t pageStart = (int16_t)omni->activePage() * 16;
 	int16_t playhead = (int16_t)omni->playingStepIndex() - pageStart;
 
@@ -2794,10 +2781,7 @@ void OmxModeForm::onDisplayStep()
 	// F3 structure layer: rate on top, the active page's length bar on the bottom.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
 	{
-		uint8_t activeCount = omni->getPageLen(omni->activePage());
-		char rbuf[12];
-		snprintf(rbuf, sizeof(rbuf), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
-		omxDisp.dispTrackLength(rbuf, activeCount);
+		dispF3RateLength(omni, omni->getPageLen(omni->activePage()));
 		return;
 	}
 	// Holding F1/F2 always shows the track page (with the copy/track overlay), from any menu
@@ -2839,11 +2823,7 @@ void OmxModeForm::onDisplayStep()
 		// Step states (0 empty · 1 notes · 2 ghost · 3 muted ghost · 4 muted notes) + the active
 		// page's length: same data the track page uses, so the step row renders identically.
 		uint8_t stepState[16];
-		for (uint8_t i = 0; i < 16; i++)
-		{
-			bool m = omni->getStepMute(i);
-			stepState[i] = omni->stepHasNotes(i) ? (m ? 4 : 1) : (omni->stepIsOn(i) ? (m ? 3 : 2) : 0);
-		}
+		fillStepStates(omni, stepState);
 		uint8_t pageLen = omni->getPageLen(omni->activePage());
 
 		// Note mode: compact piano keyboard for the held step's chord, with step markers below.
@@ -2877,11 +2857,7 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 
 	// Step states: 0 empty · 1 notes · 2 ghost · 3 muted ghost · 4 muted notes.
 	uint8_t stepState[16];
-	for (uint8_t i = 0; i < 16; i++)
-	{
-		bool m = omni->getStepMute(i);
-		stepState[i] = omni->stepHasNotes(i) ? (m ? 4 : 1) : (omni->stepIsOn(i) ? (m ? 3 : 2) : 0);
-	}
+	fillStepStates(omni, stepState);
 
 	// Track mute states, with solo override (any soloed -> non-soloed render muted).
 	bool anySolo = false;
@@ -3557,6 +3533,30 @@ void OmxModeForm::openPotConfig()
 	omxLeds.setDirty();
 }
 
+// Display state of the active page's 16 steps: 0 empty, 1 has-notes, 2 on, 3 on+muted,
+// 4 has-notes+muted. Shared by the Seq/Notes/Mix/MI step-row renderers.
+void OmxModeForm::fillStepStates(FormOmni::FormMachineOmni *omni, uint8_t out[16])
+{
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		bool m = omni->getStepMute(i);
+		out[i] = omni->stepHasNotes(i) ? (m ? 4 : 1) : (omni->stepIsOn(i) ? (m ? 3 : 2) : 0);
+	}
+}
+
+uint32_t OmxModeForm::trackHueColor(uint8_t idx)
+{
+	return strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[idx] << 8, 255, 255));
+}
+
+// The F3 "rate | length" screen: rate as "1:<divisor>" over a length bar of activeCount steps.
+void OmxModeForm::dispF3RateLength(FormOmni::FormMachineOmni *omni, uint8_t activeCount)
+{
+	char rbuf[12];
+	snprintf(rbuf, sizeof(rbuf), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
+	omxDisp.dispTrackLength(rbuf, activeCount);
+}
+
 bool OmxModeForm::onEncoderMix(int dir)
 {
 	if (dir == 0)
@@ -4225,7 +4225,7 @@ void OmxModeForm::updateLEDs()
 			// Mix view: per-track colour from its hue. Other views use a single colour
 			// (every track is the same engine — the per-type machine colours are gone).
 			uint32_t trackColor = (formView_ == FORMVIEW_MIX)
-									   ? strip.gamma32(strip.ColorHSV((uint16_t)trackHue_[i] << 8, 255, 255))
+									   ? trackHueColor(i)
 									   : (uint32_t)ORANGE;
 			uint32_t color = isMuted ? (uint32_t)RED : trackColor;
 
@@ -4330,9 +4330,7 @@ void OmxModeForm::onDisplayUpdate()
 		uint16_t trackLen = omni->trackPtr()->getLength(); // 1-64
 		uint16_t rem = trackLen <= pageStart ? 0 : (trackLen - pageStart);
 		uint8_t activeCount = rem > 16 ? 16 : (uint8_t)rem;
-		char rbuf[12];
-		snprintf(rbuf, sizeof(rbuf), "1:%u", (unsigned)kSeqRates[omni->getSeq().rate]);
-		omxDisp.dispTrackLength(rbuf, activeCount);
+		dispF3RateLength(omni, activeCount);
 		return;
 	}
 
