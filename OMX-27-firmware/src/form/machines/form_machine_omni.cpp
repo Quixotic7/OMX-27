@@ -33,6 +33,7 @@ namespace FormOmni
         OMNIPAGE_SEQMIDI,    // Chan, Mono, SendMidi, SendCV
         OMNIPAGE_TIMINGS,    // BPM, Rate, Swing, Swing Div
         OMNIPAGE_SCALE,      // Root, Scale, Lock, Group
+        OMNIPAGE_POTS,       // click to open the shared Pot Config submode (Mix + Seq menus)
         OMNIPAGE_COUNT,
         OMNIPAGE_TPAT = OMNIPAGE_COUNT // Transpose-view render id (not in trackParams_)
     };
@@ -141,6 +142,7 @@ namespace FormOmni
         trackParams_.addPage(4);  // OMNIPAGE_SEQMIDI: Chan, Mono, SendMidi, SendCV
         trackParams_.addPage(4);  // OMNIPAGE_TIMINGS: BPM, Rate, Swing, Swing Div
         trackParams_.addPage(4);  // OMNIPAGE_SCALE: Root, Scale, Lock, Group
+        trackParams_.addPage(1);  // OMNIPAGE_POTS: single "open Pot Config" cell
 
         tPatParams_.addPage(17);
 
@@ -2503,6 +2505,10 @@ namespace FormOmni
     }
     void FormMachineOmni::onEncoderButtonDown()
     {
+        // Clicking the POTS cell in the machine menu (Mix cursor 19 / Seq page 3) asks the shell
+        // to open the shared Pot Config submode — the machine can't reach auxMacroManager_ itself.
+        if (trackParams_.getSelPage() == OMNIPAGE_POTS)
+            potConfigRequested_ = true;
     }
     bool FormMachineOmni::onKeyUpdate(OMXKeypadEvent e)
     {
@@ -2862,6 +2868,14 @@ namespace FormOmni
             vals[1] = scaleConfig.scalePattern < 0 ? "--" : String(scaleConfig.scalePattern);
             vals[2] = scaleConfig.lockScale ? "On" : "--";
             vals[3] = scaleConfig.group16 ? "On" : "--";
+            dispParamGrid(labels, vals, selParam);
+        }
+            return false;
+        case OMNIPAGE_POTS:
+        {
+            // Single action cell: ">" = click the encoder to open the Pot Config submode.
+            const char *labels[4] = {"POTS", "", "", ""};
+            String vals[4] = {">", "", "", ""};
             dispParamGrid(labels, vals, selParam);
         }
             return false;

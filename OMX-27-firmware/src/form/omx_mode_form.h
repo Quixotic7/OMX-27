@@ -251,6 +251,12 @@ private:
 	int8_t mixHeldStepKey_ = -1; // most recent held step (focus for the lock display)
 	bool onEncoderMix(int dir); // encoder turn in the Mix view. consumed?
 	void onDisplayMix();        // render the Mix view's encoder pages
+	// Shared CC-page edit (Mix + MI): cell 0-4 = a pot-bank CC slot (live value + send),
+	// cell 5 = the track's pot bank. The P-Lock-on-held-step gesture stays Mix-only.
+	void editCCPage(uint8_t cell, int dir);
+	// Reusable pot-config action (Mix/Seq/Notes/MI POTS item): open the shared pot-config
+	// submode on the selected track's current bank.
+	void openPotConfig();
 	// ---- Tools view (AUX+19): each menu page is a tool; keys 3-10 are that tool's
 	// action buttons; the low row auditions steps (like Mix). All tools act on the
 	// selected track. The encoder walks (toolIndex_, toolCell_): the cursor only stops on

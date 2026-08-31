@@ -537,8 +537,9 @@ bool OmxModeForm::onEncoderMI(int dir)
 	}
 	if (getEncoderSelect())
 	{
-		// Select mode: navigate the cursor (0-10). Page 0 is the keyboard; 1-10 are the params.
-		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 10);
+		// Select mode: navigate the cursor. 0 keyboard; 1-4 SCALE; 5-8 MIDI (chan/vel/oct/macro);
+		// 9-14 CC page (5 slots + bank); 15-17 QUANT/CLEAR/POTS.
+		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 17);
 		omxDisp.setDirty();
 		return true;
 	}
@@ -558,12 +559,14 @@ bool OmxModeForm::onEncoderMI(int dir)
 		notesEditScaleParam(miCursor_ - 1, dir);
 	else if (miCursor_ == 5) // channel
 		omni->setChannel((uint8_t)constrain((int)omni->getChannel() + dir, 0, 15));
-	else if (miCursor_ == 6) // default velocity
+	else if (miCursor_ == 6) // default velocity (also governs AUX-macro play, see doNoteOn)
 		omni->editParamDefault(0, dir);
-	else if (miCursor_ == 7) // pot bank
-		omni->setPotBank((uint8_t)constrain((int)omni->getPotBank() + dir, 0, NUM_CC_BANKS - 1));
-	else if (miCursor_ == 8) // octave
+	else if (miCursor_ == 7) // octave
 		midiSettings.octave = constrain(midiSettings.octave + dir, -5, 4);
+	else if (miCursor_ == 8) // AUX macro select: Off / M8 / NRN / DEL
+		midiMacroConfig.midiMacro = constrain(midiMacroConfig.midiMacro + dir, 0, nummacromodes);
+	else if (miCursor_ >= 9 && miCursor_ <= 14) // CC page (slots + bank), shared with Mix
+		editCCPage(miCursor_ - 9, dir);
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 	return true;
@@ -589,17 +592,22 @@ bool OmxModeForm::onEncoderButtonMI()
 		closeClearSub();
 		return true;
 	}
-	if (miCursor_ == 9)
+	if (miCursor_ == 15)
 	{
 		quantEnterSubmenu();
 		return true;
 	}
-	if (miCursor_ == 10)
+	if (miCursor_ == 16)
 	{
 		miClearSub_ = true; // open the Yes/No confirm submenu (default NO)
 		clearSel_ = 0;
 		clearReturnView_ = -1; // opened from the MI menu -> stay in MI on exit
 		omxDisp.setDirty();
+		return true;
+	}
+	if (miCursor_ == 17)
+	{
+		openPotConfig();
 		return true;
 	}
 	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect; // unified select/edit toggle
@@ -626,18 +634,37 @@ void OmxModeForm::onDisplayMI()
 		return;
 	}
 
-	// Track page (cursor 5-8): Channel / Velocity / Pot Bank / Octave (per selected track).
+	// MIDI page (cursor 5-8): Channel / Velocity / Octave / Macro. Velocity is the per-track
+	// default that also governs AUX-macro play; Macro selects the AUX macro (Off/M8/NRN/DEL).
 	if (miCursor_ >= 5 && miCursor_ <= 8)
 	{
-		const char *labels[4] = {"CHAN", "VEL", "BANK", "OCT"};
+		const char *labels[4] = {"CHAN", "VEL", "OCT", "MACRO"};
 		String vals[4];
 		vals[0] = String(omni->getChannel() + 1);
 		vals[1] = omni->paramDefaultBox(0);
-		vals[2] = String(omni->getPotBank() + 1);
-		vals[3] = String((int)midiSettings.octave);
+		vals[2] = String((int)midiSettings.octave);
+		vals[3] = String(macromodes[constrain(midiMacroConfig.midiMacro, 0, nummacromodes)]);
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 5, !getEncoderSelect());
+		return;
+	}
+
+	// CC page (cursor 9-14): 5 pot-bank CC slots + the big bank number, reusing the Mix CC
+	// renderer. No P-Locks here — MI's low row plays the keyboard, not steps.
+	if (miCursor_ >= 9 && miCursor_ <= 14)
+	{
+		int8_t vals[5];
+		for (uint8_t i = 0; i < 5; i++)
+			vals[i] = (int8_t)ccBankRow()[i];
+		uint8_t sel = miCursor_ - 9; // 0-4 slots, 5 = the bank number
+		char vbuf[14];
+		if (sel < 5)
+			snprintf(vbuf, sizeof(vbuf), "C%u %d", (unsigned)omni->potLockCC(sel), (int)ccBankRow()[sel]);
+		else
+			snprintf(vbuf, sizeof(vbuf), "BANK %u", (unsigned)(omni->getPotBank() + 1));
+		omxDisp.dispMixLevels("CC", vbuf, vals, 5, sel, !getEncoderSelect(),
+							  nullptr, (int8_t)(omni->getPotBank() + 1));
 		return;
 	}
 
@@ -654,15 +681,15 @@ void OmxModeForm::onDisplayMI()
 		omxDisp.dispOptionCombo("Clear Track?", kYesNo, 2, clearSel_, true);
 		return;
 	}
-	// Edit page (cursor 9-10): QUANTIZE amount + CLEAR. Click the encoder to open each one.
-	if (miCursor_ == 9 || miCursor_ == 10)
+	// Actions page (cursor 15-17): QUANTIZE amount + CLEAR + POTS. Click the encoder to open each.
+	if (miCursor_ >= 15 && miCursor_ <= 17)
 	{
-		const char *labels[4] = {"QUANT", "CLEAR", "", ""};
+		const char *labels[4] = {"QUANT", "CLEAR", "POTS", ""};
 		String qv = String(recQuantize_);
-		// §4 label rule: "TRK" overflows the value cell — ">" = click the encoder to open.
-		const char *values[4] = {qv.c_str(), ">", "", ""};
+		// §4 label rule: text values overflow the cell — ">" = click the encoder to open.
+		const char *values[4] = {qv.c_str(), ">", ">", ""};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 9, false);
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 15, false);
 		return;
 	}
 
@@ -907,7 +934,7 @@ bool OmxModeForm::onEncoderNotes(int dir)
 		return true;
 	if (getEncoderSelect())
 	{
-		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 19);
+		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 20); // 20 = POTS action
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 		return true;
@@ -927,16 +954,22 @@ bool OmxModeForm::onEncoderNotes(int dir)
 		omxFormGlobal.useNoteNumbers = (dir > 0);
 	else if (notesCursor_ <= 11) // scale params
 		notesEditScaleParam(notesCursor_ - 8, dir);
-	else // step params (pid 0-7)
+	else if (notesCursor_ <= 19) // step params (pid 0-7)
 		omni->editStepParam(notesSelStep_, notesCursor_ - 12, dir);
+	// cursor 20 = POTS action (no turn edit; opens on click)
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 	return true;
 }
 
-// Encoder click in the Notes view: toggle the unified select/edit state.
+// Encoder click in the Notes view: POTS action opens Pot Config; otherwise toggle select/edit.
 bool OmxModeForm::onEncoderButtonNotes()
 {
+	if (notesCursor_ == 20)
+	{
+		openPotConfig();
+		return true;
+	}
 	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect;
 	omxDisp.setDirty();
 	return true;
@@ -1410,6 +1443,16 @@ void OmxModeForm::onDisplayNotes()
 			locked[i] = omni->stepParamLocked(notesSelStep_, pid);
 		}
 		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 12 - base, !getEncoderSelect());
+		return;
+	}
+
+	// POTS action (cursor 20): ">" = click the encoder to open the shared Pot Config submode.
+	if (notesCursor_ == 20)
+	{
+		const char *labels[4] = {"POTS", "", "", ""};
+		const char *values[4] = {">", "", "", ""};
+		bool locked[4] = {false, false, false, false};
+		omxDisp.dispStepParams(labels, values, locked, 0, false);
 		return;
 	}
 
@@ -2539,10 +2582,30 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 			return true;
 		}
 		// The notes page is the SEQ menu's only machine page — the track/global params
-		// live in the MIX view now (Seq = programming steps, Mix = track level).
+		// live in the MIX view now (Seq = programming steps, Mix = track level). Turning
+		// forward off its end lands on the POTS action page.
 		if (getEncoderSelect() && dir > 0 && omni->seqMenuAtEnd())
+		{
+			stepMenuPage_ = 4; // POTS action, after the notes editor
+			omxDisp.setDirty();
+			omxLeds.setDirty();
 			return true;
+		}
 		return false; // forward to the machine
+	}
+
+	// POTS action page (4): after the notes menu. Turning back returns to the notes editor;
+	// the click (onEncoderButtonStep) opens the shared Pot Config submode.
+	if (stepMenuPage_ == 4)
+	{
+		if (dir < 0)
+		{
+			stepMenuPage_ = 3;
+			omni->seqMenuEnter();
+		}
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
 	}
 
 	// Holding a step on a custom param page always edits the selected param (a hold is an edit
@@ -2660,6 +2723,11 @@ bool OmxModeForm::onEncoderButtonStep()
 {
 	if (formView_ != FORMVIEW_STEP)
 		return false;
+	if (stepMenuPage_ == 4) // POTS action page: open the shared Pot Config submode
+	{
+		openPotConfig();
+		return true;
+	}
 	if (stepMenuPage_ == 3)
 		return false; // machine menu: falls through to toggle the global select/edit
 	// Holding a step on a param page: clear that param's P-Lock (a distinct action, not select/edit).
@@ -2739,6 +2807,16 @@ void OmxModeForm::onDisplayStep()
 	if (stepMenuPage_ == 3)
 	{
 		omni->onDisplayUpdate();
+		return;
+	}
+
+	// POTS action page (4): ">" = click the encoder to open the shared Pot Config submode.
+	if (stepMenuPage_ == 4)
+	{
+		const char *labels[4] = {"POTS", "", "", ""};
+		const char *values[4] = {">", "", "", ""};
+		bool locked[4] = {false, false, false, false};
+		omxDisp.dispStepParams(labels, values, locked, 0, false);
 		return;
 	}
 
@@ -3478,6 +3556,34 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 //   15-18 = TRACK: Mute / Solo / Gate / Rate for the selected track
 //   19    = the machine's track/global param menu (Length/MFX, modes, transpose,
 //           MIDI, timings, scale) — moved here from the Seq view (Mix = track level)
+// Shared CC-page edit (Mix + MI). cell 0-4 = a pot-bank CC slot: bump the live value and send it
+// on the track's channel. cell 5 = the track's pot bank. (Mix's held-step P-Lock path is separate.)
+void OmxModeForm::editCCPage(uint8_t cell, int dir)
+{
+	auto omni = getSelectedMachine();
+	if (cell <= 4)
+	{
+		int v = constrain((int)ccBankRow()[cell] + dir, 0, 127);
+		ccBankRow()[cell] = (uint8_t)v;
+		omni->sendPotCC(cell, (uint8_t)v);
+	}
+	else // cell 5: the big bank number
+	{
+		omni->setPotBank((uint8_t)constrain((int)omni->getPotBank() + dir, 0, NUM_CC_BANKS - 1));
+	}
+}
+
+// Open the shared pot-config submode (edits the global pots[][] CC-number map). Seed its bank
+// from the selected track's pot bank so it opens on the bank actually in use. The submode owns
+// its own keys/encoder/display and returns to this view on exit (AUX or its Exit page).
+void OmxModeForm::openPotConfig()
+{
+	potSettings.potbank = getSelectedMachine()->getPotBank();
+	auxMacroManager_.enableSubmode(&omxUtil.subModePotConfig);
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+}
+
 bool OmxModeForm::onEncoderMix(int dir)
 {
 	if (dir == 0)
@@ -3541,17 +3647,9 @@ bool OmxModeForm::onEncoderMix(int dir)
 	{
 		machines_[mixCursor_ - 1]->editParamDefault(0, dir);
 	}
-	else if (mixCursor_ <= 13) // CC slots (9-13): live value + send (locks are the
-	{                          // held-step path above)
-		uint8_t slot = mixCursor_ - 9;
-		int v = constrain((int)ccBankRow()[slot] + dir, 0, 127);
-		ccBankRow()[slot] = (uint8_t)v;
-		getSelectedMachine()->sendPotCC(slot, (uint8_t)v);
-	}
-	else if (mixCursor_ == 14) // the big bank number: switch the track's pot bank
+	else if (mixCursor_ <= 14) // CC page: slots 9-13 + bank number 14 (shared with MI)
 	{
-		auto omni = getSelectedMachine();
-		omni->setPotBank((uint8_t)constrain((int)omni->getPotBank() + dir, 0, NUM_CC_BANKS - 1));
+		editCCPage(mixCursor_ - 9, dir);
 	}
 	else
 	{
@@ -3674,6 +3772,11 @@ void OmxModeForm::onEncoderButtonDown()
 
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderButtonDown();
+	if (selMachine->takePotConfigRequest()) // POTS cell in the machine menu (Mix cursor 19 / Seq)
+	{
+		openPotConfig();
+		return;
+	}
 
 	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect;
 	omxDisp.setDirty();
@@ -4368,7 +4471,11 @@ void OmxModeForm::seqNoteOff(MidiNoteGroup noteGroup, uint8_t midifx)
 // Called via doNoteOnForwarder
 void OmxModeForm::doNoteOn(uint8_t keyIndex)
 {
-	MidiNoteGroup noteGroup = omxUtil.midiNoteOn2(omxFormGlobal.musicScale, keyIndex, midiSettings.defaultVelocity, sysSettings.midiChannel);
+	// AUX-macro notes follow the selected track's routing (channel + default velocity), like the
+	// normal FORM keyboard (previewNote) — not the global sysSettings.midiChannel/defaultVelocity.
+	auto omni = getSelectedMachine();
+	MidiNoteGroup noteGroup = omxUtil.midiNoteOn2(omxFormGlobal.musicScale, keyIndex,
+												  omni->trackPtr()->paramDefaults[0], omni->getChannel() + 1);
 
 	if (noteGroup.noteNumber == 255)
 		return;
@@ -4394,7 +4501,7 @@ void OmxModeForm::doNoteOn(uint8_t keyIndex)
 // Called via doNoteOnForwarder
 void OmxModeForm::doNoteOff(uint8_t keyIndex)
 {
-	MidiNoteGroup noteGroup = omxUtil.midiNoteOff2(keyIndex, sysSettings.midiChannel);
+	MidiNoteGroup noteGroup = omxUtil.midiNoteOff2(keyIndex, getSelectedMachine()->getChannel() + 1);
 
 	if (noteGroup.noteNumber == 255)
 		return;
