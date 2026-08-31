@@ -538,8 +538,8 @@ bool OmxModeForm::onEncoderMI(int dir)
 	if (getEncoderSelect())
 	{
 		// Select mode: navigate the cursor. 0 keyboard; 1-4 SCALE; 5-8 MIDI (chan/vel/oct/macro);
-		// 9-15 CC page (5 slots + bank + CC-editor title); 16-18 QUANT/CLEAR/POTS.
-		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 18);
+		// 9-15 CC page (5 slots + bank + CC-editor title); 16-19 QUANT/CLEAR/POTS/MPOT.
+		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 19);
 		omxDisp.setDirty();
 		return true;
 	}
@@ -567,6 +567,11 @@ bool OmxModeForm::onEncoderMI(int dir)
 		midiMacroConfig.midiMacro = constrain(midiMacroConfig.midiMacro + dir, 0, nummacromodes);
 	else if (miCursor_ >= 9 && miCursor_ <= 14) // CC page (slots + bank), shared with Mix
 		editCCPage(miCursor_ - 9, dir);
+	else if (miCursor_ == 19) // MPOT: may a selected macro take the pots in FORM? (default no)
+	{
+		omxFormGlobal.macroConsumesPots = (dir > 0);
+		auxMacroManager_.setMacrosConsumePots(omxFormGlobal.macroConsumesPots);
+	}
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 	return true;
@@ -689,15 +694,18 @@ void OmxModeForm::onDisplayMI()
 		omxDisp.dispOptionCombo("Clear Track?", kYesNo, 2, clearSel_, true);
 		return;
 	}
-	// Actions page (cursor 16-18): QUANTIZE amount + CLEAR + POTS. Click the encoder to open each.
-	if (miCursor_ >= 16 && miCursor_ <= 18)
+	// Actions page (cursor 16-19): QUANTIZE amount + CLEAR + POTS (click to open) + MPOT (a
+	// toggle: does a selected macro take the pots in FORM). Only MPOT is edit-turnable.
+	if (miCursor_ >= 16 && miCursor_ <= 19)
 	{
-		const char *labels[4] = {"QUANT", "CLEAR", "POTS", ""};
+		const char *labels[4] = {"QUANT", "CLEAR", "POTS", "MPOT"};
 		String qv = String(recQuantize_);
+		String mp = omxFormGlobal.macroConsumesPots ? "On" : "--";
 		// §4 label rule: text values overflow the cell — ">" = click the encoder to open.
-		const char *values[4] = {qv.c_str(), ">", ">", ""};
+		const char *values[4] = {qv.c_str(), ">", ">", mp.c_str()};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 16, false);
+		bool editingMpot = (miCursor_ == 19 && !getEncoderSelect());
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 16, editingMpot);
 		return;
 	}
 
@@ -3227,6 +3235,9 @@ void OmxModeForm::onModeActivated()
 
 	// Serial.println("AuxMacroActivated");
 	auxMacroManager_.onModeActivated();
+	// FORM keeps the pots on the track's CC bank by default — a selected macro shouldn't steal
+	// them unless the user opts in on the MI MIDI page (MPOT).
+	auxMacroManager_.setMacrosConsumePots(omxFormGlobal.macroConsumesPots);
 	// Serial.println("onModeActivated complete");
 
 

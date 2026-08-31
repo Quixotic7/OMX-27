@@ -245,7 +245,7 @@ bool AuxMacroManager::onPotChanged(int potIndex, int prevValue, int newValue, in
     auto activeMacro = getActiveMacro();
 
     bool macroConsumesPots = false;
-    if (activeMacro != nullptr)
+    if (macrosConsumePots_ && activeMacro != nullptr)
     {
         macroConsumesPots = activeMacro->consumesPots();
     }

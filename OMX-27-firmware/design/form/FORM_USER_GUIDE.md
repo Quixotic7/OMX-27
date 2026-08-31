@@ -134,9 +134,11 @@ play on the **selected track's** MIDI channel and velocity.
 - **CC** — the track's 5 pot-bank knobs as bars, plus the **bank number**. Turning a knob
   sends its CC live; the **"CC" title** is selectable — click it to edit which CC number each
   knob sends (see §10).
-- **QUANT / CLEAR / POTS** — actions (click to open): **Quantize** pulls recorded nudges
-  toward the grid by an amount you morph live; **Clear** wipes the track's pattern (Yes/No);
-  **Pots** opens the CC-number editor.
+- **QUANT / CLEAR / POTS / MPOT** — the first three are actions (click to open):
+  **Quantize** pulls recorded nudges toward the grid by an amount you morph live; **Clear**
+  wipes the track's pattern (Yes/No); **Pots** opens the CC-number editor. **MPOT** is a
+  toggle (default **off**): whether a *selected* AUX macro is allowed to take the pots in
+  FORM — leave it off to keep the knobs on the track's CC bank (see §11).
 
 ---
 
@@ -283,7 +285,7 @@ rate & length.
 **Tools:** key 7 = apply (ROTATE 6/7 = left/right · TRANSPOSE 5–8 = Oct−/Oct+/Semi−/Semi+) ·
 keys 9/10 = scope page/track · encoder click on a button also fires it.
 
-> **Heads-up on Macros:** selecting an AUX macro (M8/NRN/DEL) on the MI **MIDI** page hands the
-> knobs to that macro — even before you enter it (double-click AUX) — so the CC-page bars won't
-> track the knobs while a macro is selected. Set **Macro = Off** to use the knobs for the CC
-> bank.
+> **Heads-up on Macros:** an AUX macro (M8/NRN/DEL) can take over the pots. In FORM this is
+> **off by default** — a selected macro leaves the knobs on the track's CC bank. If you *want*
+> the macro to drive the knobs, turn **MPOT = On** (the 4th cell on the MI actions page). With
+> MPOT off, the CC-page bars track the knobs normally even while a macro is selected.

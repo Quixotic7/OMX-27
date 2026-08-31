@@ -34,6 +34,11 @@ bool useNoteNumbers = false;
 bool recArm = false;
 bool recReplace = false; // false = overdub (add to step), true = replace (clear step first)
 
+// Whether a selected AUX macro (M8/NRN/DEL) may take the pots in FORM. Default false so the
+// knobs stay on the track's CC bank; enable to let the macro drive them. (FORM-only — applied
+// to FORM's AuxMacroManager instance; other modes keep the macro's own behavior.)
+bool macroConsumesPots = false;
+
 MusicScales *musicScale;
 
 uint8_t shortcutMode;
