@@ -219,6 +219,8 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	toolCell_ = 0;
 	if (view == FORMVIEW_TOOLS)
 		stepEditMode_ = STEPMODE_NOTE; // ROTATE's hold-step mode (VEL/CHANCE tools switch it)
+	transParamsPage_ = false; // Transpose opens on the pattern editor
+	transSel_ = 0;
 	mixHeldStepMask_ = 0;
 	mixHeldStepKey_ = -1;
 	// Clear the F1+page gesture state too: a page key still physically held across a view
@@ -2536,6 +2538,10 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 			omxLeds.setDirty();
 			return true;
 		}
+		// The notes page is the SEQ menu's only machine page — the track/global params
+		// live in the MIX view now (Seq = programming steps, Mix = track level).
+		if (getEncoderSelect() && dir > 0 && omni->seqMenuAtEnd())
+			return true;
 		return false; // forward to the machine
 	}
 
@@ -2626,7 +2632,7 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 	{
 		stepMenuPage_ = 3; // enter the machine menu
 		omni->seqMenuEnter();
-		omxDisp.displayMessage("Step Params");
+		omxDisp.displayMessage("STEP NOTES");
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 		return true;
@@ -3425,6 +3431,36 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 	// fall through to the machine and walk its param menu blind (invisible edits).
 	if (formView_ == FORMVIEW_PATTERNS)
 		return;
+	// Transpose view: past the pattern editor's end lies the live-transpose params page
+	// (TPOS / TYPE / TPAT-apply — the SEQTPOSE grid, also in the Mix menu).
+	if (formView_ == FORMVIEW_TRANSPOSE)
+	{
+		auto omni = getSelectedMachine();
+		int dir = enc.dir();
+		if (transParamsPage_)
+		{
+			if (getEncoderSelect())
+			{
+				if (dir < 0 && transSel_ == 0)
+					transParamsPage_ = false; // back into the pattern editor
+				else
+					transSel_ = (uint8_t)constrain((int)transSel_ + dir, 0, 2);
+			}
+			else
+				omni->transParamsEdit(transSel_, dir);
+			omxDisp.setDirty();
+			return;
+		}
+		if (getEncoderSelect() && dir > 0 && omni->transMenuAtEnd())
+		{
+			transParamsPage_ = true;
+			transSel_ = 0;
+			omxDisp.displayMessage("TPOSE PARAMS");
+			omxDisp.setDirty();
+			return;
+		}
+		// else: the pattern editor (machine) handles it below
+	}
 
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderChanged(enc);
@@ -3440,6 +3476,8 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 //           slots; encoder click clears them). Editing the bank number switches the
 //           track's pot bank — the knobs and P-Locks follow it.
 //   15-18 = TRACK: Mute / Solo / Gate / Rate for the selected track
+//   19    = the machine's track/global param menu (Length/MFX, modes, transpose,
+//           MIDI, timings, scale) — moved here from the Seq view (Mix = track level)
 bool OmxModeForm::onEncoderMix(int dir)
 {
 	if (dir == 0)
@@ -3463,9 +3501,29 @@ bool OmxModeForm::onEncoderMix(int dir)
 		omxLeds.setDirty();
 		return true;
 	}
+	// In the track/global param menu (cursor 19): the machine navigates/edits its own
+	// pages; backing off the first page returns to the TRACK grid.
+	if (mixCursor_ == 19)
+	{
+		auto omni = getSelectedMachine();
+		if (getEncoderSelect() && dir < 0 && omni->mixMenuAtStart())
+		{
+			mixCursor_ = 18;
+			omxDisp.setDirty();
+			return true;
+		}
+		omni->onEncoderChanged(Encoder::makeUpdate(dir, 0));
+		return true;
+	}
 	if (getEncoderSelect())
 	{
-		mixCursor_ = (uint8_t)constrain((int)mixCursor_ + dir, 0, 18);
+		uint8_t prev = mixCursor_;
+		mixCursor_ = (uint8_t)constrain((int)mixCursor_ + dir, 0, 19);
+		if (mixCursor_ == 19 && prev != 19)
+		{
+			getSelectedMachine()->mixMenuEnter();
+			omxDisp.displayMessage("TRACK PARAMS");
+		}
 		omxDisp.setDirty();
 		return true;
 	}
@@ -3558,6 +3616,11 @@ void OmxModeForm::onDisplayMix()
 			snprintf(vbuf, sizeof(vbuf), "BANK %u", (unsigned)(omni->getPotBank() + 1));
 		omxDisp.dispMixLevels(tbuf, vbuf, vals, 5, sel, !getEncoderSelect(),
 							  held ? locked : nullptr, (int8_t)(omni->getPotBank() + 1));
+		return;
+	}
+	if (mixCursor_ == 19) // track/global param menu: the machine renders its pages
+	{
+		getSelectedMachine()->onDisplayUpdate();
 		return;
 	}
 	if (mixCursor_ >= 15) // TRACK: Mute / Solo / Gate / Rate (selected track)
@@ -3917,6 +3980,14 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 		// Otherwise (F3 + track) falls through to the machine.
 	}
 
+	// Transpose params page: the keys belong to the pattern editor — a press drops back
+	// to it (and still acts there), so nothing edits invisibly behind the params grid.
+	if (formView_ == FORMVIEW_TRANSPOSE && transParamsPage_ && e.down() && thisKey >= 1 && thisKey < 27)
+	{
+		transParamsPage_ = false;
+		omxDisp.setDirty();
+	}
+
 	if(selMachine->doesConsumeKeys())
 	{
 		// if(omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX)
@@ -4148,6 +4219,11 @@ void OmxModeForm::onDisplayUpdate()
 	if (formView_ == FORMVIEW_TOOLS)
 	{
 		onDisplayTools();
+		return;
+	}
+	if (formView_ == FORMVIEW_TRANSPOSE && transParamsPage_)
+	{
+		getSelectedMachine()->transParamsDraw(transSel_);
 		return;
 	}
 

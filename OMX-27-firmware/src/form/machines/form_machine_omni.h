@@ -224,6 +224,13 @@ namespace FormOmni
         // this machine's native param menu (Notes/CC/Transpose/track params, same as MIX view).
         void seqMenuEnter();       // position the menu at the first delegated page (Notes)
         bool seqMenuAtStart();     // true when on that first page/param (for the back boundary)
+        // Transpose view's second page: the track's live-transpose params (SEQTPOSE).
+        bool transMenuAtEnd(); // at the pattern editor's last cell (LEN)
+        void transParamsDraw(uint8_t sel);      // render the SEQTPOSE grid (TPOS/TYPE/TPAT)
+        void transParamsEdit(uint8_t sel, int dir);
+        bool seqMenuAtEnd();       // true at the notes page's last param (Seq's forward fence)
+        void mixMenuEnter();       // position the menu at the track/global pages (Mix)
+        bool mixMenuAtStart();     // true at the Mix menu's first page/param (back boundary)
         void setSelStepByKey(uint8_t key16); // point step-scoped menu edits at this step
 
         // v2 Step menu (P-Lockable params). pid: 0 Vel,1 Nudge,2 Len,3 MFX,4 Prob,5 Cond,6 Func,7 Accum.

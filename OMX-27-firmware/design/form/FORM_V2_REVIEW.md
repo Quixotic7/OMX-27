@@ -462,6 +462,76 @@ Full rework of the Tools pages to the user's spec; all verified on device:
   sets its value.
 - EUCLID/GRIDS param text un-clipped (params shifted down 1px into the preview gap).
 
+### 7.6 Seq/Mix menu split (2026-08-30, user direction — verified on device)
+
+"Mix is track-level, Seq is programming steps": the machine menu was split.
+- **SEQ view menu** = overview → the two P-Lockable param pages → **STEP NOTES**
+  (the kept notes editor) — and nothing else (forward-fenced via `seqMenuAtEnd`).
+- **MIX view** gained cursor **19** = the track/global param pages (TRACK Length/MFX,
+  TRACKMODES, SEQTPOSE, SEQMIDI, TIMINGS, SCALE), entered with a "TRACK PARAMS"
+  popup, rendered by the machine, backed out via `mixMenuAtStart`.
+- **Deleted from the menu**: the TPAT page (the Transpose *view* owns the editor —
+  its renderer is kept under a special id beyond the menu range), the STEPPOTS CC
+  page (superseded by the Mix CC page), and SEQMIX (redundant with Mix's own TRACK
+  grid). The "Track Params/Step Params" transition popups went with them.
+- `OmniPage` reordered (STEPNOTES=0 … SCALE=6, TPAT=COUNT); param counts now exact.
+
+### 7.6.1 Transpose view params page (2026-08-30, user request — verified on device)
+The Transpose view gained a second encoder page: turning past the pattern editor's
+end (the LEN cell) opens the **live-transpose params** (TPOS / TYPE / TPAT-apply —
+the same SEQTPOSE grid the Mix menu carries, machine-rendered via
+`transParamsDraw/Edit`). Backing off TPOS returns to the editor; any key press also
+drops back (and acts in the editor), so nothing edits invisibly behind the grid.
+
+### 7.7 Reference — the MIX view's track parameters (2026-08-30)
+
+Everything acts on the **selected track** unless marked global.
+
+**LEVELS (cursor 1-8)** — one fader per track: the track's default velocity (0-127).
+Edits push to every step without its own velocity lock (locked accents survive).
+Unlike the rest of Mix, each bar edits its own track.
+
+**CC (9-14)** — the five pot-bank CC values, live (turn = send, same path as a knob;
+numbers resolve through the track's bank). Hold a low-row step → that step's CC
+P-Locks (dots = locked; turn writes, click clears). Cell 14 = the track's **pot
+bank** (1-5); knobs, bars, and P-Locks all follow it, and each track x bank pair
+remembers its own last-sent values.
+
+**TRACK grid (15-18)** — **MUTE** (track silenced, stays in sync) · **SOLO** (any
+solo mutes the non-soloed) · **GATE** (note-length scaler, 0-200% of each step's
+programmed length) · **RATE** (per-track clock divider, 8 shortcuts).
+
+**TRACK PARAMS menu (19)**:
+- *TRACK*: **LEN** — flat track length 1-64 (rebuilds enabled pages + page lengths);
+  **MFX** — the track's MIDI-FX group (`--`/1-5), the target of a step's "Track" MFX.
+- *TRACKMODES*: **TRIP** — triplet mode (every 4th step skipped: 16 → 12-feel);
+  **DIR** — forward/reverse; **MODE** — play order: `--` none, PG pong, RD random,
+  R2 random-no-repeat, SF shuffle (new permutation each loop), SH shuffle-hold.
+- *SEQTPOSE* (live, non-destructive — unlike the Tools transpose): **TPOS** — track
+  transpose −64..+64; **TYPE** — SE semitones · GI global interval (scale degrees in
+  the global scale — stays in key) · LI local interval (degree offset per note); no
+  scale set → semitones. **TPAT** — apply the track's transpose pattern (edited in
+  the Transpose view) on top of TPOS, advancing per loop step.
+- *SEQMIDI*: **CHAN** (defaults to track number) · **MONO** (only the last note of a
+  chord plays) · **MIDI**/**CV** output enables.
+- *TIMINGS*: **BPM** (global) · **RATE** (same divider, all 16 values) ·
+  **SWNG** −100..+100 (off-beat timing push; negative = early) · **S-DV** (16ths or
+  8ths swing).
+- *SCALE* (global): **ROOT**/**SCALE** (`--` = chromatic) — drives keyboard colours,
+  scale palettes, GI/LI transposition, and SCALE SNAP; **LOCK** — keyboards restricted
+  to in-scale notes; **GROUP** — group-16 keybed layout.
+
+MUTE/SOLO/GATE/RATE deliberately appear in both the grid (fast performance surface)
+and the menu (complete set).
+
+**ACUM (per-step, Seq param page 2)** — the step's *accumulator* into the track's
+transpose pattern. Each step carries its own private position in that pattern;
+every time the step fires, the pattern value at its position is added to the step's
+pitch, then the position advances by ACUM (1-4; 0 = off, mod pattern length). So a
+step with ACUM 1 walks through the transpose pattern one entry per loop — evolving,
+Metropolis-style melodic movement per step, independent of the track-wide TPAT
+apply (which advances once per loop step for the whole track).
+
 ## 7. QA follow-up fixes (2026-08-29, after QA pass #2)
 
 **The switch-style "drift" from QA pass #2 is solved — it was a real bug.**

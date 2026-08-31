@@ -257,6 +257,10 @@ private:
 	// a tool's real cells (kToolCells[]) and crossing a tool boundary pops its name.
 	uint8_t toolIndex_ = 0;
 	uint8_t toolCell_ = 0;
+	// Transpose view's second encoder page: the track's live-transpose params
+	// (TPOS/TYPE/TPAT), entered by turning past the pattern editor's end.
+	bool transParamsPage_ = false;
+	uint8_t transSel_ = 0;
 	// Tool params (persist while in the mode):
 	bool toolScopeAll_ = false;              // ROTATE: whole loop vs active page
 	uint8_t toolVelMin_ = 64, toolVelMax_ = 127;

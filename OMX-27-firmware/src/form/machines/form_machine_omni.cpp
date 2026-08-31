@@ -20,19 +20,21 @@ namespace FormOmni
     // FORM_V2_REVIEW.md §4 decisions); the seven param pages after them render in the
     // shared dispStepParams grid. The old STEP1/STEPCONDITION pages are gone — the shell's
     // Step param pages 1-2 (P-Lockable) cover those fields.
+    // The machine menu. The SEQ view walks only OMNIPAGE_STEPNOTES (its notes editor);
+    // the MIX view walks OMNIPAGE_TRACK..SCALE (track/global params) — Seq is for
+    // programming steps, Mix is for track-level control (FORM_V2_REVIEW.md).
+    // TPAT is not a menu page: it's the Transpose view's renderer id.
     enum OmniPage
     {
-        OMNIPAGE_STEPNOTES,
-        OMNIPAGE_STEPPOTS,
-        OMNIPAGE_TPAT, // Transpose pattern editor
-        OMNIPAGE_TRACK, // Length, MidiFX
-        OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode
-        OMNIPAGE_SEQMIX, // Mute, Solo, Gate
-        OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat
-        OMNIPAGE_SEQMIDI, // Midi Chan, MonoPhonic, SendMidi, SendCV
-        OMNIPAGE_TIMINGS, // BPM, Rate, Swing, Swing Division
-        OMNIPAGE_SCALE,
-        OMNIPAGE_COUNT
+        OMNIPAGE_STEPNOTES,  // per-step notes editor (Seq menu)
+        OMNIPAGE_TRACK,      // Length, MidiFX          (Mix menu from here on)
+        OMNIPAGE_TRACKMODES, // Triplet, Direction, Mode
+        OMNIPAGE_SEQTPOSE,   // Transpose, Mode, Apply TPat
+        OMNIPAGE_SEQMIDI,    // Chan, Mono, SendMidi, SendCV
+        OMNIPAGE_TIMINGS,    // BPM, Rate, Swing, Swing Div
+        OMNIPAGE_SCALE,      // Root, Scale, Lock, Group
+        OMNIPAGE_COUNT,
+        OMNIPAGE_TPAT = OMNIPAGE_COUNT // Transpose-view render id (not in trackParams_)
     };
 
     // 2-char cell codes for the play modes (full kTrackModeMsg name pops while turning —
@@ -133,11 +135,8 @@ namespace FormOmni
             return;
 
         trackParams_.addPage(7);  // OMNIPAGE_STEPNOTES
-        trackParams_.addPage(7);  // OMNIPAGE_STEPPOTS
-        trackParams_.addPage(17); // OMNIPAGE_TPAT (transpose pattern editor)
         trackParams_.addPage(2);  // OMNIPAGE_TRACK: Length, MidiFX
         trackParams_.addPage(3);  // OMNIPAGE_TRACKMODES: Triplet, Direction, Mode
-        trackParams_.addPage(3);  // OMNIPAGE_SEQMIX: Mute, Solo, Gate
         trackParams_.addPage(3);  // OMNIPAGE_SEQTPOSE: Transpose, Mode, Apply TPat
         trackParams_.addPage(4);  // OMNIPAGE_SEQMIDI: Chan, Mono, SendMidi, SendCV
         trackParams_.addPage(4);  // OMNIPAGE_TIMINGS: BPM, Rate, Swing, Swing Div
@@ -956,6 +955,31 @@ namespace FormOmni
     bool FormMachineOmni::seqMenuAtStart()
     {
         return trackParams_.getSelPage() == OMNIPAGE_STEPNOTES && trackParams_.getSelParam() == 0;
+    }
+    bool FormMachineOmni::seqMenuAtEnd() // the SEQ menu is the notes page only
+    {
+        return trackParams_.getSelPage() == OMNIPAGE_STEPNOTES && trackParams_.getSelParam() == 6;
+    }
+    bool FormMachineOmni::transMenuAtEnd()
+    {
+        return tPatParams_.getSelParam() >= 16;
+    }
+    void FormMachineOmni::transParamsDraw(uint8_t sel)
+    {
+        drawPage(OMNIPAGE_SEQTPOSE, sel);
+    }
+    void FormMachineOmni::transParamsEdit(uint8_t sel, int dir)
+    {
+        editPage(OMNIPAGE_SEQTPOSE, sel, (int8_t)dir, (int8_t)dir);
+    }
+
+    void FormMachineOmni::mixMenuEnter() // the MIX menu = the track/global pages
+    {
+        trackParams_.setSelPageAndParam(OMNIPAGE_TRACK, 0);
+    }
+    bool FormMachineOmni::mixMenuAtStart()
+    {
+        return trackParams_.getSelPage() == OMNIPAGE_TRACK && trackParams_.getSelParam() == 0;
     }
     void FormMachineOmni::setSelStepByKey(uint8_t key16)
     {
@@ -1790,20 +1814,7 @@ namespace FormOmni
         case OMNIUIMODE_LENGTH:
         {
             {
-                int8_t prevPage = trackParams_.getSelPage();
-
                 trackParams_.changeParam(enc.dir());
-
-                int8_t newPage = trackParams_.getSelPage();
-
-                if (prevPage == OMNIPAGE_TPAT && newPage == OMNIPAGE_TRACK)
-                {
-                    omxDisp.displayMessage("Track Params");
-                }
-                else if (prevPage == OMNIPAGE_TRACK && newPage == OMNIPAGE_TPAT)
-                {
-                    omxDisp.displayMessage("Step Params");
-                }
 
                 // if (trackParams_.getSelPage() != prevPage)
                 // {
@@ -1872,15 +1883,7 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         {
-            switch (selPage)
-            {
-            case OMNIPAGE_TPAT: // SendMidi, SendCV
-                transpPat_.onEncoderChangedEditParam(enc, selParam, &seq_.transposePattern);
-                break;
-            default:
-                editPage(selPage, selParam, amtSlow, amtFast);
-                break;
-            }
+            editPage(selPage, selParam, amtSlow, amtFast);
         }
         break;
         case OMNIUIMODE_LENGTH:
@@ -2574,24 +2577,6 @@ namespace FormOmni
             }
         }
         break;
-        case OMNIPAGE_STEPPOTS:
-        {
-            auto selStep = getSelStep();
-
-            if (param == 5)
-            {
-                seq_.potMode = constrain(seq_.potMode + amtSlow, 0, 1);
-            }
-            else if (param == 6)
-            {
-                seq_.potBank = constrain(seq_.potBank + amtSlow, 0, NUM_CC_BANKS - 1);
-            }
-            else
-            {
-                selStep->potVals[param] = constrain(selStep->potVals[param] + amtFast, -1, 127);
-            }
-        }
-        break;
         // Length, MidiFX
         case OMNIPAGE_TRACK:
         {
@@ -2635,23 +2620,6 @@ namespace FormOmni
                 }
                 // The cell only fits a 2-char code — the full name shows while turning (§4 rule).
                 omxDisp.displayMessage(kTrackModeMsg[track->playMode]);
-            }
-        }
-        break;
-        // Mute, Solo, Gate
-        case OMNIPAGE_SEQMIX:
-        {
-            if (param == 0)
-            {
-                seq_.mute = constrain(seq_.mute + amtSlow, 0, 1);
-            }
-            else if (param == 1)
-            {
-                seq_.solo = constrain(seq_.solo + amtSlow, 0, 1);
-            }
-            else if (param == 2)
-            {
-                seq_.gate = constrain(seq_.gate + amtFast, 0, 100);
             }
         }
         break;
@@ -2785,8 +2753,6 @@ namespace FormOmni
             }
         }
         break;
-        case OMNIPAGE_TPAT: // edited by the transpose-pattern editor itself
-        break;
         }
     }
 
@@ -2832,34 +2798,6 @@ namespace FormOmni
             omxDisp.dispCenteredSlots(FONT_LABELS, labels, 6, selParam, getEncoderSelect(), true, true, headers, 1);
         }
             return false;
-        case OMNIPAGE_STEPPOTS:
-        {
-            const char *labels[5];
-            const char *headers[2];
-            headers[0] = kPotMode[seq_.potMode];
-            tempStrings[5] = "Bank " + String(seq_.potBank + 1);
-            headers[1] = tempStrings[5].c_str();
-
-            auto step = getSelStep();
-
-            for (uint8_t i = 0; i < 5; i++)
-            {
-                int pVal = step->potVals[i];
-
-                if (pVal >= 0 && pVal <= 127)
-                {
-                    tempStrings[i] = String(pVal);
-                    labels[i] = tempStrings[i].c_str();
-                }
-                else
-                {
-                    labels[i] = "-";
-                }
-            }
-
-            omxDisp.dispCenteredSlots(labels, 5, selParam, getEncoderSelect(), true, true, headers, 2);
-        }
-            return false;
         // The seven param pages render in the shared 4-cell grid — same look as the
         // shell's Step/Notes/MI param pages (FORM_V2_REVIEW.md §4 decision 2).
         case OMNIPAGE_TRACK:
@@ -2880,16 +2818,6 @@ namespace FormOmni
             vals[0] = track->tripletMode ? "On" : "--";
             vals[1] = track->playDirection == TRACKDIRECTION_FORWARD ? ">>" : "<<";
             vals[2] = kTrackModeShort[track->playMode];
-            dispParamGrid(labels, vals, selParam);
-        }
-            return false;
-        case OMNIPAGE_SEQMIX:
-        {
-            const char *labels[4] = {"MUTE", "SOLO", "GATE", ""};
-            String vals[4];
-            vals[0] = seq_.mute == 1 ? "On" : "--";
-            vals[1] = seq_.solo == 1 ? "On" : "--";
-            vals[2] = String((uint16_t)(getGateMult(seq_.gate) * 100));
             dispParamGrid(labels, vals, selParam);
         }
             return false;
@@ -2939,7 +2867,7 @@ namespace FormOmni
             return false;
         case OMNIPAGE_TPAT:
         {
-            transpPat_.onDisplayUpdate(omniUiMode_ == OMNIUIMODE_TRANSPOSE ? &tPatParams_ : &trackParams_, &seq_.transposePattern, getEncoderSelect());
+            transpPat_.onDisplayUpdate(&tPatParams_, &seq_.transposePattern, getEncoderSelect());
         }
             return false;
         }
