@@ -538,8 +538,8 @@ bool OmxModeForm::onEncoderMI(int dir)
 	if (getEncoderSelect())
 	{
 		// Select mode: navigate the cursor. 0 keyboard; 1-4 SCALE; 5-8 MIDI (chan/vel/oct/macro);
-		// 9-14 CC page (5 slots + bank); 15-17 QUANT/CLEAR/POTS.
-		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 17);
+		// 9-15 CC page (5 slots + bank + CC-editor title); 16-18 QUANT/CLEAR/POTS.
+		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 18);
 		omxDisp.setDirty();
 		return true;
 	}
@@ -592,12 +592,17 @@ bool OmxModeForm::onEncoderButtonMI()
 		closeClearSub();
 		return true;
 	}
-	if (miCursor_ == 15)
+	if (miCursor_ == 15) // the selectable "CC" title: open the CC-number editor for this bank
+	{
+		openPotConfig();
+		return true;
+	}
+	if (miCursor_ == 16)
 	{
 		quantEnterSubmenu();
 		return true;
 	}
-	if (miCursor_ == 16)
+	if (miCursor_ == 17)
 	{
 		miClearSub_ = true; // open the Yes/No confirm submenu (default NO)
 		clearSel_ = 0;
@@ -605,7 +610,7 @@ bool OmxModeForm::onEncoderButtonMI()
 		omxDisp.setDirty();
 		return true;
 	}
-	if (miCursor_ == 17)
+	if (miCursor_ == 18)
 	{
 		openPotConfig();
 		return true;
@@ -650,19 +655,22 @@ void OmxModeForm::onDisplayMI()
 		return;
 	}
 
-	// CC page (cursor 9-14): 5 pot-bank CC slots + the big bank number, reusing the Mix CC
-	// renderer. No P-Locks here — MI's low row plays the keyboard, not steps.
-	if (miCursor_ >= 9 && miCursor_ <= 14)
+	// CC page (cursor 9-15): 5 pot-bank CC slots + the big bank number + the selectable CC
+	// title (click = open the CC-number editor), reusing the Mix CC renderer. No P-Locks here
+	// — MI's low row plays the keyboard, not steps.
+	if (miCursor_ >= 9 && miCursor_ <= 15)
 	{
 		int8_t vals[5];
 		for (uint8_t i = 0; i < 5; i++)
 			vals[i] = (int8_t)ccBankRow()[i];
-		uint8_t sel = miCursor_ - 9; // 0-4 slots, 5 = the bank number
+		uint8_t sel = miCursor_ - 9; // 0-4 slots, 5 = bank number, 6 = the "CC" title
 		char vbuf[14];
 		if (sel < 5)
 			snprintf(vbuf, sizeof(vbuf), "C%u %d", (unsigned)omni->potLockCC(sel), (int)ccBankRow()[sel]);
-		else
+		else if (sel == 5)
 			snprintf(vbuf, sizeof(vbuf), "BANK %u", (unsigned)(omni->getPotBank() + 1));
+		else
+			snprintf(vbuf, sizeof(vbuf), "EDIT"); // title selected: click opens the CC editor
 		omxDisp.dispMixLevels("CC", vbuf, vals, 5, sel, !getEncoderSelect(),
 							  nullptr, (int8_t)(omni->getPotBank() + 1));
 		return;
@@ -681,15 +689,15 @@ void OmxModeForm::onDisplayMI()
 		omxDisp.dispOptionCombo("Clear Track?", kYesNo, 2, clearSel_, true);
 		return;
 	}
-	// Actions page (cursor 15-17): QUANTIZE amount + CLEAR + POTS. Click the encoder to open each.
-	if (miCursor_ >= 15 && miCursor_ <= 17)
+	// Actions page (cursor 16-18): QUANTIZE amount + CLEAR + POTS. Click the encoder to open each.
+	if (miCursor_ >= 16 && miCursor_ <= 18)
 	{
 		const char *labels[4] = {"QUANT", "CLEAR", "POTS", ""};
 		String qv = String(recQuantize_);
 		// §4 label rule: text values overflow the cell — ">" = click the encoder to open.
 		const char *values[4] = {qv.c_str(), ">", ">", ""};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 15, false);
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 16, false);
 		return;
 	}
 
@@ -3350,7 +3358,10 @@ void OmxModeForm::onPotChanged(int potIndex, int prevValue, int newValue, int an
 	if(selMachine->doesConsumePots())
 	{
 		if (potIndex >= 0 && potIndex < 5)
-			ccBankRow()[potIndex] = (uint8_t)constrain(newValue, 0, 127); // Mix CC page mirror
+		{
+			ccBankRow()[potIndex] = (uint8_t)constrain(newValue, 0, 127); // Mix/MI CC page mirror
+			omxDisp.setDirty(); // redraw the CC bar now, independent of the pot-meter timer / sendMidi
+		}
 		selMachine->onPotChanged(potIndex, prevValue, newValue, analogDelta);
 		return;
 	}
@@ -3553,8 +3564,9 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 //           low-row step is held, writes that step's CC P-Lock (lock dots mark locked
 //           slots; encoder click clears them). Editing the bank number switches the
 //           track's pot bank — the knobs and P-Locks follow it.
-//   15-18 = TRACK: Mute / Solo / Gate / Rate for the selected track
-//   19    = the machine's track/global param menu (Length/MFX, modes, transpose,
+//   15    = the selectable "CC" title (click = open the CC-number editor for the bank)
+//   16-19 = TRACK: Mute / Solo / Gate / Rate for the selected track
+//   20    = the machine's track/global param menu (Length/MFX, modes, transpose,
 //           MIDI, timings, scale) — moved here from the Seq view (Mix = track level)
 // Shared CC-page edit (Mix + MI). cell 0-4 = a pot-bank CC slot: bump the live value and send it
 // on the track's channel. cell 5 = the track's pot bank. (Mix's held-step P-Lock path is separate.)
@@ -3607,14 +3619,14 @@ bool OmxModeForm::onEncoderMix(int dir)
 		omxLeds.setDirty();
 		return true;
 	}
-	// In the track/global param menu (cursor 19): the machine navigates/edits its own
+	// In the track/global param menu (cursor 20): the machine navigates/edits its own
 	// pages; backing off the first page returns to the TRACK grid.
-	if (mixCursor_ == 19)
+	if (mixCursor_ == 20)
 	{
 		auto omni = getSelectedMachine();
 		if (getEncoderSelect() && dir < 0 && omni->mixMenuAtStart())
 		{
-			mixCursor_ = 18;
+			mixCursor_ = 19;
 			omxDisp.setDirty();
 			return true;
 		}
@@ -3624,8 +3636,8 @@ bool OmxModeForm::onEncoderMix(int dir)
 	if (getEncoderSelect())
 	{
 		uint8_t prev = mixCursor_;
-		mixCursor_ = (uint8_t)constrain((int)mixCursor_ + dir, 0, 19);
-		if (mixCursor_ == 19 && prev != 19)
+		mixCursor_ = (uint8_t)constrain((int)mixCursor_ + dir, 0, 20);
+		if (mixCursor_ == 20 && prev != 20)
 		{
 			getSelectedMachine()->mixMenuEnter();
 			omxDisp.displayMessage("TRACK PARAMS");
@@ -3651,15 +3663,16 @@ bool OmxModeForm::onEncoderMix(int dir)
 	{
 		editCCPage(mixCursor_ - 9, dir);
 	}
-	else
+	// cursor 15 = the selectable "CC" title (no turn edit; click opens the CC editor)
+	else if (mixCursor_ >= 16) // TRACK grid
 	{
 		auto omni = getSelectedMachine();
 		switch (mixCursor_)
 		{
-		case 15: omni->setMute(!(dir < 0)); break;  // turn right = mute, left = unmute
-		case 16: omni->setSolo(!(dir < 0)); break;
-		case 17: omni->editGate(dir); break;
-		case 18:
+		case 16: omni->setMute(!(dir < 0)); break;  // turn right = mute, left = unmute
+		case 17: omni->setSolo(!(dir < 0)); break;
+		case 18: omni->editGate(dir); break;
+		case 19:
 			omni->editRate(dir);
 			// §4 label rule: the cell shows the bare divisor; the full form pops while turning.
 			omxDisp.displayMessage("RATE 1:" + String(kSeqRates[omni->getRate()]));
@@ -3685,7 +3698,7 @@ void OmxModeForm::onDisplayMix()
 		omxDisp.dispMixLevels("LEVELS", vbuf, vals, 8, sel, !getEncoderSelect());
 		return;
 	}
-	if (mixCursor_ >= 9 && mixCursor_ <= 14) // CC: 5 pot-bank slots + the bank number
+	if (mixCursor_ >= 9 && mixCursor_ <= 15) // CC: 5 slots + bank number + selectable CC title
 	{
 		auto omni = getSelectedMachine();
 		bool held = (mixHeldStepMask_ != 0);
@@ -3699,7 +3712,7 @@ void OmxModeForm::onDisplayMix()
 			// otherwise the live last-sent values.
 			vals[i] = held ? lockVal : (int8_t)ccBankRow()[i];
 		}
-		uint8_t sel = mixCursor_ - 9; // 0-4 slots, 5 = the bank number
+		uint8_t sel = mixCursor_ - 9; // 0-4 slots, 5 = bank number, 6 = the "CC" title
 		char tbuf[12], vbuf[14];
 		snprintf(tbuf, sizeof(tbuf), held ? "CC LOCK" : "CC");
 		if (sel < 5)
@@ -3710,18 +3723,20 @@ void OmxModeForm::onDisplayMix()
 			else
 				snprintf(vbuf, sizeof(vbuf), "C%u %d", (unsigned)omni->potLockCC(sel), v);
 		}
-		else
+		else if (sel == 5)
 			snprintf(vbuf, sizeof(vbuf), "BANK %u", (unsigned)(omni->getPotBank() + 1));
+		else
+			snprintf(vbuf, sizeof(vbuf), "EDIT"); // title selected: click opens the CC editor
 		omxDisp.dispMixLevels(tbuf, vbuf, vals, 5, sel, !getEncoderSelect(),
 							  held ? locked : nullptr, (int8_t)(omni->getPotBank() + 1));
 		return;
 	}
-	if (mixCursor_ == 19) // track/global param menu: the machine renders its pages
+	if (mixCursor_ == 20) // track/global param menu: the machine renders its pages
 	{
 		getSelectedMachine()->onDisplayUpdate();
 		return;
 	}
-	if (mixCursor_ >= 15) // TRACK: Mute / Solo / Gate / Rate (selected track)
+	if (mixCursor_ >= 16) // TRACK: Mute / Solo / Gate / Rate (selected track)
 	{
 		auto omni = getSelectedMachine();
 		const char *labels[4] = {"MUTE", "SOLO", "GATE", "RATE"};
@@ -3732,7 +3747,7 @@ void OmxModeForm::onDisplayMix()
 		vals[3] = String(kSeqRates[omni->getRate()]); // full "1:n" pops while turning
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, mixCursor_ - 15, !getEncoderSelect());
+		omxDisp.dispStepParams(labels, values, locked, mixCursor_ - 16, !getEncoderSelect());
 		return;
 	}
 	onDisplaySeqTrackPage(); // cursor 0: the shared track/page overview
@@ -3767,12 +3782,19 @@ void OmxModeForm::onEncoderButtonDown()
 		return;
 	}
 
+	// Mix CC page: click the selectable "CC" title (cursor 15) to open the CC-number editor.
+	if (formView_ == FORMVIEW_MIX && mixCursor_ == 15)
+	{
+		openPotConfig();
+		return;
+	}
+
 	if (onEncoderButtonStep())
 		return;
 
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderButtonDown();
-	if (selMachine->takePotConfigRequest()) // POTS cell in the machine menu (Mix cursor 19 / Seq)
+	if (selMachine->takePotConfigRequest()) // POTS cell in the machine menu (Mix cursor 20 / Seq)
 	{
 		openPotConfig();
 		return;

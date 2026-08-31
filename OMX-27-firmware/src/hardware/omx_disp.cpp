@@ -852,6 +852,9 @@ void OmxDisp::dispMixLevels(const char *title, const char *valText, const int8_t
 	u8g2_display.setBackgroundColor(BLACK);
 	u8g2centerText(title, 0, 9, 64, 8);
 	u8g2centerText(valText, 64, 9, 64, 8);
+	// The title is selectable (sel == count+1): box it — a shortcut to the CC-number editor.
+	if (sel == count + 1)
+		display.drawRect(0, 0, 63, 10, WHITE);
 
 	// With a big number on the right, the bars squeeze into the left 100px.
 	const uint8_t barsW = (bigNum >= 0) ? 100 : 128;
