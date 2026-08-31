@@ -81,7 +81,7 @@ public:
 						  uint8_t activePage, const uint8_t *stepState, int8_t playhead,
 						  uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport,
 						  const char *viewLabel, bool viewLabelSel, bool showPagesSteps = true,
-						  bool showCCMeter = false);
+						  bool showCCMeter = false, uint8_t numTracks = 8);
 	// Step view overview: mode name on top, a row of `count` step cells on the bottom (filled
 	// = has content). The playhead step (0-based, -1 = none) gets a tick underneath.
 	void dispStepOverview(const char *modeName, const uint8_t *stepState, uint8_t pageLen, int8_t playhead, bool invertTitle = false);

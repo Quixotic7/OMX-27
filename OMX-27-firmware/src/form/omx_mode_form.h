@@ -239,7 +239,7 @@ private:
 	// page's encoder). Per-track-per-bank so every track's banks remember their own
 	// values — switching track or bank shows that combination's last-sent state.
 	// (potSettings.analogValues can't hold encoder edits: the pot scan rewrites it.)
-	uint8_t ccLastSent_[8][NUM_CC_BANKS][5] = {};
+	uint8_t ccLastSent_[FORM_NUM_TRACKS][NUM_CC_BANKS][5] = {};
 	// The selected track's current bank row of that table.
 	uint8_t *ccBankRow() { return ccLastSent_[selectedMachine_][getSelectedMachine()->getPotBank()]; }
 	// Low-row steps held in Mix (audition): while held, the CC page shows/edits that
@@ -286,7 +286,19 @@ private:
 	void updateToolsLEDs();
 	void onDisplayTools();
 
-	static const uint8_t kNumMachines = 8;
+	// One machine per track. Follows FORM_NUM_TRACKS so the whole shell (machines_, trackHue_,
+	// every kNumMachines loop, patterns_) scales with the per-platform track count.
+	static const uint8_t kNumMachines = FORM_NUM_TRACKS;
+
+	// Mix-view encoder cursor map, parameterized by the track count so it scales with
+	// kNumMachines: 0 overview · 1..kNumMachines LEVELS · then 5 CC slots + bank + "CC" title ·
+	// then the 4-cell TRACK grid · then the machine param menu. (For 8 tracks these are the
+	// original 9-13/14/15/16-19/20.)
+	static const uint8_t kMixCcStart = kNumMachines + 1;  // first of 5 CC-slot cursors
+	static const uint8_t kMixCcBank  = kNumMachines + 6;  // big bank-number cursor
+	static const uint8_t kMixCcTitle = kNumMachines + 7;  // selectable "CC" title cursor
+	static const uint8_t kMixTrack   = kNumMachines + 8;  // first of the 4 TRACK-grid cursors
+	static const uint8_t kMixMenu    = kNumMachines + 12; // machine param menu cursor (last)
 
 	SubModePreset presetManager;
 

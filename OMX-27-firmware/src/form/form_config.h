@@ -13,7 +13,14 @@
 // (Moved from the retired form2_data.h scaffolding — the shipping data model is the
 // OmniSeq-based FormPattern in src/form/form_patterns.h.)
 #ifndef FORM_NUM_TRACKS
+#if BOARDTYPE == TEENSY32
+// Teensy 3.1 (64 KB): 4 tracks instead of 8. Each track is a heap machine (~1.6 KB) plus an
+// OmniSeq in the resident pattern (~1.3 KB), so halving the count frees ~11.8 KB — enough
+// headroom for MidiFX. Pages stay at 4 (steps-per-track unchanged). RP2040/Teensy 4 keep 8.
+#define FORM_NUM_TRACKS 4
+#else
 #define FORM_NUM_TRACKS 8
+#endif
 #endif
 #ifndef FORM_NUM_PAGES
 #define FORM_NUM_PAGES 4

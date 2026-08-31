@@ -651,7 +651,7 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
 							   uint8_t activePage, const uint8_t *stepState, int8_t playhead,
 							   uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport,
-							   const char *viewLabel, bool viewLabelSel, bool showPagesSteps, bool showCCMeter)
+							   const char *viewLabel, bool viewLabelSel, bool showPagesSteps, bool showCCMeter, uint8_t numTracks)
 {
 	if (isMessageActive())
 	{
@@ -665,9 +665,9 @@ void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, ui
 	u8g2_display.setForegroundColor(WHITE);
 	u8g2_display.setBackgroundColor(BLACK);
 
-	// --- 8 track-state squares (top-left): filled = unmuted, outline = muted, selected underlined.
+	// --- track-state squares (top-left): filled = unmuted, outline = muted, selected underlined.
 	// Everything below the CC meter sits 1px down (y>=2) to give the top meter breathing room.
-	for (uint8_t t = 0; t < 8; t++)
+	for (uint8_t t = 0; t < numTracks; t++)
 	{
 		int x = 1 + t * 6;
 		if (!trackMuted[t])

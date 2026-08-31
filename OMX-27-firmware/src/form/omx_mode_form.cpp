@@ -1183,7 +1183,7 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 			omxLeds.setDirty();
 			return;
 		}
-		if (down && !held && k >= 3 && k <= 10)
+		if (down && !held && k >= 3 && k < 3 + kNumMachines) // track keys past the count are inert
 		{
 			selectMachine(k - 3);
 			heldTrackKey_ = k - 3;
@@ -2133,7 +2133,7 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		return;
 	}
 	// F2 + top row (3-10) = select the track; holding one exposes its controls on the low row.
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && thisKey >= 3 && thisKey <= 10)
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && thisKey >= 3 && thisKey < 3 + kNumMachines)
 	{
 		if (e.down() && !e.held())
 		{
@@ -2863,8 +2863,8 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 	bool anySolo = false;
 	for (uint8_t t = 0; t < kNumMachines; t++)
 		if (machines_[t]->getSolo()) { anySolo = true; break; }
-	bool trackMuted[8];
-	for (uint8_t t = 0; t < 8; t++)
+	bool trackMuted[kNumMachines];
+	for (uint8_t t = 0; t < kNumMachines; t++)
 		trackMuted[t] = anySolo ? !machines_[t]->getSolo() : machines_[t]->getMute();
 
 	bool mixMute = (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F1);
@@ -2927,7 +2927,7 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 							 mixPlayModeIndex(omni->trackPtr()), (uint16_t)clockConfig.clockbpm,
 							 omni->getEnabledPages(), omni->activePage(), stepState, playhead,
 							 modOverlay, overlayLabel, omni->getPageLen(omni->activePage()), transport,
-							 viewLabel, viewLabelSel, !keyboardMode, ccMeterActive());
+							 viewLabel, viewLabelSel, !keyboardMode, ccMeterActive(), kNumMachines);
 }
 
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
@@ -2935,7 +2935,7 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 {
 	uint8_t thisKey = e.key();
-	if (thisKey < 3 || thisKey >= 11)
+	if (thisKey < 3 || thisKey >= 3 + kNumMachines) // track keys past the count are inert
 		return;
 	uint8_t track = thisKey - 3;
 
@@ -3564,9 +3564,9 @@ bool OmxModeForm::onEncoderMix(int dir)
 	// A held low-row step on a CC slot is an edit gesture (like the Step view's
 	// hold-step): the turn always writes that step's P-Lock, regardless of
 	// select/edit mode — the encoder click stays free to clear the lock.
-	if (mixHeldStepMask_ != 0 && mixCursor_ >= 9 && mixCursor_ <= 13)
+	if (mixHeldStepMask_ != 0 && mixCursor_ >= kMixCcStart && mixCursor_ < kMixCcBank)
 	{
-		uint8_t slot = mixCursor_ - 9;
+		uint8_t slot = mixCursor_ - kMixCcStart;
 		auto omni = getSelectedMachine();
 		for (uint8_t st = 0; st < 16; st++)
 			if (mixHeldStepMask_ & (1 << st))
@@ -3580,14 +3580,14 @@ bool OmxModeForm::onEncoderMix(int dir)
 		omxLeds.setDirty();
 		return true;
 	}
-	// In the track/global param menu (cursor 20): the machine navigates/edits its own
+	// In the track/global param menu (last cursor): the machine navigates/edits its own
 	// pages; backing off the first page returns to the TRACK grid.
-	if (mixCursor_ == 20)
+	if (mixCursor_ == kMixMenu)
 	{
 		auto omni = getSelectedMachine();
 		if (getEncoderSelect() && dir < 0 && omni->mixMenuAtStart())
 		{
-			mixCursor_ = 19;
+			mixCursor_ = kMixMenu - 1; // back to the TRACK grid's last cell (RATE)
 			omxDisp.setDirty();
 			return true;
 		}
@@ -3597,8 +3597,8 @@ bool OmxModeForm::onEncoderMix(int dir)
 	if (getEncoderSelect())
 	{
 		uint8_t prev = mixCursor_;
-		mixCursor_ = (uint8_t)constrain((int)mixCursor_ + dir, 0, 20);
-		if (mixCursor_ == 20 && prev != 20)
+		mixCursor_ = (uint8_t)constrain((int)mixCursor_ + dir, 0, kMixMenu);
+		if (mixCursor_ == kMixMenu && prev != kMixMenu)
 		{
 			getSelectedMachine()->mixMenuEnter();
 			omxDisp.displayMessage("TRACK PARAMS");
@@ -3616,24 +3616,24 @@ bool OmxModeForm::onEncoderMix(int dir)
 				selectMachine((uint8_t)t);
 		}
 	}
-	else if (mixCursor_ <= 8) // LEVELS: edits the bar under the cursor, not the selection
+	else if (mixCursor_ <= kNumMachines) // LEVELS: edits the bar under the cursor, not the selection
 	{
 		machines_[mixCursor_ - 1]->editParamDefault(0, dir);
 	}
-	else if (mixCursor_ <= 14) // CC page: slots 9-13 + bank number 14 (shared with MI)
+	else if (mixCursor_ <= kMixCcBank) // CC page: 5 slots + bank number (shared with MI)
 	{
-		editCCPage(mixCursor_ - 9, dir);
+		editCCPage(mixCursor_ - kMixCcStart, dir);
 	}
-	// cursor 15 = the selectable "CC" title (no turn edit; click opens the CC editor)
-	else if (mixCursor_ >= 16) // TRACK grid
+	// kMixCcTitle = the selectable "CC" title (no turn edit; click opens the CC editor)
+	else if (mixCursor_ >= kMixTrack) // TRACK grid
 	{
 		auto omni = getSelectedMachine();
-		switch (mixCursor_)
+		switch (mixCursor_ - kMixTrack)
 		{
-		case 16: omni->setMute(!(dir < 0)); break;  // turn right = mute, left = unmute
-		case 17: omni->setSolo(!(dir < 0)); break;
-		case 18: omni->editGate(dir); break;
-		case 19:
+		case 0: omni->setMute(!(dir < 0)); break;  // turn right = mute, left = unmute
+		case 1: omni->setSolo(!(dir < 0)); break;
+		case 2: omni->editGate(dir); break;
+		case 3:
 			omni->editRate(dir);
 			// §4 label rule: the cell shows the bare divisor; the full form pops while turning.
 			omxDisp.displayMessage("RATE 1:" + String(kSeqRates[omni->getRate()]));
@@ -3648,18 +3648,18 @@ bool OmxModeForm::onEncoderMix(int dir)
 // Render the Mix view's encoder pages.
 void OmxModeForm::onDisplayMix()
 {
-	if (mixCursor_ >= 1 && mixCursor_ <= 8) // LEVELS
+	if (mixCursor_ >= 1 && mixCursor_ <= kNumMachines) // LEVELS
 	{
-		int8_t vals[8];
+		int8_t vals[kNumMachines];
 		for (uint8_t i = 0; i < kNumMachines; i++)
 			vals[i] = (int8_t)machines_[i]->trackPtr()->paramDefaults[0];
 		uint8_t sel = mixCursor_ - 1;
 		char vbuf[12];
 		snprintf(vbuf, sizeof(vbuf), "T%u %u", (unsigned)(sel + 1), (unsigned)vals[sel]);
-		omxDisp.dispMixLevels("LEVELS", vbuf, vals, 8, sel, !getEncoderSelect());
+		omxDisp.dispMixLevels("LEVELS", vbuf, vals, kNumMachines, sel, !getEncoderSelect());
 		return;
 	}
-	if (mixCursor_ >= 9 && mixCursor_ <= 15) // CC: 5 slots + bank number + selectable CC title
+	if (mixCursor_ >= kMixCcStart && mixCursor_ <= kMixCcTitle) // CC: 5 slots + bank + CC title
 	{
 		auto omni = getSelectedMachine();
 		bool held = (mixHeldStepMask_ != 0);
@@ -3673,7 +3673,7 @@ void OmxModeForm::onDisplayMix()
 			// otherwise the live last-sent values.
 			vals[i] = held ? lockVal : (int8_t)ccBankRow()[i];
 		}
-		uint8_t sel = mixCursor_ - 9; // 0-4 slots, 5 = bank number, 6 = the "CC" title
+		uint8_t sel = mixCursor_ - kMixCcStart; // 0-4 slots, 5 = bank number, 6 = the "CC" title
 		char tbuf[12], vbuf[14];
 		snprintf(tbuf, sizeof(tbuf), held ? "CC LOCK" : "CC");
 		if (sel < 5)
@@ -3692,12 +3692,12 @@ void OmxModeForm::onDisplayMix()
 							  held ? locked : nullptr, (int8_t)(omni->getPotBank() + 1));
 		return;
 	}
-	if (mixCursor_ == 20) // track/global param menu: the machine renders its pages
+	if (mixCursor_ == kMixMenu) // track/global param menu: the machine renders its pages
 	{
 		getSelectedMachine()->onDisplayUpdate();
 		return;
 	}
-	if (mixCursor_ >= 16) // TRACK: Mute / Solo / Gate / Rate (selected track)
+	if (mixCursor_ >= kMixTrack) // TRACK: Mute / Solo / Gate / Rate (selected track)
 	{
 		auto omni = getSelectedMachine();
 		const char *labels[4] = {"MUTE", "SOLO", "GATE", "RATE"};
@@ -3708,7 +3708,7 @@ void OmxModeForm::onDisplayMix()
 		vals[3] = String(kSeqRates[omni->getRate()]); // full "1:n" pops while turning
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, mixCursor_ - 16, !getEncoderSelect());
+		omxDisp.dispStepParams(labels, values, locked, mixCursor_ - kMixTrack, !getEncoderSelect());
 		return;
 	}
 	onDisplaySeqTrackPage(); // cursor 0: the shared track/page overview
@@ -3731,9 +3731,9 @@ void OmxModeForm::onEncoderButtonDown()
 
 	// Mix CC page: click while holding step(s) on a slot = clear that slot's P-Lock
 	// (the same click-clears-a-lock convention as the Step view's param pages).
-	if (formView_ == FORMVIEW_MIX && mixHeldStepMask_ != 0 && mixCursor_ >= 9 && mixCursor_ <= 13)
+	if (formView_ == FORMVIEW_MIX && mixHeldStepMask_ != 0 && mixCursor_ >= kMixCcStart && mixCursor_ < kMixCcBank)
 	{
-		uint8_t slot = mixCursor_ - 9;
+		uint8_t slot = mixCursor_ - kMixCcStart;
 		auto omni = getSelectedMachine();
 		for (uint8_t st = 0; st < 16; st++)
 			if (mixHeldStepMask_ & (1 << st))
@@ -3743,8 +3743,8 @@ void OmxModeForm::onEncoderButtonDown()
 		return;
 	}
 
-	// Mix CC page: click the selectable "CC" title (cursor 15) to open the CC-number editor.
-	if (formView_ == FORMVIEW_MIX && mixCursor_ == 15)
+	// Mix CC page: click the selectable "CC" title to open the CC-number editor.
+	if (formView_ == FORMVIEW_MIX && mixCursor_ == kMixCcTitle)
 	{
 		openPotConfig();
 		return;
