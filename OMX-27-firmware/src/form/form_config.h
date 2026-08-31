@@ -1,5 +1,6 @@
 #pragma once
-// FORM v2 — per-platform capacity caps (Phase 1). Device-only (pulls BOARDTYPE).
+// FORM — per-platform capacity caps + fixed geometry. Device-only (pulls BOARDTYPE).
+// (Formerly src/form2/form2_config.h; the rest of form2/ was retired.)
 // NOTE: the live model is FormPattern (OmniSeq x 8) — sizeof measured ~10.6 KB/pattern,
 //   so 16 patterns fully-resident = ~165 KB. Re-measure before raising any cap.
 //   RP2040 V3 (264 KB RAM) and Teensy 4 (512 KB) both hold 16 in RAM — no streaming.
