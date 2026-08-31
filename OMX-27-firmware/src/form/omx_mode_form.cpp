@@ -164,17 +164,6 @@ void OmxModeForm::switchPattern(uint8_t index)
 	loadPatternIntoMachines(index);
 }
 
-void OmxModeForm::copyPatternTo(uint8_t from, uint8_t to)
-{
-	if (from >= FORM_NUM_PATTERNS || to >= FORM_NUM_PATTERNS || from == to)
-		return;
-
-	snapshotActivePattern(); // make sure the source (if it's active) is current
-	patterns_[to] = patterns_[from];
-	if (to == activePattern_)
-		loadPatternIntoMachines(activePattern_); // reflect the paste in the live tracks
-}
-
 void OmxModeForm::clearPattern(uint8_t index)
 {
 	if (index >= FORM_NUM_PATTERNS)
@@ -3276,45 +3265,6 @@ void OmxModeForm::selectMidiFx(uint8_t mfxIndex, bool dispMsg)
 	{
 		subModeMidiFx[i].setSelected(i == mfxIndex);
 	}
-
-	// uint8_t prevMidiFX = activeDrumKit.drumKeys[selDrumKey].midifx;
-
-	// if(mfxIndex != prevMidiFX && prevMidiFX < NUM_MIDIFX_GROUPS)
-	// {
-	//     drumKeyUp(selDrumKey + 1);
-	// }
-
-	// activeDrumKit.drumKeys[selDrumKey].midifx = mfxIndex;
-
-	// if(mfxQuickEdit_)
-	// {
-	// 	// Change the MidiFX Group being edited
-	// 	if(mfxIndex < NUM_MIDIFX_GROUPS && mfxIndex != quickEditMfxIndex_)
-	// 	{
-	// 		enableSubmode(&subModeMidiFx[mfxIndex]);
-	// 		subModeMidiFx[mfxIndex].enablePassthrough();
-	// 		quickEditMfxIndex_ = mfxIndex;
-	// 		dispMsg = false;
-	// 	}
-	// 	else if(mfxIndex >= NUM_MIDIFX_GROUPS)
-	// 	{
-	// 		disableSubmode();
-	// 	}
-	// }
-
-	
-
-	// if (dispMsg)
-	// {
-	// 	if (mfxIndex < NUM_MIDIFX_GROUPS)
-	// 	{
-	// 		omxDisp.displayMessageTimed("MidiFX " + String(mfxIndex + 1), 5);
-	// 	}
-	// 	else
-	// 	{
-	// 		omxDisp.displayMessageTimed("MidiFX Off", 5);
-	// 	}
-	// }
 }
 
 void OmxModeForm::onPotChanged(int potIndex, int prevValue, int newValue, int analogDelta)
@@ -4519,16 +4469,6 @@ void OmxModeForm::doNoteOn(uint8_t keyIndex)
 	noteGroup.prevNoteNumber = noteGroup.noteNumber;
 
 	onNotePostFX(noteGroup);
-
-	// if (mfxIndex_ < NUM_MIDIFX_GROUPS)
-	// {
-	// 	subModeMidiFx[mfxIndex_].noteInput(noteGroup);
-	// 	// subModeMidiFx.noteInput(noteGroup);
-	// }
-	// else
-	// {
-	// 	onNotePostFX(noteGroup);
-	// }
 }
 
 // Called via doNoteOnForwarder
@@ -4545,16 +4485,6 @@ void OmxModeForm::doNoteOff(uint8_t keyIndex)
 	noteGroup.prevNoteNumber = noteGroup.noteNumber;
 
 	onNotePostFX(noteGroup);
-
-	// if (mfxIndex_ < NUM_MIDIFX_GROUPS)
-	// {
-	// 	subModeMidiFx[mfxIndex_].noteInput(noteGroup);
-	// 	// subModeMidiFx.noteInput(noteGroup);
-	// }
-	// else
-	// {
-	// 	onNotePostFX(noteGroup);
-	// }
 }
 
 // Called by the midiFX group when a note exits it's FX Pedalboard

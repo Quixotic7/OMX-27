@@ -57,8 +57,6 @@ public:
 	// FORM Mix bar pages. locked marks P-Locked slots; bigNum >= 0 draws a large number
 	// block on the right (the pot bank) selectable as cell index `count`.
 	void dispMixLevels(const char *title, const char *valText, const int8_t *vals, uint8_t count, uint8_t sel, bool editing, const bool *locked = nullptr, int8_t bigNum = -1);
-	// FORM Tools page: compact param strip over the shared 16-step row.
-	void dispToolPage(const char *labels[4], const char *values[4], uint8_t sel, bool editing, const uint8_t *stepState, uint8_t pageLen, int8_t playhead);
 	// FORM Tools v2 layouts: action tools (params + buttons + steps; stepState=nullptr =
 	// no-steps variant), the VEL/CHANCE bars page, and the generator page w/ live preview.
 	void dispToolActionPage(const char *pLabels[], const char *pVals[], uint8_t pCount, const char *btnLabels[], uint8_t btnCount, int8_t sel, bool editing, const uint8_t *stepState, uint8_t pageLen, int8_t playhead);

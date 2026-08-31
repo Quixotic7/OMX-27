@@ -15,7 +15,6 @@ namespace FormOmni
         ~OmniTransposePattern();
 
         void reset();
-        int16_t applyTranspPattern(int16_t noteNumber, TransposePattern *tPat);
 
         void advance(TransposePattern *tPat);
 
@@ -32,7 +31,6 @@ namespace FormOmni
         void onKeyHeldUpdate(OMXKeypadEvent e, TransposePattern *tPat);
         void onDisplayUpdate(ParamManager *params, TransposePattern *tPat, bool encoderSelect);
 
-        void onEncoderChangedSelectParam(Encoder::Update enc, TransposePattern *tPat);
         void onEncoderChangedEditParam(Encoder::Update enc, uint8_t selParam, TransposePattern *tPat);
 
     private:

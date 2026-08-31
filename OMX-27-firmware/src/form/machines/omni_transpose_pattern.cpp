@@ -89,14 +89,6 @@ namespace FormOmni
         return tPat->pat[stepIndex];
     }
 
-    int16_t OmniTransposePattern::applyTranspPattern(int16_t noteNumber, TransposePattern *tPat)
-    {
-        // Simple
-        int16_t newNote = noteNumber + tPat->pat[transpPos_];
-
-        return newNote;
-    }
-
     void OmniTransposePattern::updateLEDs(ParamManager *params, TransposePattern *tPat)
     {
         bool blinkState = omxLeds.getBlinkState();
@@ -490,10 +482,6 @@ namespace FormOmni
 
             omxDisp.dispValues16(tPat->pat, tPat->len + 1, -10, 10, true, params->getSelParam(), params->getNumPages(), params->getSelPage(), encoderSelect, true, labels, 3);
         }
-    }
-
-    void OmniTransposePattern::onEncoderChangedSelectParam(Encoder::Update enc, TransposePattern *tPat)
-    {
     }
 
     void OmniTransposePattern::onEncoderChangedEditParam(Encoder::Update enc, uint8_t selParam, TransposePattern *tPat)

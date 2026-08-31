@@ -43,17 +43,8 @@ namespace FormOmni
     const char* kTrackModeShort[] = {"--", "PG", "RD", "R2", "SF", "SH"};
     const char* kTranspModeShort[] = {"GI", "SE", "LI"};
 
-    enum OmniStepPage
-    {
-        OSTEPPAGE_1,
-        OSTEPAGE_COUNT
-    };
-
     const char* kUIModeMsg[] = {"CONFIG", "MIX", "LENGTH", "TRANSPOSE", "STEP", "NOTE EDIT"};
 
-    const char* kPotMode[] = {"CC Step", "CC Fade"};
-
-    const char* kTranspModeMsg[] = {"GINT", "SEMI", "LINT"};
     const char* kTranspModeLongMsg[] = {"GBL INTERVAL", "SEMITONES", "LOC INTERVAL"};
 
     const char* kTrackModeMsg[] = {"NONE", "PONG", "RAND", "RND2", "SHUF", "SHLD"};
@@ -65,35 +56,8 @@ namespace FormOmni
     const uint8_t kZoomMults[] = {1,2,4};
     const uint8_t kPageMax[] = {4,2,1};
 
-    // v2: fixed 4 pages of 16 steps (zoom retired; zoomLevel_ stays 0).
-    static const uint8_t kFormNumPages = 4;
-
-    // 0, 0.33333, 0.66666, 0.83333
-    // 0, 0.25, 0.5, 0.75, 1.0
-    // 0, 0.083333, 0.166666, 0.083333
-    // Percent, how much to nudge note forward to become a triplet note
-    const float kTripletNudge[] = {0.0f, 1.0f/3.0f, 1.0f/3.0f * 2.0f, 0.0f};
-
-    // Mod to use for swing
-    // 16th is 2
-    // 0S0S0S
-    // 00S00
-    // 10001000100010001000
-    const uint8_t kSwingDivisionMod[] = {2,4};
-
-    // const char *kTrigConditions[36] = {
-	// "1:1",
-	// "1:2", "2:2",
-	// "1:3", "2:3", "3:3",
-	// "1:4", "2:4", "3:4", "4:4",
-	// "1:5", "2:5", "3:5", "4:5", "5:5",
-	// "1:6", "2:6", "3:6", "4:6", "5:6", "6:6",
-	// "1:7", "2:7", "3:7", "4:7", "5:7", "6:7", "7:7",
-	// "1:8", "2:8", "3:8", "4:8", "5:8", "6:8", "7:8", "8:8"};
-
     const char* kConditionModes[9] = {"--", "FILL", "!FIL", "PRE", "!PRE", "NEI", "!NEI", "1ST", "!1ST"};
 
-    // Must be a quick way to calculate this
     uint8_t kTrigConditionsAB[35][2] = {
 	{1, 2},	{2, 2},
 	{1, 3},	{2, 3},	{3, 3},
@@ -103,12 +67,8 @@ namespace FormOmni
     {1, 7},	{2, 7},	{3, 7},	{4, 7},	{5, 7},	{6, 7},	{7, 7},
 	{1, 8},	{2, 8},	{3, 8},	{4, 8},	{5, 8},	{6, 8},	{7, 8},	{8, 8}};
 
-    // int sizeArray[sizeof(kTrigConditions)];
-
     // Off, Reset, Forward, Reverse, Jump Rand, Rand, Jump to step
     const char *kStepFuncs[7] = {"--", "RSET", "<<", ">>", "<>", "J?", "???"};
-
-    const int kStepFuncColors[7] = {RED, ORANGE, DKYELLOW, GREEN, MAGENTA, ROSE, DIMORANGE};
 
     // v2 Step value palettes: len index for 0.5·0.75·1·2·4·6·8·16·32·64, and mfxIndex for Off + FX 1-5.
     static const uint8_t kLenPalette[10] = {2, 3, 4, 5, 7, 9, 11, 19, 20, 22};
@@ -118,7 +78,6 @@ namespace FormOmni
     ParamManager trackParams_;
     ParamManager tPatParams_;
 
-    bool paramsInit_ = false;
     bool neighborPrevTrigWasTrue_ = false;
 
     uint8_t omniUiMode_ = 0;
@@ -145,8 +104,6 @@ namespace FormOmni
         trackParams_.addPage(1);  // OMNIPAGE_POTS: single "open Pot Config" cell
 
         tPatParams_.addPage(17);
-
-        paramsInit_ = true;
     }
 
     FormMachineOmni::FormMachineOmni()
@@ -177,19 +134,6 @@ namespace FormOmni
     bool FormMachineOmni::doesConsumePots()
     {
         return true;
-        // switch (omniUiMode_)
-        // {
-        // case OMNIUIMODE_CONFIG:
-        // case OMNIUIMODE_MIX:
-        // case OMNIUIMODE_LENGTH:
-        // case OMNIUIMODE_TRANSPOSE:
-        // case OMNIUIMODE_COUNT:
-        //     return false;
-        // case OMNIUIMODE_STEP:
-        // case OMNIUIMODE_NOTEEDIT:
-        //     return true;
-        // }
-        // return false;
     }
 
     bool FormMachineOmni::doesConsumeDisplay()
@@ -276,8 +220,6 @@ namespace FormOmni
             // ticksTilNextTrigger_ = 0;
             // ticksTilNextTriggerRate_ = 0;
 
-            playRateCounter_ = playingStep_;
-
             onRateChanged();
 
             didNotesPlayThisStep_ = false;
@@ -352,7 +294,6 @@ namespace FormOmni
         pongDir_ = getTrack()->playDirection == TRACKDIRECTION_FORWARD ? 1 : -1; // pong starts in the set direction
 
         grooveCounter_ = 0;
-        playRateCounter_ = 0;
         loopCounter_ = 0;
         loopCount_ = 0;
         firstLoop_ = true;
@@ -1803,9 +1744,6 @@ namespace FormOmni
     void FormMachineOmni::onEnabled()
     {
     }
-    void FormMachineOmni::onDisabled()
-    {
-    }
 
     void FormMachineOmni::onEncoderChangedSelectParam(Encoder::Update enc)
     {
@@ -2181,13 +2119,10 @@ namespace FormOmni
                 {
                     ratchetDivs_ = 0;
                 }
-
-                lastTriggeredStepState_ = true;
             }
             else
             {
                 ratchetDivs_ = 0; // a non-triggering step clears any pending ratchet
-                lastTriggeredStepState_ = false;
                 didNotesPlayThisStep_ = false;
             }
             lastTriggeredStepIndex_ = playingStep_;
@@ -2345,8 +2280,6 @@ namespace FormOmni
 
         ticksTilNextTrigger_ = ticksTilNext16Trigger_;
         ticksTilNextTriggerRate_ = ticksTilNext16Trigger_;
-
-        stepLengthMult_ = 16.0f / rate;
 
         stepMicros_ = clockConfig.step_micros * 16 / rate;
 

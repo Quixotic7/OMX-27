@@ -898,47 +898,6 @@ void OmxDisp::dispMixLevels(const char *title, const char *valText, const int8_t
 	}
 }
 
-// FORM Tools page: a compact 4-cell param strip (small font) over the shared 16-step
-// row, so step-modifying tools show their effect live — the same row page-0 track
-// pages draw. sel/editing follow the dispStepParams conventions.
-void OmxDisp::dispToolPage(const char *labels[4], const char *values[4], uint8_t sel, bool editing, const uint8_t *stepState, uint8_t pageLen, int8_t playhead)
-{
-	if (isMessageActive())
-	{
-		renderMessage();
-		return;
-	}
-	display.fillRect(0, 0, 128, 32, BLACK);
-	u8g2_display.setFontMode(1);
-	u8g2_display.setFont(FONT_LABELS);
-
-	const int cw = 32;
-	for (uint8_t i = 0; i < 4; i++)
-	{
-		int x = i * cw;
-		bool inv = (i == sel) && editing;
-		if (inv)
-		{
-			display.fillRect(x + 1, 10, cw - 2, 10, WHITE);
-			u8g2_display.setForegroundColor(BLACK);
-			u8g2_display.setBackgroundColor(WHITE);
-		}
-		else
-		{
-			u8g2_display.setForegroundColor(WHITE);
-			u8g2_display.setBackgroundColor(BLACK);
-		}
-		u8g2centerText(labels[i], x, 8, cw, 8);
-		u8g2centerText(values[i], x, 18, cw, 8);
-		if (i == sel && !editing)
-			display.drawRect(x + 1, 0, cw - 2, 20, WHITE);
-	}
-	u8g2_display.setForegroundColor(WHITE);
-	u8g2_display.setBackgroundColor(BLACK);
-
-	drawStepRow(23, stepState, pageLen, playhead);
-}
-
 // FORM Tools: action-tool page. Params (label+value pairs) on top, action "buttons"
 // beneath, the step row at the bottom. sel walks params (0..pCount-1) then buttons.
 // stepState == nullptr = the no-steps variant (taller cells + full-width button row).

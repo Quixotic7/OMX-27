@@ -83,12 +83,9 @@ public:
 	int loadFromDisk(int startingAddress, Storage *storage);
 
 	// ---- Patterns (v2 data layer) ----
-	uint8_t getActivePattern() const { return activePattern_; }
 	FormOmni::FormMachineOmni *getSelectedMachine();
-	uint8_t getPatternCount() const { return FORM_NUM_PATTERNS; }
 	// Snapshot the current pattern, then make `index` active and load it into the machines.
 	void switchPattern(uint8_t index);
-	void copyPatternTo(uint8_t from, uint8_t to);
 	void clearPattern(uint8_t index);
 	bool patternHasContent(uint8_t index); // any track has any step with notes (snapshots if active)
 	// Pattern-bank persistence. The bank (~165 KB) exceeds FRAM (32 KB), so on the
@@ -341,14 +338,6 @@ private:
 	void updateShortcutMode();
 
 	bool getEncoderSelect();
-
-	// SubModes
-	// SubmodeInterface *activeSubmode = nullptr;
-	// SubModePotConfig subModePotConfig_;
-
-	// void enableSubmode(SubmodeInterface *subMode);
-	// void disableSubmode();
-	// bool isSubmodeEnabled();
 
 	bool onKeyUpdateSelMidiFX(OMXKeypadEvent e);
 	bool onKeyHeldSelMidiFX(OMXKeypadEvent e);

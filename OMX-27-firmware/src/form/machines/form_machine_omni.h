@@ -368,7 +368,6 @@ namespace FormOmni
         OmniTransposePattern transpPat_;
 
         void onEnabled();
-        void onDisabled();
 
         void onEncoderChangedSelectParam(Encoder::Update enc);
         void onEncoderChangedEditParam(Encoder::Update enc);
@@ -418,8 +417,6 @@ namespace FormOmni
         // Counts from 0 to 16 during playback to determine groove
         uint8_t grooveCounter_ = 0;
 
-        uint8_t playRateCounter_ = 0;
-
         // Counts from 0 to track length to determine when the track has looped
         uint8_t loopCounter_ = 0;
 
@@ -430,28 +427,14 @@ namespace FormOmni
         uint16_t loopCount_ = 0;
 
         uint8_t lastTriggeredStepIndex_ = 0;
-        bool lastTriggeredStepState_ = false;
         bool didNotesPlayThisStep_ = false;
-
-        // Each slot points to a step index
-        // uint8_t shufflePattern[64];
 
         std::vector<uint8_t> shuffleVec;
         std::vector<uint8_t> tempShuffleVec;
 
-        // static inline bool
-		// shuffleSortFunc(uint8_t a1, uint8_t a2)
-		// {
-		// 	return (rand() % 100) > 50;
-		// }
-
-        Micros nextStepTime_;
-
         Micros stepMicros_;
 
         uint16_t ticksPerStep_ = 24;
-
-        uint16_t omniTick_ = 0;
 
         int16_t ticksTilNextTrigger_ = 0;
 
@@ -470,8 +453,6 @@ namespace FormOmni
         uint8_t ratchetHitIndex_ = 0;  // next sub-hit to fire (1 .. divs-1)
         int16_t ratchetTotalTicks_ = 0;
         int16_t ratchetElapsed_ = 0;
-
-        float stepLengthMult_ = 1.0f; // 1 is a 16th note, 0.5 a 32nd note length, recalculated with the rate
 
         std::vector<OmniTriggeredNoteTracker> triggeredNotes_;
 
