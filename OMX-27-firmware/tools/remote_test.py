@@ -27,6 +27,8 @@ class Omx:
         self.inp.open_port(self._find(self.inp, port_match))
         self.inp.ignore_types(sysex=False, timing=True, active_sense=True)
         self.last_frame = None
+        self.frame_pending = False    # a DRAW_UPD is in flight, waiting for ack
+        self._frame_sent_at = 0.0
         # callbacks, norns-style
         self.on_key = lambda index, ev: None       # OMX_Key(index, ev) ev: 0=Up 1=Down 2=Hold 3=QuickClick
         self.on_encoder_turn = lambda d: None      # OMX_Enc(d)  d = +/-n
@@ -70,7 +72,7 @@ class Omx:
                 continue
             self.sysex(CMD_DRAW, c, *self._enc7(chunk))
             self.pump()          # keep input flowing while a frame streams out
-            time.sleep(0.002)    # pace so the device FIFO keeps up
+            time.sleep(0.004)    # pace so the device FIFO keeps up
         self.sysex(CMD_DRAW_UPD)
         self.last_frame = buf
 
@@ -110,7 +112,10 @@ class Omx:
                 continue
             cmd = msg[4]
             if cmd == CMD_STATUS:
-                self.on_status(msg[5])
+                if msg[5] == 0x04:
+                    self.frame_pending = False  # frame ack
+                else:
+                    self.on_status(msg[5])
             elif cmd == CMD_INPUT:
                 sub, a = msg[5], msg[6:-1]
                 if sub == 0x00 and len(a) >= 2:
@@ -190,32 +195,42 @@ def main():
     time.sleep(0.3)
 
     phase = 0.0
-    last_led = 0.0
+    last_rainbow = 0.0
     last_draw = 0.0
+    led_sent = [None] * 27  # last colors on the device, for diffing
     try:
         while True:
             omx.pump()
             now = time.time()
 
-            # LEDs ~30fps: rainbow base, white for held keys, cursor on bottom row
-            if now - last_led > 0.033:
-                last_led = now
-                phase += 0.005
-                colors = []
-                for i in range(27):
-                    if i in state["held"]:
-                        colors.append((127, 127, 127))
-                    else:
-                        r, g, b = hsv_to_rgb7((phase + i / 27.0) % 1.0)
-                        colors.append((r // 6, g // 6, b // 6))  # dim rainbow
-                cur = 11 + state["cursor"]
-                if cur not in state["held"]:
-                    colors[cur] = (127, 127, 0)
-                omx.led_all(colors)
+            # LEDs: desired state computed every pass, but only DIFFS are sent —
+            # a cursor move is 2 tiny messages (instant), while the background
+            # rainbow only advances at 10fps.
+            if now - last_rainbow > 0.1:
+                last_rainbow = now
+                phase += 0.015
+            colors = []
+            for i in range(27):
+                if i in state["held"]:
+                    colors.append((127, 127, 127))
+                else:
+                    r, g, b = hsv_to_rgb7((phase + i / 27.0) % 1.0)
+                    colors.append((r // 6, g // 6, b // 6))  # dim rainbow
+            cur = 11 + state["cursor"]
+            if cur not in state["held"]:
+                colors[cur] = (127, 127, 0)
+            changed = [i for i in range(27) if colors[i] != led_sent[i]]
+            if changed:
+                if len(changed) > 8:
+                    omx.led_all(colors)  # bulk update (rainbow tick)
+                else:
+                    for i in changed:
+                        omx.led(i, *colors[i])
                 omx.led_show()
+                led_sent = list(colors)
 
             # screen: at most 15fps, and only when something changed
-            if state["dirty"] and now - last_draw > 1.0 / 15:
+            if state["dirty"] and now - last_draw > 1.0 / 8:
                 last_draw = now
                 state["dirty"] = False
                 img = Image.new("1", (128, 32), 0)

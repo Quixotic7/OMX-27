@@ -1089,6 +1089,13 @@ void loop()
 
 	} // END KEYS WHILE
 
+	// Drain USB MIDI before the display/LED push: display.display() stalls the
+	// loop for several ms and the TinyUSB RX FIFO is only 128 bytes — going into
+	// the stall full makes the host back up (REMOTE mode is the heavy case).
+	while (MM::usbMidiRead())
+	{
+	}
+
 	if (!sysSettings.screenSaverMode)
 	{
 		omxLeds.updateBlinkStates();

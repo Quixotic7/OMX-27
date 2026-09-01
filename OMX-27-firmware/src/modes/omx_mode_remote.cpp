@@ -14,6 +14,7 @@ extern OmxScreensaver omxScreensaver;
 // STATUS payloads (NL_CMD_STATUS): 0x01 = activity (NornsLink), plus:
 static const uint8_t kStatusRemoteOn = 0x02;
 static const uint8_t kStatusRemoteOff = 0x03;
+static const uint8_t kStatusFrameAck = 0x04; // DRAW_UPD processed; host may send the next frame
 
 // Decode the mirror-format 7-bit stream (hi-bits byte then up to 7 data bytes)
 // into dst[dstLen]. Returns true if the source held enough data.
@@ -205,6 +206,7 @@ void OmxModeRemote::onSysex(const uint8_t *d, unsigned len)
 		frameReceived_ = true;
 		omxDisp.setDirty();
 		omxScreensaver.resetCounter(); // host is driving; keep the panel awake
+		sendStatus(kStatusFrameAck);   // flow control: one frame in flight
 		break;
 	default:
 		break;
