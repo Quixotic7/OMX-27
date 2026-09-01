@@ -16,7 +16,7 @@ HDR = [0x7D, 0x00, 0x00]
 CMD_INPUT, CMD_STATUS = 0x51, 0x52
 CMD_LED, CMD_LED_BATCH, CMD_LED_SHOW = 0x59, 0x5A, 0x5B
 CMD_DRAW, CMD_DRAW_UPD = 0x5C, 0x5D
-MODE_REMOTE = 10  # OMXMode enum index
+MODE_REMOTE = 9  # OMXMode enum index (after OM, before CONFIG)
 
 # ---------------------------------------------------------------- transport
 class Omx:
@@ -28,7 +28,7 @@ class Omx:
         self.inp.ignore_types(sysex=False, timing=True, active_sense=True)
         self.last_frame = None
         # callbacks, norns-style
-        self.on_key = lambda index, z: None        # OMX_Key(index, z)
+        self.on_key = lambda index, ev: None       # OMX_Key(index, ev) ev: 0=Up 1=Down 2=Hold 3=QuickClick
         self.on_encoder_turn = lambda d: None      # OMX_Enc(d)  d = +/-n
         self.on_encoder_button = lambda z: None    # OMX_Encoder(z)
         self.on_pot = lambda index, v, hires: None # OMX_Pot(index, v)
@@ -69,7 +69,8 @@ class Omx:
             if not force and self.last_frame is not None and self.last_frame[c * 32:(c + 1) * 32] == chunk:
                 continue
             self.sysex(CMD_DRAW, c, *self._enc7(chunk))
-            time.sleep(0.002)  # pace so the device FIFO keeps up
+            self.pump()          # keep input flowing while a frame streams out
+            time.sleep(0.002)    # pace so the device FIFO keeps up
         self.sysex(CMD_DRAW_UPD)
         self.last_frame = buf
 
@@ -148,9 +149,14 @@ def main():
         "dirty": True,
     }
 
-    def on_key(index, z):
-        state["held"].add(index) if z else state["held"].discard(index)
-        state["last_event"] = f"OMX_Key({index}, {z})"
+    KEY_EVENTS = {0: "Up", 1: "Down", 2: "Hold", 3: "QuickClick"}
+
+    def on_key(index, ev):
+        if ev == 1:
+            state["held"].add(index)
+        elif ev == 0:
+            state["held"].discard(index)
+        state["last_event"] = f"OMX_Key({index}, {KEY_EVENTS.get(ev, ev)})"
         state["dirty"] = True
         print(state["last_event"])
 
@@ -185,6 +191,7 @@ def main():
 
     phase = 0.0
     last_led = 0.0
+    last_draw = 0.0
     try:
         while True:
             omx.pump()
@@ -207,8 +214,9 @@ def main():
                 omx.led_all(colors)
                 omx.led_show()
 
-            # screen only when something changed
-            if state["dirty"]:
+            # screen: at most 15fps, and only when something changed
+            if state["dirty"] and now - last_draw > 1.0 / 15:
+                last_draw = now
                 state["dirty"] = False
                 img = Image.new("1", (128, 32), 0)
                 dr = ImageDraw.Draw(img)

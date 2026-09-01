@@ -55,7 +55,20 @@ void OmxModeRemote::onKeyUpdate(OMXKeypadEvent e)
 	if (key == 0)
 		auxHeld_ = e.down();
 
-	sendInput2(0x00, key, e.down() ? 1 : 0);
+	// Event types: 0=KeyUp 1=KeyDown 2=KeyHold 3=KeyQuickClick.
+	// The keypad re-delivers a held key as a down+held event; report that as
+	// Hold instead of a duplicate Down. A quick release sends Up, then
+	// QuickClick, so state tracking and gestures both work without host logic.
+	if (e.down())
+	{
+		sendInput2(0x00, key, e.held() ? 2 : 1);
+	}
+	else
+	{
+		sendInput2(0x00, key, 0);
+		if (e.quickClicked())
+			sendInput2(0x00, key, 3);
+	}
 }
 
 void OmxModeRemote::onEncoderChanged(Encoder::Update enc)
@@ -68,9 +81,19 @@ void OmxModeRemote::onEncoderChanged(Encoder::Update enc)
 
 void OmxModeRemote::onEncoderButtonDown()
 {
+	// AUX + encoder HOLD exits to mode select. Button::Down arrives first; the
+	// main loop re-calls this on Button::DownLong (shouldBlockEncEdit is true),
+	// which is when the chord has been held long enough.
+	if (auxChordArmed_)
+	{
+		if (auxHeld_)
+			enterModeSelect();
+		auxChordArmed_ = false;
+		return;
+	}
 	if (auxHeld_)
 	{
-		enterModeSelect();
+		auxChordArmed_ = true; // swallow the button; wait for the long call
 		return;
 	}
 	if (!ebtnDown_)
@@ -83,12 +106,12 @@ void OmxModeRemote::onEncoderButtonDown()
 
 void OmxModeRemote::onEncoderButtonDownLong()
 {
-	// Down was already reported; the host does its own hold timing.
 	onEncoderButtonDown();
 }
 
 void OmxModeRemote::onEncoderButtonUp()
 {
+	auxChordArmed_ = false; // released before the hold threshold: no-op chord
 	if (ebtnDown_)
 	{
 		ebtnDown_ = false;

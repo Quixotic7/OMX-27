@@ -1048,7 +1048,10 @@ void loop()
 			midiSettings.keyState[thisKey] = true;
 		}
 
-		if (e.down() && thisKey == 0 && encoderConfig.enc_edit)
+		// !e.held(): only a fresh AUX press saves — an AUX that was already held
+		// when enc_edit opened (e.g. the REMOTE-mode AUX+enc exit chord) gets
+		// re-delivered as a held event and must not trigger the blocking save.
+		if (e.down() && !e.held() && thisKey == 0 && encoderConfig.enc_edit)
 		{
 			// temp - save whenever the 0 key is pressed in encoder edit mode
 			omxDisp.displayMessage("Saving...");

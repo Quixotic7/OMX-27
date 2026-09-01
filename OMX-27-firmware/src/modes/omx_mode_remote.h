@@ -50,7 +50,8 @@ private:
 	static const uint16_t kFrameBytes = kChunkCount * kChunkBytes; // 512
 
 	bool auxHeld_ = false;
-	bool ebtnDown_ = false; // dedupe Down vs DownLong
+	bool ebtnDown_ = false;      // dedupe Down vs DownLong
+	bool auxChordArmed_ = false; // AUX was held when the encoder button went down
 
 	// Pot jitter suppression
 	int16_t lastPotV_[5] = {-1, -1, -1, -1, -1};

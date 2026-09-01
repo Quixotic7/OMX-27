@@ -53,17 +53,20 @@ Example:
 
 ## REMOTE mode (`0x51`, `0x52`, `0x59`-`0x5D`)
 
-In REMOTE mode (mode "RMT") the OMX is a dumb terminal for a host script
-(monome norns lua, or `tools/remote_test.py`): the host owns all 27 LEDs and
-the 128x32 screen, and every input event is reported over SysEx. Normal MIDI
-output (notes/CCs) is suppressed. Hold AUX + click the encoder to open mode
-select (the encoder long-press is left free for scripts).
+In REMOTE mode (mode "RMT", after OM / before CFG) the OMX is a dumb terminal
+for a host script (monome norns lua, or `tools/remote_test.py`): the host owns
+all 27 LEDs and the 128x32 screen, and every input event is reported over
+SysEx. Normal MIDI output (notes/CCs) is suppressed. Hold AUX + HOLD the
+encoder button to open mode select (both the encoder click and long-press are
+left free for scripts; AUX + a short click is swallowed).
 
 All messages: `F0 7D 00 00 <cmd> <payload...> F7`.
 
 ### OMX -> host
 
-- `0x51 0x00 [key z]` — key event, key 0-26 (0 = AUX), z 1/0
+- `0x51 0x00 [key ev]` — key event, key 0-26 (0 = AUX).
+  ev: 0=KeyUp, 1=KeyDown, 2=KeyHold (fires while held past the hold
+  threshold), 3=KeyQuickClick (a quick press; sent right after its KeyUp)
 - `0x51 0x01 [dir amt]` — encoder turn, dir 0=CCW 2=CW, amt >= 1
 - `0x51 0x02 [z]` — encoder button, z 1/0 (host does its own hold timing)
 - `0x51 0x03 [pot v7 hi lo]` — pot 0-4, v7 0-127, plus 14-bit hi-res `(hi<<7)|lo`
