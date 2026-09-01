@@ -8,7 +8,7 @@
 > - **Phase 2** (single-engine collapse): done late but fully — `FormMachineInterface`
 >   is deleted, the shell owns concrete `FormMachineOmni` tracks, zero downcasts.
 > - **Phases 3-11**: done (views, Step editor, Mix, copy/paste, Notes/MI/Transpose,
->   menus, Patterns, live recording) — see `FORM_REDESIGN.md`'s as-built header for
+>   menus, Patterns, live recording) — see `FORM_DESIGN.md` §6 (decision log) for
 >   the deliberate deviations (AUX-only view switching, pages on F1, config split
 >   between the Seq and Mix menus, etc.).
 > - **Phase 12** (persistence + polish): the pattern bank persists to **LittleFS on
@@ -19,7 +19,8 @@
 >   and `setTest` scaffolding are gone (~1,500 lines removed).
 > - `FORM_V2_REVIEW.md` is the authoritative record of the work, bugs, and QA.
 
-A build order that turns [`FORM_REDESIGN.md`](FORM_REDESIGN.md) into firmware. Read that
+A build order that turned the v2 redesign into firmware (spec now merged into
+[`FORM_DESIGN.md`](FORM_DESIGN.md)). Read that
 first for the *what*; this is the *how* and the *in what order*. Grounded in the current
 tree (`src/form/…`, `src/hardware/storage.h`, `src/modes/…`).
 
@@ -209,5 +210,5 @@ Build **all three targets** every phase (`pico`, `teensy31`, `teensy40`); flash 
 
 ---
 
-_Companion: [`FORM_REDESIGN.md`](FORM_REDESIGN.md) (design) · `FORM_DESIGN.md` (as-built) ·
+_Companion: [`FORM_DESIGN.md`](FORM_DESIGN.md) (design, as-built) ·
 `form_*.json` (LED frames). Everything on branch `ChordGhostFix`._

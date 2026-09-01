@@ -3,7 +3,7 @@
 _A full review of the FORM v2 work on `q7-2026-3-Form-Seq-Upgrade` (133 commits since
 forking `q7-2026-3`), performed 2026-08-28: the UI as shipped, the code structure, and
 the cleanup needed before this branch can PR. Line numbers reference the tree at commit
-`d3496b7`. Companion docs: [`FORM_REDESIGN.md`](FORM_REDESIGN.md) (the design),
+`d3496b7`. Companion docs: [`FORM_DESIGN.md`](FORM_DESIGN.md) (the design, as-built; absorbed FORM_REDESIGN.md 2026-09-01),
 [`FORM_IMPLEMENTATION.md`](FORM_IMPLEMENTATION.md) (the original phased plan),
 [`../../src/form/DESIGN_NOTES.md`](../../src/form/DESIGN_NOTES.md) (the pre-v2 audit)._
 
@@ -31,7 +31,7 @@ Both are addressed by the plan in §5.
 
 ### 1.1 The machine abstraction is a fiction (collapse it)
 
-Per `FORM_REDESIGN.md` §0 the switchable-machine concept is dropped, but the
+Per the redesign (now `FORM_DESIGN.md` §2) the switchable-machine concept is dropped, but the
 implementation still routes everything through `FormMachineInterface`:
 
 - **38 `static_cast<FormOmni::FormMachineOmni *>` call sites** in `omx_mode_form.cpp`;
@@ -199,7 +199,7 @@ Redundancy: scale is reachable in 3 menus in 2 looks; SEQMIX duplicates Mix, TPA
 duplicates the Transpose view, STEPNOTES/STEPPOTS duplicate what the shell param grids
 + Notes view cover; rate/BPM/mute/track-select each live in 3–4 places.
 
-Spec drift worth reconciling in `FORM_REDESIGN.md`: the §4.0 encoder view selector is
+Spec drift worth reconciling in the design doc (reconciled — see `FORM_DESIGN.md` §6): the §4.0 encoder view selector is
 documented as built but was since **removed** (d3496b7/5dc52c9); hold-a-mode-key →
 default palette was never built; pages moved off AUX 6–9 to F1+3–6 (Step only); Mix
 hold-track 25/26 copy/paste not built; `kStepModeColors` in code doesn't match the §9
@@ -437,7 +437,7 @@ Ordered; each step is independently landable.
      itself was intact and both round-trips passed, so this was almost certainly a
      stray injected tap on a style key during blind QA driving, not a firmware bug.
      Watch for it recurring in normal use.)
-10. **Spec sync**. ✅ **Done 2026-08-31**: `FORM_REDESIGN.md` gained an as-built
+10. **Spec sync**. ✅ **Done 2026-08-31**: the redesign doc gained an as-built
     status header + a refreshed "Still open" list; `FORM_IMPLEMENTATION.md` marked
     complete phase-by-phase; `src/form/DESIGN_NOTES.md` marked historical;
     `FORM_USER_GUIDE.md` reviewed/corrected same day.

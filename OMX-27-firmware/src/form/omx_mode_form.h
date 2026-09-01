@@ -11,8 +11,8 @@
 #include "form_patterns.h"
 
 // FORM v2: an 8-track polyphonic step sequencer (single engine — the OMNI machine),
-// six views on the AUX layer, patterns, live recording. Design: design/form/FORM_REDESIGN.md
-// (v1 machine-type spec history lives in git and design/form/FORM_DESIGN.md).
+// six views on the AUX layer, patterns, live recording. Design: design/form/FORM_DESIGN.md
+// (the v1 machine-type spec and the v2 redesign proposal live in git history).
 
 // v2 shell: the six top-level views, switched on the AUX layer (AUX + keys 13-18).
 // The four editor views map to the OMNI machine's UI modes; Patterns + MI are rendered

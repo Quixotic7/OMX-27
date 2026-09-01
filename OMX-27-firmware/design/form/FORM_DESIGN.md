@@ -1,240 +1,151 @@
-# FORM — Full Design Reference
+# FORM — Design Reference (as built)
 
-A complete, as-built reference for the **FORM** mode: the hardware model, every
-on-screen state, and the exact **LED / key / pot / encoder / screen** behaviour of
-the container and each machine. This is the companion to the LED-designer files in
-this folder and to the design review in
-[`../../src/form/DESIGN_NOTES.md`](../../src/form/DESIGN_NOTES.md).
+The single design document for the **FORM** sequencer as it ships on
+`q7-2026-3-Form-Seq-Upgrade`. It merges the old v1 reference and the v2 redesign
+proposal (`FORM_REDESIGN.md`, now retired) into one as-built record.
 
-- **This file** = *how FORM works today* (mechanics + exact colors).
-- **`DESIGN_NOTES.md`** = *the vision, what's done, what's missing, roadmap*.
-- **`form_*.json`** = LED-designer frames you can load into `index.html` (the OMX-27 LED
-  designer). See [`FORMAT.md`](FORMAT.md) for the JSON schema.
-
-> Line references point at the current tree (`src/form/…`). Colors are the named
-> constants in [`src/consts/colors.h`](../../src/consts/colors.h).
+**Companions:**
+- [`FORM_MENU_MAP.md`](FORM_MENU_MAP.md) — **authoritative** parameter / page / group /
+  view map (every param has an ID; edit it to respec menus).
+- [`FORM_USER_GUIDE.md`](FORM_USER_GUIDE.md) — the user-facing manual.
+- [`FORM_V2_REVIEW.md`](FORM_V2_REVIEW.md) — the review + path-to-PR running record
+  (what was built, fixed, and hardware-verified, in order).
+- [`FORM_IMPLEMENTATION.md`](FORM_IMPLEMENTATION.md), `../../src/form/DESIGN_NOTES.md`
+  — historical (phased plan / v1 audit), kept for archaeology.
+- `form_*.json` — LED-designer frames (see [`FORMAT.md`](FORMAT.md); load into the
+  OMX-27 LED designer). §8 lists them.
 
 ---
 
 ## 1. Hardware model
 
-27 keys, each with an RGB LED (`strip.setPixelColor(index, 0xRRGGBB)`):
+27 keys, each with an RGB LED:
 
-| Index | Role | Notes |
-|---|---|---|
-| **0** | AUX / function key | stands alone, top-left |
-| **1–10** | black keys (top row) | also **F1 (1)**, **F2 (2)**, and **machine slots 0–7 on 3–10** |
-| **11–26** | white keys (bottom row) | the **16-step** sequencer row (key 11 = step 0) |
+| Index | Role |
+|---|---|
+| **0** | AUX / function key (top-left) |
+| **1–10** | top row — **F1 (1)**, **F2 (2)**, **F3 (1+2)**; keys 3–10 = tracks / pages / palettes per view |
+| **11–26** | bottom row — the **16-step** row (key 11 = step 0); view switcher under AUX |
 
-Plus **5 pots (K1–K5)**, a **push encoder** (turn + press), and a **128×32 OLED**.
-
----
+Plus **5 pots (K1–K5)**, a **push encoder**, and a **128×32 OLED**.
 
 ## 2. Concept
 
-FORM is a **host for pluggable sequencer "machines"** (Elektron-ish, OMX-shaped).
-Up to **8 machines** live in the 8 top-row slots (keys 3–10); each slot runs one
-machine of a selectable **type**. Two types are built today:
+FORM is a **single-engine, 8-track polyphonic step sequencer**. The v1 pluggable
+"machine type" architecture (NULL/OMNI/EUCL picker, `FormMachineInterface`) is fully
+deleted — every track is the same engine (`FormOmni::FormMachineOmni`), and the shell
+(`OmxModeForm`) owns `machines_[8]` directly plus the pattern bank.
 
-| Type | Enum | Slot color | Status |
-|---|---|---|---|
-| **NONE** (empty) | `FORMMACH_NULL` (0) | off | — |
-| **OMNI** | `FORMMACH_OMNI` (1) | `ORANGE #ff8000` | full polyphonic step sequencer |
-| **EUCL** | `FORMMACH_EUCLID` (2) | `CYAN #00ffff` | Euclidean rhythm generator |
+- **Track**: up to **64 steps** as **4 fixed pages × 16** (no zoom), per-page length
+  1–16 (**polymeter**), enable/disable pages (loop range).
+- **Step**: ≤6 notes (chords), velocity, gate length, nudge (±60 micro-timing),
+  ratchet ×1–4, probability, conditional trigs (Fill/!Fill, A:B), step functions
+  (jumps/resets), accumulating transpose, per-step MidiFX group, per-step mute, and
+  **5 CC P-Lock slots** resolved through the track's pot bank.
+- **Pattern**: a snapshot of the whole sequencer (all 8 tracks + settings). 16 slots
+  on V3/T4, 2 on Teensy 3.1. Switch styles: Finish Loop / Next Bar / Instant /
+  Chained (auto-advancing chain). No song mode — chaining covers it (user call).
+- **Knobs**: the 5 pots are the selected track's **pot bank** (5 CC numbers from the
+  global `pots[bank][slot]` map, editable in-mode via Pot Config). Hold a step + turn
+  a knob = **CC P-Lock** on that step.
 
-Planned but not built: **Grids**, **Tambola** (see `DESIGN_NOTES.md §4a`).
+## 3. Interaction model
 
-The container paints the **top row** (machine picker) and delegates the **bottom 16
-keys**, the **pots**, the **display**, and note output to the selected machine.
+- **Encoder, one rule everywhere**: SELECT (turn = move cursor) ⇄ EDIT (turn = change
+  value); click toggles, holding AUX is temporary EDIT. Selected = boxed, editing =
+  inverted.
+- **Views**: seven, on **AUX + keys 13–19** — MIX · STEP(SEQ) · TRANSPOSE · NOTES ·
+  PATTERNS · MI · TOOLS. Switching is **live** (the view renders while AUX is still
+  held); every view **remembers its page position**. The AUX layer is **modal**
+  (unassigned keys are inert while it's held) and identical in every view:
+  transport (F1 play/pause · F2 reset · F1+F2 stop), rec arm/mode (3/4), octave
+  (11/12), views (13–19), MidiFX shortcuts (5–10, 20–26).
+- **F-keys inside a view**: F1 = page gesture (select / double-tap solo / hold-two =
+  loop range), F2 = track select (+ hold-track controls), F3 = rate & page length.
+  Patterns overrides these for slot copy / cut-paste / clear (with hold labels).
+- **Groups**: a view's pages are organized in named groups; crossing into a group pops
+  its name once (see the menu map §3/§4).
+- **Cell glyphs** (TENFAT `_t_all`): ☐/☑ (`Ć`/`Ĉ`) = boolean off/on · ↗-box (`@`) =
+  opens a submenu · ✕ (`µ`) = destructive action.
+- **P-Lock convention**: *editing is locking* — setting a step's value on a param page
+  (palette, encoder, or knob) sets that param's lock bit; the encoder click clears it.
+  Unlocked steps follow the **track defaults**, edited on the same pages with nothing
+  held.
+- **Live recording**: AUX+3 arm, AUX+4 overdub/replace. Notes record musically —
+  nearest step plus **nudge** (how far off-grid) and **length** (hold time); armed +
+  stopped, the first note starts the transport. QUANTIZE is a live morph submenu
+  (scrub, hear it, apply). Count-in was dropped (MIDI-only device).
 
----
+## 4. The seven views
 
-## 3. Global color legend
+Menu contents per view are specified in the **menu map** — this is the one-line role
+of each:
 
-| Meaning | Color | Hex |
-|---|---|---|
-| Selected machine slot | WHITE | `#ffffff` |
-| Selected **and** muted slot | SALMON | `#ff8080` |
-| Muted machine slot | RED | `#ff0000` |
-| Machine fired this step (flash) | INDIGO | `#4b0082` |
-| OMNI type / EUCL hit / (SEQ playhead=white) | ORANGE | `#ff8000` |
-| EUCL type | CYAN | `#00ffff` |
-| OMNI step has notes | LTBLUE | `#a8a8ff` |
-| OMNI step empty (in length) | DKBLUE | `#00004d` |
-| Playhead on a firing step | WHITE | `#ffffff` |
-| Playhead on a silent step | RED | `#ff0000` |
-| Jump-to-step target | LTYELLOW | `#ffff80` |
-| EUCL rest | LOWWHITE | `#202020` |
-| Note-editor: scale root | (periwinkle) | `#a2a2ff` |
-| Note-editor: in-scale | (dim blue) | `#000090` |
-| Note-editor: stored chord note | LTYELLOW / ORANGE | `#ffff80` / `#ff8000` |
-| Note-editor: REST key (key 11) | DKRED | `#800000` |
-| Cursor (blink) | HALFWHITE | `#808080` |
-| Transpose 0 / up / down | TZERO / THIGH / TLOW | `#0000ff` / `#8080ff` / `#000020` |
-| Step-function palette | RED,ORANGE,DKYELLOW,GREEN,MAGENTA,ROSE,DIMORANGE | `#ff0000 #ff8000 #4c4d00 #00ff00 #ff00ff #ff0080 #9f8060` |
-
----
-
-## 4. Container states
-
-### 4.1 `FORMMODE_BASE` — the main FORM screen
-`OmxModeForm::updateLEDs()` `omx_mode_form.cpp:881-942`.
-
-- All LEDs cleared, then:
-  - If **AUX held** (`midiSettings.midiAUX`) → the AUX macro layer paints everything
-    and the container returns (`:885-890`).
-  - If the selected machine **consumes LEDs** → it paints the whole grid (`:894-898`).
-    (OMNI consumes LEDs while a step is held or in an editor; EUCL never does.)
-  - Otherwise the **top row (keys 3–10)** shows the 8 machine slots and the machine
-    paints keys **11–26**.
-- **Top-row slot colors** (`:906-922`): type color (off/ORANGE/CYAN) · muted = RED ·
-  selected = WHITE (SALMON if muted) · fired-this-step = INDIGO (overrides).
-- Keys **0/1/2** are unlit in base (AUX/F1/F2 are gestures, not indicators).
-
-**Keys** (`onKeyUpdate` `:586-824`):
-
-| Key | Action |
+| View | Role |
 |---|---|
-| 0 (AUX) | hold → AUX shortcut layer (octave on 11/12, play on AUX+1, reset on AUX+2) |
-| 1 (F1) | hold → **copy machine**; tap a slot to copy, tap again to paste |
-| 2 (F2) | hold → **cut/paste machine** |
-| 1+2 (F3) | machine-defined shortcut overlay (top row hidden) |
-| 3–10 | **tap** = select slot · **double-tap** = mute · **hold** = open type picker |
-| 11–26 | forwarded to the selected machine |
+| **MIX** | Track-level: overview, LEVELS velocity mixer, TRACK grid, full track/global param menu. Hold-track = mute/solo/play-mode/colour + the armed **track copy** (key 18: COPY PAT / COPY ALL → tap destination). |
+| **SEQ** | Step programming: TRIG overview with 8 hold-modes + palettes, two step-param grids, the **CC page** (live values + held-step P-Locks + bank digit), STEPNOTES editor, then SCALE + ACTIONS. |
+| **TRANSPOSE** | The 16-slot transpose lane (per-step values; ACUM makes steps walk it) + the TPOS/TYPE/TPAT params page past its end. |
+| **NOTES** | Focused chord editor (6 note slots, names/numbers), with scale, step-param, and ACTIONS pages on the same walk. |
+| **PATTERNS** | 16 snapshot slots + switch style + progress bar; F1/F2/F3 = copy / cut-paste / clear slots. |
+| **MI** | Live-play keyboard (records when armed) + scale/MIDI/macros/actions/CC pages. |
+| **TOOLS** | 11 destructive one-shots: ROTATE · MIRROR · SHUFFLE · HUMANIZE · QUANTIZE · TRANSPOSE · SCALE SNAP · VEL RANDOM · CHANCE RND · EUCLID · GRIDS — shared SCOPE (page/track), live generator previews, Seq-style hold editing. |
 
-→ Designer frames: `form_container.json` states 1 (stopped) & 2 (playing).
+## 5. Data & persistence
 
-### 4.2 `FORMMODE_SELECTMACHINE` — machine-type picker
-Reached by **holding** a slot key. Keys **11 / 12 / 13** = **NONE / OMNI / EUCL**
-(colors off / ORANGE / CYAN); the slot's current type blinks (NONE blinks `DKRED`).
-Press to set the type; release the held slot key to exit. `:804-822`, `:925-937`.
+- `FormPattern` = `FormOmni::OmniSeq[8]`; `sizeof` ≈ **10,576 B** → 16 patterns
+  ≈ 165 KB (V3/T4 in RAM; Teensy 3.1 capped at 2).
+- Save format **v8** (`kOmniSaveVersion`). `Track::startstep` and `OmniSeq::potMode`
+  are RESERVED (never read; kept only for layout).
+- **V3 (RP2040)**: the full bank persists to **LittleFS** (`/formbank.dat`, validated
+  header) alongside the FRAM active-pattern save, with boot-glitch hardening (header
+  re-read + bank restore before any defaults are written). **Teensy**: active pattern
+  only (FRAM/EEPROM) — the documented platform limitation.
+- Raw blits (bank load / pattern switch) run through `sanitizeSeq()`.
 
-→ Designer frame: `form_container.json` state 3.
+## 6. Design decision log
 
-### 4.3 Shortcut overlays
-`updateShortcutMode()` `:229-268`, driven purely by which of keys 0/1/2 are held:
-`AUX`, `F1` (Copy), `F2` (Cut/Paste), `F3` (1+2). Feedback is mostly on the **screen**
-(“Copy”/“Cut”/“Paste”/`getF3shortcutName()`); F3 also blanks the top row.
+The 30 resolved decisions from the redesign are preserved verbatim in the git history
+of `FORM_REDESIGN.md` (removed 2026-09-01, this branch). The ones that still shape the
+code, compressed — plus the deliberate deviations:
 
----
+- Single engine; AUX+13–19 views; per-page length via F3; Math = conditional-trig
+  palette (Fill/!Fill + A:B); one select/edit encoder model; MIDI channels default to
+  track index+1; default velocity 100; step-length palette 0.5…64; microtiming is
+  encoder-only; MidiFX = Off + 5 groups, per-step and lockable; OLED renders every
+  loop (SysEx mirror); SysEx remote control (`NL_CMD_INPUT` 0x51 + screen mirror)
+  for host-driven QA.
+- **Deviations from the original spec (deliberate):** view switching is AUX-only (the
+  page-1 encoder view selector was removed); pages live on F1+3–6, not the AUX layer;
+  "hold a mode key = set default" was superseded by param-page palettes; config is
+  split by role (Seq = steps, Mix = track/global, Transpose = its own params) instead
+  of one track menu, and the 2-octave mini-keyboard page was dropped (MI *is* the
+  keyboard); the CC meter is transient/track-page-only — the CC page is the real knob
+  surface; as-built colors differ from the proposal tables.
+- **Beyond the spec:** TOOLS view; LEVELS + CC pages; LittleFS bank persistence;
+  group popups + glyphs; armed track copy; Patterns slot ops; MFX slot bypass
+  (AUX+21 / hold-slot F1/F2, bypassed slots red); the interface collapse, dead-code
+  removal (~1,500 lines), and the QA rig.
+- **Won't build (user calls):** song mode; P-Lock magenta step tint; persistent
+  4-line page indicator; count-in.
+- **Still open (opportunistic):** the single copy/paste-buffer ideal; re-measure RAM
+  before growing the data model.
 
-## 5. OMNI machine
+## 7. Extension notes
 
-`FormMachineOmni`, `form_machine_omni.cpp`. A single-track (`tracks[0]`) polyphonic
-step sequencer, up to **64 steps** viewed 16 at a time through **page** (K1) × **zoom**
-(K2, 1/2/4 bar). **UI mode** is chosen with **K5** or **AUX + keys 13–18**:
-CONFIG · MIX · LENGTH · TRANSPOSE · STEP · NOTEEDIT.
+There is no machine plug-in interface anymore. New functionality lands either as a
+**page** in an existing view (add a row to the menu map, one case per event switch in
+`omx_mode_form.cpp` — the six dispatch sites are each a single `switch (formView_)`),
+as a **tool** (add to the `kTool*` tables + `toolAction`), or as an **engine feature**
+on `FormMachineOmni` (mind `kOmniSaveVersion` for anything persisted).
 
-> STEP and NOTEEDIT are identical. CONFIG and MIX are treated identically. LENGTH is a
-> near-noop (track length is actually set via the F3 shortcut in CONFIG/MIX). See
-> `DESIGN_NOTES.md §4c`.
-
-### 5.1 SEQ view (CONFIG / MIX) — `updateLEDs()` `:1727-1783`
-Step row: **LTBLUE** = step has notes, **DKBLUE** = in-length but empty, **off** =
-muted or beyond track length. Playhead (while playing) = **WHITE** on a firing step,
-**RED** on a silent one. `key16toStep()` applies page/zoom, so the 16 keys are a slice
-of the 64-step track.
-
-Keys: tap step = mute/unmute · double-tap = enter note editor · **hold** a step = arm
-the **function overlay** (top keys 1–7 = `-- RSET << >> <> J? ???`, the current
-function blinks; a second step key sets **jump-to-step N**, shown LTYELLOW).
-
-→ `form_omni.json` states 1 (SEQ) & 2 (step-held).
-
-### 5.2 Note editor (STEP / NOTEEDIT) — `omni_note_editor.cpp:41-146`
-A piano/scale keyboard: roots `#a2a2ff`, in-scale `#000090`, out-of-scale off (red
-tint when the step is muted). Notes on the selected step light **LTYELLOW** (in view)
-or **ORANGE** (folded out of view). **Key 11 = REST** (DKRED) clears the step. Cursor
-pulses **HALFWHITE**. Hold multiple keys to enter a chord (≤ 6 notes). Encoder moves
-the selected step 0–63.
-
-→ `form_omni.json` state 3.
-
-### 5.3 Transpose pattern editor (TRANSPOSE) — `omni_transpose_pattern.cpp:100-380`
-Per-step transpose lane within the pattern length: **TZERO** `#0000ff` (0), **THIGH**
-`#8080ff` (up), **TLOW** `#000020` (down), off beyond length. Shortcuts: key 3 =
-random-arm, key 9 = randomize, key 10 = clear, keys 1/2 = F1/F2 copy/cut. Holding a
-step turns keys 1–10 into a value bar.
-
-→ `form_omni.json` state 4.
-
-### 5.4 What OMNI can do (model)
-Per-step: ≤6 notes, velocity, gate length, micro-nudge (±60), probability, conditional
-trigs (A:B, PRE/NEI/1ST + negation), step functions, transpose accumulation, per-step
-MIDI-FX, per-step mute. Per-track: length, swing (+division), triplets, play direction
-& modes (pong/rand/shuffle…), rate, gate, transpose modes. Global: MIDI channel,
-send-MIDI, send-CV, BPM, scale.
-
-> **Advertised but currently inert:** per-step CC/pot locks, monophonic mode,
-> `startstep`, FILL trigs (see `DESIGN_NOTES.md §4b`). Some were wired in Tier-1 — check
-> the notes file for current status.
-
----
-
-## 6. EUCL machine
-
-`FormMachineEuclid`, `form_machine_euclid.cpp`. Wraps the existing
-`EuclideanSequencer`: distribute **Hits** over **Steps** with **Rotation**, play one
-note per hit. **Does not** consume the grid — the container keeps the top-row picker and
-EUCL paints only keys 11–26.
-
-- **Step row** `updateLEDs()`: **ORANGE** = hit, **LOWWHITE** = rest, **WHITE** =
-  playhead, **off** = beyond the step count.
-- **Keys 11–26**: tap a step to **rotate** the pattern to start there.
-- **Params** (encoder; hold AUX or press to edit): **RHYTHM** page = Steps / Hits /
-  Rotation / Note · **NOTE** page = Vel / Chan / Length / Swing.
-- Per-machine versioned save/load.
-
-→ `form_euclid.json` states 1 (E(5,16)) & 2 (E(4,12), short length).
-
----
-
-## 7. Pots & encoder (summary)
-
-| Control | OMNI | EUCL |
-|---|---|---|
-| **K1** | Page (1–4) | — |
-| **K2** | Zoom (1/2/4 bar) | — |
-| **K3** | cross-page apply | — |
-| **K4** | rate / play-mode | — |
-| **K5** | UI mode | — |
-| **Encoder turn** | select parameter | select parameter |
-| **Encoder + AUX (or press-toggle)** | edit value | edit value |
-
-> Encoder select vs edit is gated by the shared `omxFormGlobal.encoderSelect` flag
-> (turn = select by default; hold AUX or click to edit). See the Aug-2026 fix for the
-> static-init bug that had OMNI's param pages empty.
-
----
-
-## 8. Machine interface (extension point)
-
-Adding a machine = implement `FormMachineInterface`
-([`machines/form_machine_interface.h`](../../src/form/machines/form_machine_interface.h))
-and register it:
-
-1. add a value to `enum FormMachineType`;
-2. add a name to `kMachineNames[]` and a color to `kMachineColors[]`
-   (`omx_mode_form.cpp:28-30`);
-3. add a `case` in `changeMachineAtIndex()` that `new`s it.
-
-Key contract methods: `getType()`, `getClone()`,
-`doesConsume{Keys,LEDs,Display,Pots}()` (return **false** unless you need the whole
-grid — return false to keep the container's top-row navigation working),
-`updateLEDs()`, `onKeyUpdate()`, `onDisplayUpdate()`, `onEncoderChanged*()`,
-`loopUpdate()`, `saveToDisk()/loadFromDisk()`, and the `seqNoteOn/seqNoteOff`
-callbacks. EUCL (`form_machine_euclid.*`) is the smallest complete example.
-
----
-
-## 9. Files in this folder
+## 8. Files in this folder
 
 | File | What it is |
 |---|---|
-| `FORMAT.md` | the LED-designer JSON schema |
+| `FORMAT.md` | LED-designer JSON schema |
 | `FORM_DESIGN.md` | this reference |
-| `form_container.json` | container frames: base (stopped / playing), type picker |
-| `form_omni.json` | OMNI frames: SEQ, step-held, note editor, transpose |
-| `form_euclid.json` | EUCL frames: E(5,16), E(4,12) short length |
-
-Load any `form_*.json` into the LED designer (`index.html`) to view/edit the frames.
+| `FORM_MENU_MAP.md` / `FORM_USER_GUIDE.md` / `FORM_V2_REVIEW.md` / `FORM_IMPLEMENTATION.md` | see header |
+| `form_redesign.json` | v2 overview frames: Mix · Step (modes/hold/defaults) · Step+F3 · Notes · Transpose · AUX |
+| `form_mix.json` / `form_step.json` / `form_notes.json` / `form_aux.json` / `form_patterns.json` / `form_mi.json` | per-view v2 frames |
+| `form_container.json` / `form_omni.json` / `form_euclid.json` | **v1 historical** frames (machine picker / zoom era — superseded) |
