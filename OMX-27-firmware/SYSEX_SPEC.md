@@ -50,3 +50,35 @@ Example:
 ## `0x0B` - "c0nfig edit (trs options)"
 
 ~~"Here is a new set of TRS options for you". Payload (other than mfg header, top/tail, etc) of 32 bytes to go straight into appropriate locations of EEPROM, according to the memory map described in `README.md`.~~ not implemented
+
+## REMOTE mode (`0x51`, `0x52`, `0x59`-`0x5D`)
+
+In REMOTE mode (mode "RMT") the OMX is a dumb terminal for a host script
+(monome norns lua, or `tools/remote_test.py`): the host owns all 27 LEDs and
+the 128x32 screen, and every input event is reported over SysEx. Normal MIDI
+output (notes/CCs) is suppressed. Hold AUX + click the encoder to open mode
+select (the encoder long-press is left free for scripts).
+
+All messages: `F0 7D 00 00 <cmd> <payload...> F7`.
+
+### OMX -> host
+
+- `0x51 0x00 [key z]` — key event, key 0-26 (0 = AUX), z 1/0
+- `0x51 0x01 [dir amt]` — encoder turn, dir 0=CCW 2=CW, amt >= 1
+- `0x51 0x02 [z]` — encoder button, z 1/0 (host does its own hold timing)
+- `0x51 0x03 [pot v7 hi lo]` — pot 0-4, v7 0-127, plus 14-bit hi-res `(hi<<7)|lo`
+  (jitter-suppressed: sent on a 7-bit change or a hi-res move >= 32)
+- `0x52 0x02` — REMOTE mode entered; `0x52 0x03` — REMOTE mode left
+
+### host -> OMX (ignored unless REMOTE mode is active)
+
+- `0x59 [idx r g b]` — stage LED idx, channels 0-127 (scaled x2 to 8-bit)
+- `0x5A [start count r g b ...]` — stage a run of LEDs
+- `0x5B` — latch staged LEDs (like grid:refresh())
+- `0x5C [chunk enc37]` — stage screen chunk 0-15: 32 bytes of the SSD1306
+  buffer, 7-bit encoded exactly like the mirror's `0x50` FRAME chunks
+- `0x5D` — latch the staged frame to the screen (also keeps the screensaver away)
+
+The screen buffer is SSD1306 page layout (`byte = buf[x + (y/8)*128]`, bit
+`y%8`), stored 180deg rotated vs the physical panel — same orientation the
+mirror streams out, see `tools/remote_test.py::Omx._pack()`.

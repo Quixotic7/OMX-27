@@ -45,6 +45,7 @@
 #include "src/modes/omx_mode_chords.h"
 #include "src/form/omx_mode_form.h"
 #include "src/modes/omx_mode_config.h"
+#include "src/modes/omx_mode_remote.h"
 #include "src/modes/omx_screensaver.h"
 #include "src/utils/music_scales.h"
 #include "src/hardware/omx_leds.h"
@@ -79,6 +80,7 @@ OmxModeEuclidean omxModeEuclid;
 OmxModeChords omxModeChords;
 OmxModeForm omxModeForm;
 OmxModeConfig omxModeConfig;
+OmxModeRemote omxModeRemote;
 
 OmxModeInterface *activeOmxMode;
 
@@ -92,6 +94,13 @@ OmxModeInterface *activeOmxMode;
 //   0x03 POT:  [6]=pot(0-4) [7]=value(0-127)
 extern OmxScreensaver omxScreensaver; // defined below
 void saveToStorage(void);   // defined below
+
+// Host->OMX REMOTE-mode data (LEDs / screen). Ignored unless REMOTE is active.
+void omxRemoteSysex(const uint8_t *d, unsigned n)
+{
+	if (sysSettings.omxMode == MODE_REMOTE)
+		omxModeRemote.onSysex(d, n);
+}
 
 void omxInjectInput(const uint8_t *d, unsigned n)
 {
@@ -332,6 +341,9 @@ void changeOmxMode(OMXMode newOmxmode)
 		break;
 	case MODE_CONFIG:
 		activeOmxMode = &omxModeConfig;
+		break;
+	case MODE_REMOTE:
+		activeOmxMode = &omxModeRemote;
 		break;
 	default:
 		omxModeMidi.setMidiMode();
