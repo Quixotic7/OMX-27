@@ -16,6 +16,8 @@ public:
 	void resetCounter();
 
 	void updateScreenSaverState();
+	void start();		 // force the screensaver on (CONFIG test action); only userActivity() ends it
+	void userActivity(); // real user input: ends a forced screensaver + resets the idle counter
 	bool shouldShowScreenSaver();
 
 	void onEncoderChanged(Encoder::Update enc) override;
@@ -45,4 +47,5 @@ private:
 	int sleepTick = 80;
 
 	bool screenSaverActive;
+	bool forced_ = false; // screensaver started via start(); immune to counter resets
 };

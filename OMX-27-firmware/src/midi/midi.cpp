@@ -114,7 +114,7 @@ namespace MM
 		{
 			cvNoteUtil.cvNoteOn(note);
 		}
-		omxScreensaver.resetCounter();
+		omxScreensaver.userActivity();
 		activeOmxMode->inMidiNoteOn(channel, note, velocity);
 	}
 

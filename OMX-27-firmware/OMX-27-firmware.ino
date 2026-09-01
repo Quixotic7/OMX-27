@@ -99,7 +99,7 @@ void omxInjectInput(const uint8_t *d, unsigned n)
 		return;
 	// Injected input counts as user activity: without this the screensaver blanks the
 	// OLED mid-QA while injected events keep silently mutating mode state underneath.
-	omxScreensaver.resetCounter();
+	omxScreensaver.userActivity();
 	sysSettings.screenSaverMode = false;
 	switch (d[5])
 	{
@@ -471,6 +471,11 @@ void saveHeader()
 	storage->write(EEPROM_HEADER_ADDRESS + 48, (uint8_t)screensaverEnabled);
 	storage->write(EEPROM_HEADER_ADDRESS + 49, (uint8_t)(screensaverTimeoutSec & 0xFF));
 	storage->write(EEPROM_HEADER_ADDRESS + 50, (uint8_t)((screensaverTimeoutSec >> 8) & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 51, (uint8_t)(colorConfig.midiBg_Hue & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 52, (uint8_t)((colorConfig.midiBg_Hue >> 8) & 0xFF));
+	uint16_t ssHue = (uint16_t)min(colorConfig.screensaverColor, (uint32_t)65024);
+	storage->write(EEPROM_HEADER_ADDRESS + 53, (uint8_t)(ssHue & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 54, (uint8_t)((ssHue >> 8) & 0xFF));
 }
 
 // returns true if the header contained initialized data
@@ -568,6 +573,13 @@ bool loadHeader(void)
 	screensaverEnabled = (bool)storage->read(EEPROM_HEADER_ADDRESS + 48);
 	uint16_t ssTimeout = (uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 49) | ((uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 50) << 8);
 	screensaverTimeoutSec = constrain((int)ssTimeout, 5, 3600);
+	// LED hues (0xFFFF = written by an older save that lacked these bytes -> keep defaults)
+	uint16_t keyBgHue = (uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 51) | ((uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 52) << 8);
+	if (keyBgHue != 0xFFFF)
+		colorConfig.midiBg_Hue = keyBgHue;
+	uint16_t ssHue = (uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 53) | ((uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 54) << 8);
+	if (ssHue != 0xFFFF)
+		colorConfig.screensaverColor = ssHue;
 
 	// digitalWrite(BLUELED, HIGH);
 	return true;
@@ -907,7 +919,7 @@ void loop()
 	if (u.active())
 	{
 		auto amt = u.accel(1);		   // where 5 is the acceleration factor if you want it, 0 if you don't)
-		omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+		omxScreensaver.userActivity(); // screenSaverCounter = 0;
 		nornsLink.markActivity();
 									   //    	Serial.println(u.dir() < 0 ? "ccw " : "cw ");
 									   //    	Serial.println(amt);
@@ -947,7 +959,7 @@ void loop()
 	{
 	// SHORT PRESS
 	case Button::Down:				   // Serial.println("Button down");
-		omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+		omxScreensaver.userActivity(); // screenSaverCounter = 0;
 		nornsLink.markActivity();
 
 		// what page are we on?
@@ -1019,7 +1031,7 @@ void loop()
 
 		if (e.down())
 		{
-			omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+			omxScreensaver.userActivity(); // screenSaverCounter = 0;
 			nornsLink.markActivity();
 			midiSettings.keyState[thisKey] = true;
 		}

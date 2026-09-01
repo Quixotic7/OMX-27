@@ -28,12 +28,18 @@ void OmxScreensaver::onPotChanged(int potIndex, int prevValue, int newValue, int
 
 void OmxScreensaver::updateScreenSaverState()
 {
+	if (forced_)
+	{
+		// Started via start() (CONFIG test action). Stays on regardless of
+		// counter resets (e.g. running clocks) until real user input ends it.
+		screenSaverActive = true;
+		return;
+	}
 	if (screensaverEnabled && screenSaverCounter > (unsigned long)screensaverTimeoutSec * 1000UL)
 	{
 		if (!screenSaverActive)
         {
             screenSaverActive = true;
-            setScreenSaverColor();
         }
     }
 	else if (screenSaverCounter < 10)
@@ -72,6 +78,16 @@ void OmxScreensaver::onDisplayUpdate()
 }
 void OmxScreensaver::resetCounter()
 {
+	screenSaverCounter = 0;
+}
+void OmxScreensaver::start()
+{
+	forced_ = true;
+	screenSaverCounter = (unsigned long)screensaverTimeoutSec * 1000UL + 100;
+}
+void OmxScreensaver::userActivity()
+{
+	forced_ = false;
 	screenSaverCounter = 0;
 }
 void OmxScreensaver::updateLEDs()

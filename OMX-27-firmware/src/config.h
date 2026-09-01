@@ -293,7 +293,7 @@ extern SequencerConfig seqConfig;
 
 struct ColorConfig
 {
-	uint32_t screensaverColor = 0xFF0000;
+	uint32_t screensaverColor = 0; // HSV hue 0-65535 (>65528 = LEDs off); 0 = red
 	uint32_t stepColor = 0x000000;
 	uint32_t muteColor = 0x000000;
 	uint16_t midiBg_Hue = 0;

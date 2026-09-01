@@ -260,7 +260,7 @@ void OmxUtil::midiNoteOn(MusicScales *scale, int notenum, int velocity, int chan
 		return; // no note sent, don't light LEDs
 	}
 
-	strip.setPixelColor(notenum, MIDINOTEON); //  Set pixel's color (in RAM)
+	strip.setPixelColor(notenum, omxLeds.applyMidiKeyTint(MIDINOTEON)); //  Set pixel's color (in RAM)
 	omxLeds.setDirty();
 	omxDisp.setDirty();
 }
@@ -421,7 +421,7 @@ MidiNoteGroup OmxUtil::midiNoteOn2(MusicScales *scale, int notenum, int velocity
 		return noteGroup; // no note sent, don't light LEDs
 	}
 
-	strip.setPixelColor(notenum, MIDINOTEON); //  Set pixel's color (in RAM)
+	strip.setPixelColor(notenum, omxLeds.applyMidiKeyTint(MIDINOTEON)); //  Set pixel's color (in RAM)
 	omxLeds.setDirty();
 	omxDisp.setDirty();
 
