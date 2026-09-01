@@ -243,7 +243,10 @@ void OmxModeConfig::onEncoderChangedEditParam(Encoder::Update enc)
 			if (prevPat != scaleConfig.scalePattern)
 			{
 				if (musicScale_ != nullptr)
+				{
+					omxDisp.displayMessage(musicScale_->getScaleName(scaleConfig.scalePattern));
 					musicScale_->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
+				}
 				if (scaleConfig.scalePattern < 0)
 				{
 					if (prevPat >= 0)
@@ -477,7 +480,7 @@ void OmxModeConfig::onDisplayUpdate()
 		break;
 	case CFGPAGE_SCALE:
 		omxDisp.setLegend(0, "ROOT", musicScale_ != nullptr ? musicScale_->getNoteName(scaleConfig.scaleRoot) : "-");
-		omxDisp.setLegend(1, "SCALE", (scaleConfig.scalePattern < 0 || musicScale_ == nullptr) ? "Off" : musicScale_->getScaleName(scaleConfig.scalePattern));
+		omxDisp.setLegend(1, "SCALE", scaleConfig.scalePattern < 0, scaleConfig.scalePattern);
 		omxDisp.setLegend(2, "LOCK", scaleConfig.lockScale ? "ON" : "OFF");
 		omxDisp.setLegend(3, "GRP", scaleConfig.group16 ? "ON" : "OFF");
 		break;

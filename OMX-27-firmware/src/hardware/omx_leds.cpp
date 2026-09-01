@@ -170,6 +170,10 @@ void OmxLeds::drawMidiLeds(MusicScales *scale)
 						strip.setPixelColor(q, strip.ColorHSV(colorConfig.midiBg_Hue, colorConfig.midiBg_Sat, colorConfig.midiBg_Brightness));
 					}
 				}
+				else
+				{
+					strip.setPixelColor(q, MIDINOTEON);
+				}
 			}
 		}
 	}
