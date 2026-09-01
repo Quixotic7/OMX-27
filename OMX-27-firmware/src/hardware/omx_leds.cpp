@@ -106,6 +106,8 @@ uint32_t OmxLeds::applyMidiKeyTint(int keyColor)
 		return strip.gamma32(strip.ColorHSV(colorConfig.midiBg_Hue, 160, 255));
 	if (keyColor == INSCALECOLOR) // dim saturated in-scale, like the default 0x000090
 		return strip.gamma32(strip.ColorHSV(colorConfig.midiBg_Hue, 255, 144));
+	if (keyColor == MIDINOTEON) // pressed key: bright near-white, on theme
+		return strip.gamma32(strip.ColorHSV(colorConfig.midiBg_Hue, 96, 255));
 	return keyColor;
 }
 
@@ -161,7 +163,7 @@ void OmxLeds::drawMidiLeds(MusicScales *scale)
 				}
 				else
 				{
-					strip.setPixelColor(q, MIDINOTEON);
+					strip.setPixelColor(q, applyMidiKeyTint(MIDINOTEON));
 				}
 			}
 		}
