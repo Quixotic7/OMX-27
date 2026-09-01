@@ -4224,10 +4224,11 @@ void OmxModeForm::updateLEDs()
 	{
 		selMachine->updateLEDs(); // low row = the selected track's step content
 		bool soloLayer = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2);
+		const uint32_t kMuteSoloOn = 0xCCCCFF; // bright pale blue — reads clearly on the top row
 		for (uint8_t i = 0; i < 8; i++)
 		{
 			bool on = (i < kNumMachines) && (soloLayer ? machines_[i]->getSolo() : !machines_[i]->getMute());
-			strip.setPixelColor(3 + i, on ? (uint32_t)BLUE : (uint32_t)LEDOFF);
+			strip.setPixelColor(3 + i, on ? kMuteSoloOn : (uint32_t)LEDOFF);
 		}
 		return;
 	}
