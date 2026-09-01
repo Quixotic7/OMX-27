@@ -2947,25 +2947,25 @@ void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 		return;
 	}
 
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1) // Mute
-	{
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1) // Mute — toggles the tapped track only,
+	{                                                  // without changing the selected track.
 		if (!e.held())
 		{
-			selectMachine(track);
-			auto m = getSelectedMachine();
+			auto m = machines_[track];
 			m->setMute(!m->getMute());
 			omxDisp.setDirty(); // the MUTE page's track squares show the state; no popup
+			omxLeds.setDirty();
 		}
 		return;
 	}
-	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2) // Solo
-	{
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2) // Solo — same: no track switch, no popup
+	{                                                  // (the on-screen SOLO split shows state).
 		if (!e.held())
 		{
-			selectMachine(track);
-			auto m = getSelectedMachine();
+			auto m = machines_[track];
 			m->setSolo(!m->getSolo());
-			omxDisp.displayMessage(m->getSolo() ? "SOLO" : "UNSOLO");
+			omxDisp.setDirty();
+			omxLeds.setDirty();
 		}
 		return;
 	}
@@ -4216,6 +4216,22 @@ void OmxModeForm::updateLEDs()
 	bool blinkState = omxLeds.getBlinkState();
 	// bool slowBlink = omxLeds.getSlowBlinkState();
 
+	// Mix F1 (Mute) / F2 (Solo) layers: the top row shows mute/solo state in bright blue rather
+	// than track colours, matching the on-screen MUTE/SOLO view. F1: blue = unmuted, off = muted.
+	// F2: blue = soloed, off = not soloed. No selected highlight — the state is what matters here.
+	if (formView_ == FORMVIEW_MIX &&
+		(omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F2))
+	{
+		selMachine->updateLEDs(); // low row = the selected track's step content
+		bool soloLayer = (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2);
+		for (uint8_t i = 0; i < 8; i++)
+		{
+			bool on = (i < kNumMachines) && (soloLayer ? machines_[i]->getSolo() : !machines_[i]->getMute());
+			strip.setPixelColor(3 + i, on ? (uint32_t)BLUE : (uint32_t)LEDOFF);
+		}
+		return;
+	}
+
 	// F3 machine might use these keys for shortcuts
 	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_F3)
 	{
@@ -4227,11 +4243,12 @@ void OmxModeForm::updateLEDs()
 			uint32_t trackColor = (formView_ == FORMVIEW_MIX)
 									   ? trackHueColor(i)
 									   : (uint32_t)ORANGE;
-			uint32_t color = isMuted ? (uint32_t)RED : trackColor;
+			// Mix: a muted (unselected) track goes dark so mute state is obvious; other views dim-red.
+			uint32_t color = isMuted ? (formView_ == FORMVIEW_MIX ? (uint32_t)LEDOFF : (uint32_t)RED) : trackColor;
 
 			if(i == selectedMachine_)
 			{
-				color = isMuted ? SALMON : WHITE;
+				color = isMuted ? SALMON : WHITE; // keep the selected track visible even when muted
 			}
 
 			if(machines_[i]->didTriggerThisStep())
