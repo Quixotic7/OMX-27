@@ -219,6 +219,8 @@ bool OmxModeForm::patternHasContent(uint8_t index)
 }
 
 // ---- v2 shell: view router ----
+static uint8_t toolStepMode(uint8_t tool); // defined with the Tools view below
+
 void OmxModeForm::setFormView(uint8_t view, bool silent)
 {
 	if (view >= FORMVIEW_COUNT)
@@ -232,15 +234,10 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	notesModalHeld_ = false;
 	notesHoldUIShown_ = false;
 	notesF1Used_ = notesF2Used_ = false;
-	notesCursor_ = 0; // open on the keyboard page, select mode
-	miCursor_ = 0; // MI opens on the keyboard, select mode
-	mixCursor_ = 0; // Mix opens on the track overview
-	toolIndex_ = 0; // Tools opens on the first tool (ROTATE)
-	toolCell_ = 0;
+	// Every view REMEMBERS its menu position across switches (notesCursor_ / miCursor_ /
+	// mixCursor_ / stepMenuPage_ / toolIndex_ / transParamsPage_ are deliberately not reset).
 	if (view == FORMVIEW_TOOLS)
-		stepEditMode_ = STEPMODE_NOTE; // ROTATE's hold-step mode (VEL/CHANCE tools switch it)
-	transParamsPage_ = false; // Transpose opens on the pattern editor
-	transSel_ = 0;
+		stepEditMode_ = toolStepMode(toolIndex_); // the remembered tool's hold-step mode
 	mixHeldStepMask_ = 0;
 	mixHeldStepKey_ = -1;
 	// Clear the F1+page gesture state too: a page key still physically held across a view
@@ -4182,7 +4179,8 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			}
 			else if (thisKey >= 13 && thisKey <= 19) // v2 shell: preview view (commit on AUX release)
 			{
-				pendingView_ = thisKey - 13;
+				// Switch live (the view renders immediately, while AUX is still held).
+				setFormView(thisKey - 13, true);
 				omxDisp.displayMessage(kViewNames[pendingView_]);
 				omxLeds.setDirty();
 				keyConsumed = true;

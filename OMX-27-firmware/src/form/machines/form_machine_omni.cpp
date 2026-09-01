@@ -1865,8 +1865,9 @@ namespace FormOmni
             omxLeds.setDirty();
             omxDisp.setDirty();
 
-		    omxFormGlobal.shortcutMode = FORMSHORTCUT_NONE;
-			midiSettings.midiAUX = false;
+            // v1 used to clear shortcutMode/midiAUX here — with live AUX view switching
+            // that killed the held AUX layer mid-switch. The shell owns AUX now:
+            // updateShortcutMode recomputes from the real key state every frame.
             setDirtyOnceMessageClears_ = true;
         }
     }

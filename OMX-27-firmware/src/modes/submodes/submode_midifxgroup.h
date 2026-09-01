@@ -46,6 +46,7 @@ public:
 	void enablePassthrough();
 	void selectPrevMFXSlot(bool silent = false);
 	void selectNextMFXSlot(bool silent = false);
+	void toggleSelectedFXBypass(); // AUX+21: pass-through toggle for the selected slot
 
 
 	uint8_t getArpOctaveRange();

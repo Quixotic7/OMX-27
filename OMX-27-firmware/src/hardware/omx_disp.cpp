@@ -1760,11 +1760,11 @@ void OmxDisp::dispParamBar(int8_t potValue, int8_t targetValue, int8_t minValue,
 
 void OmxDisp::dispSlots(const char *slotNames[], uint8_t slotCount, uint8_t selected, uint8_t animPos, bool encSelActive, bool showLabels, const char *labels[], uint8_t labelCount)
 {
-	// if (isMessageActive())
-	// {
-	//     renderMessage();
-	//     return;
-	// }
+	if (isMessageActive()) // popups (e.g. the hold-slot FX on/off confirm) render over the slot page
+	{
+		renderMessage();
+		return;
+	}
 
 	display.fillRect(0, 0, 128, 32, BLACK);
 
