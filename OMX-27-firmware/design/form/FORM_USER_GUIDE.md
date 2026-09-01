@@ -174,6 +174,12 @@ This is the classic step programmer for the selected track.
 MIX is track-level control. **Hold a track key (3–10)** to reveal its low-row controls:
 **Mute · Solo · play direction/mode · colour**. Turn a held track + knob 5 to set its colour.
 
+**Track copy:** hold the source track's key, press **key 18** to arm — once = **"COPY
+PAT TO?"** (pattern only: steps, pages, play mode, step defaults), twice = **"COPY ALL
+TO?"** (settings and colour too). While still holding the track, **tap a destination
+track key** to copy ("TRK n > m"); tap more keys to copy to several tracks. Release the
+held track to cancel. Destructive on the destination, like the tools.
+
 Turn the encoder (SELECT) to move through the MIX pages:
 
 - **Overview** (EDIT-turn selects the track).

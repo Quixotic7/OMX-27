@@ -279,8 +279,7 @@ namespace FormOmni
         Step steps[64];
 
         uint8_t len : 6; // Max 63, Length of track, 0 - 63, maps to 1 - 64
-        // This is rot in current Seq, just going to make this a utility function that moves everything
-        uint8_t startstep : 6;     // Max 63,  Step that track starts on, -1 for random?
+        uint8_t startstep : 6;     // RESERVED — never read; kept for save-format layout (v8)
         int8_t swing : 8;         // Amount of swing, + or minus 100. Shifts off notes forward back, similar to nudge, but applies to whole track. 
         uint8_t swingDivision : 1; // 16th or 8th note swing
         uint8_t tripletMode : 1;   // automatically nudges every 2nd and 3rd step to become a triplet
@@ -434,7 +433,7 @@ namespace FormOmni
         uint8_t applyTransPat : 1; // bool
         uint8_t gate : 7;          // 0-100 mapping to 0-200% for quick legato
         uint8_t potBank : 3;
-        uint8_t potMode : 1;
+        uint8_t potMode : 1;       // RESERVED — never read; kept for save-format layout (v8)
 
         TransposePattern transposePattern;
 

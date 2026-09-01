@@ -19,6 +19,9 @@
 
 
 
+// Full view names (popup on switch); the short tags live in the overview header.
+static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI", "TOOLS"};
+
 OmxModeForm::OmxModeForm()
 {
 
@@ -53,14 +56,42 @@ OmxModeForm::OmxModeForm()
 	selectMachine(0);
 
 	ledUpdateTime_ = 0;
+}
 
-	// machines_[0]->setContext(this);
-	// machines_[0]->setNoteOnFptr(&OmxModeForm::seqNoteOnForwarder);
-	// machines_[0]->setNoteOffFptr(&OmxModeForm::seqNoteOffForwarder);
-
-
-
-	// char foo[sizeof(OmxModeForm)]
+// F1 + page keys (3-6), shared by the Seq and Notes views: single-click selects the edit
+// page; double-click solos that page; hold one page + press another enables just that
+// range (loop). Muted pages don't play.
+void OmxModeForm::handlePageGesture(FormOmni::FormMachineOmni *omni, uint8_t p, OMXKeypadEvent e)
+{
+	if (e.down() && !e.held())
+	{
+		if (heldPageMask_ != 0 && !(heldPageMask_ & (1 << p)))
+		{
+			// loop-range: enable pages between the first held page and p.
+			uint8_t a = 0;
+			for (uint8_t i = 0; i < 4; i++) if (heldPageMask_ & (1 << i)) { a = i; break; }
+			uint8_t lo = a < p ? a : p, hi = a < p ? p : a, mask = 0;
+			for (uint8_t i = lo; i <= hi; i++) mask |= (1 << i);
+			omni->setEnabledPages(mask);
+			omni->setActivePage(a);
+			pageGestureDone_ = true;
+		}
+		heldPageMask_ |= (1 << p);
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+	}
+	else if (!e.down() && (heldPageMask_ & (1 << p)))
+	{
+		if (!pageGestureDone_)
+		{
+			if (e.clicks() == 2) { omni->setEnabledPages(1 << p); omni->setActivePage(p); } // solo
+			else if (e.quickClicked()) omni->setActivePage(p); // select edit page
+		}
+		heldPageMask_ &= ~(1 << p);
+		if (heldPageMask_ == 0)
+			pageGestureDone_ = false;
+		omxLeds.setDirty();
+	}
 }
 
 OmxModeForm::~OmxModeForm()
@@ -238,7 +269,6 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 
 	if (!silent)
 	{
-		static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI", "TOOLS"};
 		omxDisp.displayMessage(kViewNames[view]);
 	}
 	omxLeds.setDirty();
@@ -1129,35 +1159,7 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 	{
 		if (k >= 3 && k <= 6)
 		{
-			uint8_t p = k - 3;
-			if (e.down() && !e.held())
-			{
-				if (heldPageMask_ != 0 && !(heldPageMask_ & (1 << p)))
-				{
-					uint8_t a = 0;
-					for (uint8_t i = 0; i < 4; i++) if (heldPageMask_ & (1 << i)) { a = i; break; }
-					uint8_t lo = a < p ? a : p, hi = a < p ? p : a, mask = 0;
-					for (uint8_t i = lo; i <= hi; i++) mask |= (1 << i);
-					omni->setEnabledPages(mask);
-					omni->setActivePage(a);
-					pageGestureDone_ = true;
-				}
-				heldPageMask_ |= (1 << p);
-				omxDisp.setDirty();
-				omxLeds.setDirty();
-			}
-			else if (!e.down() && (heldPageMask_ & (1 << p)))
-			{
-				if (!pageGestureDone_)
-				{
-					if (e.clicks() == 2) { omni->setEnabledPages(1 << p); omni->setActivePage(p); }
-					else if (e.quickClicked()) omni->setActivePage(p);
-				}
-				heldPageMask_ &= ~(1 << p);
-				if (heldPageMask_ == 0)
-					pageGestureDone_ = false;
-				omxLeds.setDirty();
-			}
+			handlePageGesture(omni, k - 3, e);
 			notesF1Used_ = true;
 			notesHoldUIShown_ = true;
 			return;
@@ -2080,48 +2082,10 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		return;
 	}
 
-	// F1 + page keys (3-6): single-click selects the edit page; double-click solos that page;
-	// hold one page + press another enables just that range (loop). Muted pages don't play.
+	// F1 + page keys (3-6): the shared page gesture (select / solo / loop-range).
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && (thisKey >= 3 && thisKey <= 6))
 	{
-		uint8_t p = thisKey - 3;
-		if (e.down() && !e.held())
-		{
-			if (heldPageMask_ != 0 && !(heldPageMask_ & (1 << p)))
-			{
-				// loop-range: enable pages between the first held page and p.
-				uint8_t a = 0;
-				for (uint8_t i = 0; i < 4; i++) if (heldPageMask_ & (1 << i)) { a = i; break; }
-				uint8_t lo = a < p ? a : p, hi = a < p ? p : a;
-				uint8_t mask = 0;
-				for (uint8_t i = lo; i <= hi; i++) mask |= (1 << i);
-				omni->setEnabledPages(mask);
-				omni->setActivePage(a);
-				pageGestureDone_ = true;
-			}
-			heldPageMask_ |= (1 << p);
-			omxDisp.setDirty();
-			omxLeds.setDirty();
-		}
-		else if (!e.down() && (heldPageMask_ & (1 << p)))
-		{
-			if (!pageGestureDone_)
-			{
-				if (e.clicks() == 2)
-				{
-					omni->setEnabledPages(1 << p); // double-click = solo
-					omni->setActivePage(p);
-				}
-				else if (e.quickClicked())
-				{
-					omni->setActivePage(p); // single-click = select edit page
-				}
-			}
-			heldPageMask_ &= ~(1 << p);
-			if (heldPageMask_ == 0)
-				pageGestureDone_ = false;
-			omxLeds.setDirty();
-		}
+		handlePageGesture(omni, thisKey - 3, e);
 		return;
 	}
 	// Release of an F2-held track key clears the hold (even if F2 was let go first).
@@ -2897,9 +2861,11 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 	}
 	else if (formView_ == FORMVIEW_MIX && heldTrackKey_ >= 0)
 	{
-		// Mix hold-track: same box + label as Seq's F2 + Track.
+		// Mix hold-track: same box + label as Seq's F2 + Track. Key 18 arms the track
+		// copy; while armed the label asks for the destination.
 		modOverlay = 2;
-		overlayLabel = "MUTE / PLAY MODE";
+		overlayLabel = (mixCopyMode_ == 1) ? "COPY PAT TO?"
+		               : (mixCopyMode_ == 2) ? "COPY ALL TO?" : "MUTE / PLAY MODE";
 	}
 	else if (!getEncoderSelect() && heldStepMask_ == 0)
 	{
@@ -2930,6 +2896,48 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 							 viewLabel, viewLabelSel, !keyboardMode, ccMeterActive(), kNumMachines);
 }
 
+// Mix view key routing (from the shell's key dispatch): true = a Mix handler took the
+// event; false = fall through to the machine (F3 + track keys = rate / page length).
+bool OmxModeForm::onKeyUpdateMixRoute(OMXKeypadEvent e)
+{
+	uint8_t thisKey = e.key();
+
+	// Track keys 3-10 (except under F3, which the machine handles as rate).
+	if (thisKey >= 3 && thisKey < 11 && omxFormGlobal.shortcutMode != FORMSHORTCUT_F3)
+	{
+		onKeyUpdateMix(e);
+		return true;
+	}
+	// A low-row step that began an audition must finish it on release even if a track key
+	// went down meanwhile — otherwise the release routes to onKeyUpdateMixHold below and
+	// leaves the mask bit set with the audition note still ringing.
+	if (!e.down() && thisKey >= 11 && thisKey < 27 && (mixHeldStepMask_ & (1 << (thisKey - 11))))
+	{
+		onKeyUpdateMixStep(e);
+		return true;
+	}
+	// Low-row per-track controls while a track is held.
+	if (heldTrackKey_ >= 0 && thisKey >= 11 && thisKey < 27)
+	{
+		onKeyUpdateMixHold(e);
+		return true;
+	}
+	// Low-row taps (no track held, no modifier) audition the selected track's steps.
+	if (heldTrackKey_ < 0 && thisKey >= 11 && thisKey < 27 && omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE)
+	{
+		onKeyUpdateMixStep(e);
+		return true;
+	}
+	// F1/F2 + low row = step mute/solo on the selected track (not the machine's copy/cut).
+	if (thisKey >= 11 && thisKey < 27 &&
+		(omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F2))
+	{
+		onKeyUpdateMixStepMute(e);
+		return true;
+	}
+	return false;
+}
+
 // Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
 // single tap = select. (Low-row keys still go to the machine's step editor.)
 void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
@@ -2939,11 +2947,14 @@ void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 		return;
 	uint8_t track = thisKey - 3;
 
-	// Release: clear the held-track marker (used by K5 hue).
+	// Release: clear the held-track marker (used by K5 hue) — and cancel an armed copy.
 	if (!e.down())
 	{
 		if (heldTrackKey_ == track)
+		{
 			heldTrackKey_ = -1;
+			mixCopyMode_ = 0;
+		}
 		return;
 	}
 
@@ -2965,6 +2976,28 @@ void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 			auto m = machines_[track];
 			m->setSolo(!m->getSolo());
 			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		return;
+	}
+
+	// Armed track copy (hold track + key 18): tap a destination track key to copy onto it.
+	// Mode 1 = pattern only (steps/pages/play mode/step defaults), mode 2 = everything
+	// (settings + colour too). Destructive on the destination, like the tools. Stays armed
+	// for more destinations; releasing the held track cancels. Unarmed taps are ignored —
+	// a second track key while holding one must never copy by accident.
+	if (heldTrackKey_ >= 0 && heldTrackKey_ != (int8_t)track)
+	{
+		if (!e.held() && mixCopyMode_ != 0)
+		{
+			if (mixCopyMode_ == 2)
+			{
+				machines_[track]->setSeq(machines_[heldTrackKey_]->getSeq());
+				trackHue_[track] = trackHue_[heldTrackKey_];
+			}
+			else
+				machines_[track]->setTrackData(machines_[heldTrackKey_]->getSeq().tracks[0]);
+			omxDisp.displayMessage("TRK " + String(heldTrackKey_ + 1) + " > " + String(track + 1));
 			omxLeds.setDirty();
 		}
 		return;
@@ -3014,6 +3047,11 @@ void OmxModeForm::onKeyUpdateMixHold(OMXKeypadEvent e)
 	{
 		setTrackPlayModeIdx(trk, k - 13);
 		omxDisp.displayMessage(kPlayModeNames[k - 13]);
+	}
+	else if (k == 18 && formView_ == FORMVIEW_MIX) // arm track copy: 1st press = pattern only, 2nd = everything (toggles)
+	{
+		mixCopyMode_ = (mixCopyMode_ == 1) ? 2 : 1;
+		omxDisp.displayMessage(mixCopyMode_ == 1 ? "COPY PAT TO?" : "COPY ALL TO?");
 	}
 	else if (k >= 19 && k <= 26) // last 8 keys = track colour presets (8 evenly-spaced hues)
 	{
@@ -3084,6 +3122,10 @@ void OmxModeForm::updateMixHoldLEDs()
 	for (uint8_t m = 0; m < 5; m++)
 		strip.setPixelColor(13 + m, (m == pm) ? (uint32_t)CYAN : (uint32_t)DKCYAN);
 
+	// 18: track copy arm — dim until pressed; PAT mode magenta, ALL mode white.
+	strip.setPixelColor(18, mixCopyMode_ == 0 ? (uint32_t)DKMAGENTA
+	                        : mixCopyMode_ == 1 ? (uint32_t)MAGENTA : (uint32_t)WHITE);
+
 	// 19-26: 8 track-colour presets, each in its own hue (current one brightest).
 	for (uint8_t i = 0; i < 8; i++)
 	{
@@ -3095,6 +3137,10 @@ void OmxModeForm::updateMixHoldLEDs()
 
 void OmxModeForm::updateShortcutMode()
 {
+	// The armed track copy only lives while its source track is held (in Mix).
+	if (heldTrackKey_ < 0 || formView_ != FORMVIEW_MIX)
+		mixCopyMode_ = 0;
+
 	if (omxFormGlobal.auxBlock && midiSettings.keyState[0] == false)
 	{
 		omxFormGlobal.auxBlock = false;
@@ -3425,71 +3471,66 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 	if (auxMacroManager_.onEncoderChanged(enc))
 		return;
 
-	// Notes view: the encoder navigates its pages (select) / edits values (edit).
-	if (formView_ == FORMVIEW_NOTES)
+	switch (formView_)
 	{
+	case FORMVIEW_NOTES: // pages (select) / values (edit)
 		onEncoderNotes(enc.dir());
 		return;
-	}
-	// MI view: the encoder navigates its menu (scale / track settings).
-	if (formView_ == FORMVIEW_MI)
-	{
+	case FORMVIEW_MI: // scale / track-settings menu
 		onEncoderMI(enc.dir());
 		return;
-	}
-
-	if (onEncoderStep(enc))
-		return;
-
-	// Mix view: the encoder navigates its own pages (overview / LEVELS / TRACK) — it no
-	// longer walks the machine menu (which the Mix display never rendered anyway).
-	if (formView_ == FORMVIEW_MIX)
-	{
+	case FORMVIEW_MIX: // its own pages (overview / LEVELS / CC / TRACK / menu)
 		onEncoderMix(enc.dir());
 		return;
-	}
-	if (formView_ == FORMVIEW_TOOLS)
-	{
+	case FORMVIEW_TOOLS:
 		onEncoderTools(enc.dir());
 		return;
-	}
-	// Patterns view: the encoder has no job yet — swallow it rather than letting it
-	// fall through to the machine and walk its param menu blind (invisible edits).
-	if (formView_ == FORMVIEW_PATTERNS)
+	case FORMVIEW_PATTERNS:
+		// No encoder job yet — swallow it rather than letting it fall through to
+		// the machine and walk its param menu blind (invisible edits).
 		return;
-	// Transpose view: past the pattern editor's end lies the live-transpose params page
-	// (TPOS / TYPE / TPAT-apply — the SEQTPOSE grid, also in the Mix menu).
-	if (formView_ == FORMVIEW_TRANSPOSE)
-	{
-		auto omni = getSelectedMachine();
-		int dir = enc.dir();
-		if (transParamsPage_)
-		{
-			if (getEncoderSelect())
-			{
-				if (dir < 0 && transSel_ == 0)
-					transParamsPage_ = false; // back into the pattern editor
-				else
-					transSel_ = (uint8_t)constrain((int)transSel_ + dir, 0, 2);
-			}
-			else
-				omni->transParamsEdit(transSel_, dir);
-			omxDisp.setDirty();
+	case FORMVIEW_STEP:
+		if (onEncoderStep(enc))
 			return;
-		}
-		if (getEncoderSelect() && dir > 0 && omni->transMenuAtEnd())
-		{
-			transParamsPage_ = true;
-			transSel_ = 0;
-			omxDisp.displayMessage("TPOSE PARAMS");
-			omxDisp.setDirty();
+		break; // machine menu page: the machine navigates/edits below
+	case FORMVIEW_TRANSPOSE:
+		if (onEncoderTranspose(enc.dir()))
 			return;
-		}
-		// else: the pattern editor (machine) handles it below
+		break; // the pattern editor (machine) handles it below
 	}
 
-	auto selMachine = getSelectedMachine();
-	selMachine->onEncoderChanged(enc);
+	getSelectedMachine()->onEncoderChanged(enc);
+}
+
+// Transpose view: past the pattern editor's end lies the live-transpose params page
+// (TPOS / TYPE / TPAT-apply — the SEQTPOSE grid, also in the Mix menu). Returns true
+// when handled; false lets the machine's pattern editor take the turn.
+bool OmxModeForm::onEncoderTranspose(int dir)
+{
+	auto omni = getSelectedMachine();
+	if (transParamsPage_)
+	{
+		if (getEncoderSelect())
+		{
+			if (dir < 0 && transSel_ == 0)
+				transParamsPage_ = false; // back into the pattern editor
+			else
+				transSel_ = (uint8_t)constrain((int)transSel_ + dir, 0, 2);
+		}
+		else
+			omni->transParamsEdit(transSel_, dir);
+		omxDisp.setDirty();
+		return true;
+	}
+	if (getEncoderSelect() && dir > 0 && omni->transMenuAtEnd())
+	{
+		transParamsPage_ = true;
+		transSel_ = 0;
+		omxDisp.displayMessage("TPOSE PARAMS");
+		omxDisp.setDirty();
+		return true;
+	}
+	return false;
 }
 
 // Mix encoder pages (flat cursor, like MI/Notes; click toggles select/edit):
@@ -3719,39 +3760,48 @@ void OmxModeForm::onEncoderButtonDown()
 	if (auxMacroManager_.onEncoderButtonDown())
 		return;
 
-	if (formView_ == FORMVIEW_NOTES && onEncoderButtonNotes())
-		return;
-
-	if (formView_ == FORMVIEW_MI && onEncoderButtonMI())
-		return;
-
-	// Tools: click on an action-button cell fires the action.
-	if (onEncoderButtonTools())
-		return;
-
-	// Mix CC page: click while holding step(s) on a slot = clear that slot's P-Lock
-	// (the same click-clears-a-lock convention as the Step view's param pages).
-	if (formView_ == FORMVIEW_MIX && mixHeldStepMask_ != 0 && mixCursor_ >= kMixCcStart && mixCursor_ < kMixCcBank)
+	switch (formView_)
 	{
-		uint8_t slot = mixCursor_ - kMixCcStart;
-		auto omni = getSelectedMachine();
-		for (uint8_t st = 0; st < 16; st++)
-			if (mixHeldStepMask_ & (1 << st))
-				omni->setStepPotLock(st, slot, -1);
-		omxDisp.setDirty();
-		omxLeds.setDirty();
-		return;
+	case FORMVIEW_NOTES:
+		if (onEncoderButtonNotes())
+			return;
+		break;
+	case FORMVIEW_MI:
+		if (onEncoderButtonMI())
+			return;
+		break;
+	case FORMVIEW_TOOLS: // click on an action-button cell fires the action
+		if (onEncoderButtonTools())
+			return;
+		break;
+	case FORMVIEW_STEP:
+		if (onEncoderButtonStep())
+			return;
+		break;
+	case FORMVIEW_MIX:
+		// CC page: click while holding step(s) on a slot = clear that slot's P-Lock
+		// (the same click-clears-a-lock convention as the Step view's param pages).
+		if (mixHeldStepMask_ != 0 && mixCursor_ >= kMixCcStart && mixCursor_ < kMixCcBank)
+		{
+			uint8_t slot = mixCursor_ - kMixCcStart;
+			auto omni = getSelectedMachine();
+			for (uint8_t st = 0; st < 16; st++)
+				if (mixHeldStepMask_ & (1 << st))
+					omni->setStepPotLock(st, slot, -1);
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+			return;
+		}
+		// CC page: click the selectable "CC" title to open the CC-number editor.
+		if (mixCursor_ == kMixCcTitle)
+		{
+			openPotConfig();
+			return;
+		}
+		break;
+	default:
+		break;
 	}
-
-	// Mix CC page: click the selectable "CC" title to open the CC-number editor.
-	if (formView_ == FORMVIEW_MIX && mixCursor_ == kMixCcTitle)
-	{
-		openPotConfig();
-		return;
-	}
-
-	if (onEncoderButtonStep())
-		return;
 
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderButtonDown();
@@ -3939,7 +3989,6 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			}
 			else if (thisKey >= 13 && thisKey <= 19) // v2 shell: preview view (commit on AUX release)
 			{
-				static const char *kViewNames[FORMVIEW_COUNT] = {"MIX", "STEP", "TRANSPOSE", "NOTES", "PATTERNS", "MI", "TOOLS"};
 				pendingView_ = thisKey - 13;
 				omxDisp.displayMessage(kViewNames[pendingView_]);
 				omxLeds.setDirty();
@@ -3979,8 +4028,9 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 
 
 	// v2 shell: container-rendered views take their own keys (not the machine).
-	if (formView_ == FORMVIEW_STEP)
+	switch (formView_)
 	{
+	case FORMVIEW_STEP:
 		if (keyConsumed)
 			return;
 		// Machine menu (page 3): F1/F2/F3 still copy/paste/length; a plain step tap selects
@@ -4002,76 +4052,35 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 		}
 		onKeyUpdateStep(e);
 		return;
-	}
-	if (formView_ == FORMVIEW_PATTERNS)
-	{
+	case FORMVIEW_PATTERNS:
 		if (!keyConsumed)
 			onKeyUpdatePatterns(e);
 		return;
-	}
-	if (formView_ == FORMVIEW_NOTES)
-	{
+	case FORMVIEW_NOTES:
 		if (!keyConsumed)
 			onKeyUpdateNotes(e);
 		return;
-	}
-	if (formView_ == FORMVIEW_MI)
-	{
+	case FORMVIEW_MI:
 		if (!keyConsumed)
 			onKeyUpdateMI(e);
 		return;
-	}
-	if (formView_ == FORMVIEW_TOOLS)
-	{
+	case FORMVIEW_TOOLS:
 		if (!keyConsumed)
 			onKeyUpdateTools(e);
 		return;
-	}
-	// Mix view routing.
-	if (formView_ == FORMVIEW_MIX && !keyConsumed)
-	{
-		// Track keys 3-10 (except under F3, which the machine handles as rate).
-		if (thisKey >= 3 && thisKey < 11 && omxFormGlobal.shortcutMode != FORMSHORTCUT_F3)
-		{
-			onKeyUpdateMix(e);
+	case FORMVIEW_MIX:
+		if (!keyConsumed && onKeyUpdateMixRoute(e))
 			return;
-		}
-		// A low-row step that began an audition must finish it on release even if a track key
-		// went down meanwhile — otherwise the release routes to onKeyUpdateMixHold below and
-		// leaves the mask bit set with the audition note still ringing.
-		if (!e.down() && thisKey >= 11 && thisKey < 27 && (mixHeldStepMask_ & (1 << (thisKey - 11))))
+		break; // F3 + track falls through to the machine (rate + page length)
+	case FORMVIEW_TRANSPOSE:
+		// Params page: the keys belong to the pattern editor — a press drops back
+		// to it (and still acts there), so nothing edits invisibly behind the params grid.
+		if (transParamsPage_ && e.down() && thisKey >= 1 && thisKey < 27)
 		{
-			onKeyUpdateMixStep(e);
-			return;
+			transParamsPage_ = false;
+			omxDisp.setDirty();
 		}
-		// Low-row per-track controls while a track is held.
-		if (heldTrackKey_ >= 0 && thisKey >= 11 && thisKey < 27)
-		{
-			onKeyUpdateMixHold(e);
-			return;
-		}
-		// Low-row taps (no track held, no modifier) audition the selected track's steps.
-		if (heldTrackKey_ < 0 && thisKey >= 11 && thisKey < 27 && omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE)
-		{
-			onKeyUpdateMixStep(e);
-			return;
-		}
-		// F1/F2 + low row = step mute/solo on the selected track (not the machine's copy/cut).
-		if (thisKey >= 11 && thisKey < 27 &&
-			(omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 || omxFormGlobal.shortcutMode == FORMSHORTCUT_F2))
-		{
-			onKeyUpdateMixStepMute(e);
-			return;
-		}
-		// Otherwise (F3 + track) falls through to the machine.
-	}
-
-	// Transpose params page: the keys belong to the pattern editor — a press drops back
-	// to it (and still acts there), so nothing edits invisibly behind the params grid.
-	if (formView_ == FORMVIEW_TRANSPOSE && transParamsPage_ && e.down() && thisKey >= 1 && thisKey < 27)
-	{
-		transParamsPage_ = false;
-		omxDisp.setDirty();
+		break; // the machine's pattern editor takes the key below
 	}
 
 	if(selMachine->doesConsumeKeys())
@@ -4169,8 +4178,9 @@ void OmxModeForm::updateLEDs()
 	}
 
 	// v2 shell: container-rendered views
-	if (formView_ == FORMVIEW_STEP)
+	switch (formView_)
 	{
+	case FORMVIEW_STEP:
 		if (stepMenuPage_ == 3)
 		{
 			getSelectedMachine()->updateLEDs(); // machine menu uses the machine's own LEDs
@@ -4178,24 +4188,16 @@ void OmxModeForm::updateLEDs()
 		}
 		updateStepLEDs();
 		return;
-	}
-	if (formView_ == FORMVIEW_PATTERNS)
-	{
+	case FORMVIEW_PATTERNS:
 		updatePatternsLEDs();
 		return;
-	}
-	if (formView_ == FORMVIEW_NOTES)
-	{
+	case FORMVIEW_NOTES:
 		updateNotesLEDs();
 		return;
-	}
-	if (formView_ == FORMVIEW_MI)
-	{
+	case FORMVIEW_MI:
 		updateMILEDs();
 		return;
-	}
-	if (formView_ == FORMVIEW_TOOLS)
-	{
+	case FORMVIEW_TOOLS:
 		if (omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
 		{
 			updateStepLEDs(); // F1/F2/F3 layers light exactly like the Seq view
@@ -4203,6 +4205,9 @@ void OmxModeForm::updateLEDs()
 		}
 		updateToolsLEDs(); // action keys + its own step row (triggers only, empties dark)
 		return;
+	case FORMVIEW_MIX:
+	case FORMVIEW_TRANSPOSE:
+		break; // shared machine + track-row path below
 	}
 
 	auto selMachine = getSelectedMachine();
@@ -4300,48 +4305,52 @@ void OmxModeForm::onDisplayUpdate()
 	// flush stays throttled in showDisplay(); this only refills the in-memory buffer.
 
 	// v2 shell: container-rendered views
-	if (formView_ == FORMVIEW_STEP)
+	switch (formView_)
 	{
+	case FORMVIEW_STEP:
 		onDisplayStep();
 		return;
-	}
-	if (formView_ == FORMVIEW_PATTERNS)
-	{
+	case FORMVIEW_PATTERNS:
 		onDisplayPatterns();
 		return;
-	}
-	if (formView_ == FORMVIEW_NOTES)
-	{
+	case FORMVIEW_NOTES:
 		onDisplayNotes();
 		return;
-	}
-	if (formView_ == FORMVIEW_MI)
-	{
+	case FORMVIEW_MI:
 		onDisplayMI();
 		return;
-	}
-	if (formView_ == FORMVIEW_TOOLS)
-	{
+	case FORMVIEW_TOOLS:
 		onDisplayTools();
 		return;
-	}
-	if (formView_ == FORMVIEW_TRANSPOSE && transParamsPage_)
-	{
-		getSelectedMachine()->transParamsDraw(transSel_);
+	case FORMVIEW_TRANSPOSE:
+		if (transParamsPage_)
+		{
+			getSelectedMachine()->transParamsDraw(transSel_);
+			return;
+		}
+		getSelectedMachine()->onDisplayUpdate(); // the machine draws the pattern editor
+		return;
+	case FORMVIEW_MIX:
+		onDisplayMixView();
 		return;
 	}
+}
 
+// Mix view display routing: the F1/F2/F3 modifier screens, else its encoder pages
+// (overview / LEVELS / CC / TRACK / menu).
+void OmxModeForm::onDisplayMixView()
+{
 	auto selMachine = getSelectedMachine();
 
-	if(selMachine->doesConsumeDisplay())
+	if (selMachine->doesConsumeDisplay())
 	{
 		selMachine->onDisplayUpdate();
 		return;
 	}
 
-	// Mix view: held F3 (LEN | RATE) shows the selected track's rate on top and its length as
+	// Held F3 (LEN | RATE) shows the selected track's rate on top and its length as
 	// a 16-cell bar on the bottom (full boxes for steps within length, dashes past it).
-	if (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
 	{
 		auto omni = selMachine;
 		uint16_t pageStart = (uint16_t)omni->activePage() * 16;
@@ -4352,16 +4361,16 @@ void OmxModeForm::onDisplayUpdate()
 		return;
 	}
 
-	// Mix view: held F1 shows the page-1 track overview (track squares + step glyphs already
+	// Held F1 shows the page-1 track overview (track squares + step glyphs already
 	// carry mute state); the name reads "MUTE" instead of "TRK n".
-	if (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
 	{
 		onDisplaySeqTrackPage();
 		return;
 	}
 
-	// Mix view: held F2 shows the split key-function view: top = track solos, bottom = FILL.
-	if (formView_ == FORMVIEW_MIX && omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
+	// Held F2 shows the split key-function view: top = track solos, bottom = FILL.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
 	{
 		bool topFill[kNumMachines];
 		for (uint8_t t = 0; t < kNumMachines; t++)
@@ -4370,14 +4379,7 @@ void OmxModeForm::onDisplayUpdate()
 		return;
 	}
 
-	// Mix is the only view that reaches here (the others returned above, and its
-	// F1/F2/F3 screens did too): its encoder pages (overview / LEVELS / TRACK).
-	if (formView_ == FORMVIEW_MIX)
-	{
-		onDisplayMix();
-		return;
-	}
-	selMachine->onDisplayUpdate();
+	onDisplayMix();
 }
 
 // incoming midi note on

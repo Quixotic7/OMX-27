@@ -53,9 +53,6 @@ namespace FormOmni
     // 1, 2, 3, 4, 8, 16, 32, 64
     const uint8_t kRateShortcuts[] = {0, 1, 2, 3, 6, 9, 12, 15};
 
-    const uint8_t kZoomMults[] = {1,2,4};
-    const uint8_t kPageMax[] = {4,2,1};
-
     const char* kConditionModes[9] = {"--", "FILL", "!FIL", "PRE", "!PRE", "NEI", "!NEI", "1ST", "!1ST"};
 
     uint8_t kTrigConditionsAB[35][2] = {
@@ -675,15 +672,7 @@ namespace FormOmni
 
     uint8_t FormMachineOmni::key16toStep(uint8_t key16)
     {
-        uint8_t zoomMult = kZoomMults[zoomLevel_];
-
-        uint8_t view = 16 * zoomMult;
-
-        uint8_t page = min(activePage_, kPageMax[zoomLevel_]);
-
-        uint8_t stepIndex = (view * page) + (key16 * zoomMult);
-
-        return stepIndex;
+        return (uint8_t)(16 * min(activePage_, (uint8_t)3) + key16);
     }
 
     void FormMachineOmni::copyStep(uint8_t keyIndex)
@@ -934,6 +923,41 @@ namespace FormOmni
     static const uint8_t kStepParamLockBits[8] = {
         SLOCK_VEL, SLOCK_NUDGE, SLOCK_LEN, SLOCK_MFX, SLOCK_PROB, SLOCK_COND, SLOCK_FUNC, SLOCK_ACCUM};
     static const char *kStepParamLabels[8] = {"VEL", "NUDG", "LEN", "MFX", "PROB", "COND", "FUNC", "ACUM"};
+    // One range table + field accessors for the 8 P-Lockable step params — the single
+    // source of truth for editStepParam / editParamDefault / clearStepParamLock.
+    static const int16_t kStepParamLo[8] = {0, -60, 0, 0, 0, 0, 0, 0};
+    static const int16_t kStepParamHi[8] = {127, 60, 22, NUM_MIDIFX_GROUPS + 2 - 1, 100, 9 + 35 - 1, STEPFUNC_COUNT + 64 - 1, 4};
+
+    static int getStepParam(const Step *s, uint8_t pid)
+    {
+        switch (pid)
+        {
+        case 0: return s->vel;
+        case 1: return s->nudge;
+        case 2: return s->len;
+        case 3: return s->mfxIndex;
+        case 4: return s->prob;
+        case 5: return s->condition;
+        case 6: return s->func;
+        case 7: return s->accumTPat;
+        }
+        return 0;
+    }
+
+    static void putStepParam(Step *s, uint8_t pid, int v)
+    {
+        switch (pid)
+        {
+        case 0: s->vel = v; break;
+        case 1: s->nudge = v; break;
+        case 2: s->len = v; break;
+        case 3: s->mfxIndex = v; break;
+        case 4: s->prob = v; break;
+        case 5: s->condition = v; break;
+        case 6: s->func = v; break;
+        case 7: s->accumTPat = v; break;
+        }
+    }
 
     const char *FormMachineOmni::stepParamLabel(uint8_t pid)
     {
@@ -1034,26 +1058,14 @@ namespace FormOmni
     {
         if (pid >= 8) return;
         Track *t = getTrack();
-        static const int lo[8] = {0, -60, 0, 0, 0, 0, 0, 0};
-        static const int hi[8] = {127, 60, 22, NUM_MIDIFX_GROUPS + 2 - 1, 100, 9 + 35 - 1, STEPFUNC_COUNT + 64 - 1, 4};
-        int v = constrain((int)t->paramDefaults[pid] + delta, lo[pid], hi[pid]);
+        int v = constrain((int)t->paramDefaults[pid] + delta, kStepParamLo[pid], kStepParamHi[pid]);
         t->paramDefaults[pid] = (int8_t)v;
         uint8_t bit = kStepParamLockBits[pid];
         for (uint8_t i = 0; i < 64; i++)
         {
             Step *s = &t->steps[i];
             if (s->isLocked(bit)) continue;
-            switch (pid)
-            {
-            case 0: s->vel = v; break;
-            case 1: s->nudge = v; break;
-            case 2: s->len = v; break;
-            case 3: s->mfxIndex = v; break;
-            case 4: s->prob = v; break;
-            case 5: s->condition = v; break;
-            case 6: s->func = v; break;
-            case 7: s->accumTPat = v; break;
-            }
+            putStepParam(s, pid, v);
         }
     }
 
@@ -1066,17 +1078,7 @@ namespace FormOmni
     {
         if (key16 >= 16 || pid >= 8) return;
         Step *s = &getTrack()->steps[key16toStep(key16)];
-        switch (pid)
-        {
-        case 0: s->vel = constrain(s->vel + delta, 0, 127); break;
-        case 1: s->nudge = constrain(s->nudge + delta, -60, 60); break;
-        case 2: s->len = constrain(s->len + delta, 0, 22); break;
-        case 3: s->mfxIndex = constrain(s->mfxIndex + delta, 0, NUM_MIDIFX_GROUPS + 2 - 1); break;
-        case 4: s->prob = constrain(s->prob + delta, 0, 100); break;
-        case 5: s->condition = constrain(s->condition + delta, 0, 9 + 35 - 1); break;
-        case 6: s->func = constrain(s->func + delta, 0, STEPFUNC_COUNT + 64 - 1); break;
-        case 7: s->accumTPat = constrain(s->accumTPat + delta, 0, 4); break;
-        }
+        putStepParam(s, pid, constrain(getStepParam(s, pid) + delta, kStepParamLo[pid], kStepParamHi[pid]));
         s->trig = 1;
         s->setLock(kStepParamLockBits[pid]);
     }
@@ -1092,18 +1094,7 @@ namespace FormOmni
         if (key16 >= 16 || pid >= 8) return;
         Step *s = &getTrack()->steps[key16toStep(key16)];
         s->clearLock(kStepParamLockBits[pid]);
-        int v = getTrack()->paramDefaults[pid]; // revert to the track default
-        switch (pid)
-        {
-        case 0: s->vel = v; break;
-        case 1: s->nudge = v; break;
-        case 2: s->len = v; break;
-        case 3: s->mfxIndex = v; break;
-        case 4: s->prob = v; break;
-        case 5: s->condition = v; break;
-        case 6: s->func = v; break;
-        case 7: s->accumTPat = v; break;
-        }
+        putStepParam(s, pid, getTrack()->paramDefaults[pid]); // revert to the track default
     }
 
     uint8_t FormMachineOmni::stepMathInfo(uint8_t key16, uint8_t &a, uint8_t &b)
@@ -1565,9 +1556,8 @@ namespace FormOmni
 
         if (seq_.mute == 0)
         {
-            // Per-step CC locks: send this step's pot values on the machine's pot-bank CCs.
-            // TODO: "CC Fade" (potMode 1) should interpolate over the step; for now both
-            // modes send the value once on trigger like "CC Step".
+            // Per-step CC locks: send this step's pot values on the machine's pot-bank CCs,
+            // once on trigger.
             if (seq_.sendMidi)
             {
                 for (uint8_t p = 0; p < NUM_CC_POTS; p++)
@@ -2403,20 +2393,7 @@ namespace FormOmni
 
             if(omxFormGlobal.isPlaying)
             {
-                // auto track = getTrack();
-                // uint8_t playingStepKey = playRateCounter_ % (16 * kZoomMults[zoomLevel_]);
-
-                // playingStepKey = map(playingStepKey, 0, 16 * kZoomMults[zoomLevel_], 0, 15);
-
-                // strip.setPixelColor(11 + playingStepKey, WHITE);
-
-                uint8_t playingStepKey = lastTriggeredStepIndex_ % (16 * kZoomMults[zoomLevel_]);
-
-                if (kZoomMults[zoomLevel_] > 1)
-                {
-                    playingStepKey = map(playingStepKey, 0, 16 * kZoomMults[zoomLevel_], 0, 15);
-                }
-
+                uint8_t playingStepKey = lastTriggeredStepIndex_ % 16;
                 strip.setPixelColor(11 + playingStepKey, GREEN); // playhead: steady bright green
             }
         }
@@ -2473,7 +2450,7 @@ namespace FormOmni
                 }
                 if (e.down() && thisKey >= 11 && thisKey < 27)
                 {
-                    uint8_t flatLen = (thisKey - 11) + (16 * min(activePage_, kPageMax[zoomLevel_] - 1));
+                    uint8_t flatLen = (thisKey - 11) + (16 * min(activePage_, (uint8_t)3));
                     setTrackLen(flatLen); // rebuild the page structure from a flat length
                     omxDisp.displayMessage("LENGTH " + String(getTrack()->getLength()));
                 }

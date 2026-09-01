@@ -333,9 +333,28 @@ Ordered; each step is independently landable.
    deleted; `loadFromDisk` now loads **in place** (reset seq → default channel → blit),
    and the save format is unchanged (the per-slot type byte is kept, always OMNI, so
    existing saves still load). `kOmniSaveVersion` moved to the namespace header.
-   _The §1.2 view-handler table remains open (the six dispatch sites still exist)._
-5. **Extraction pass** (§1.4) — opportunistic; the page-gesture and quick-copy/paste
-   helpers alone remove ~150 duplicated lines.
+   _§1.2 closed 2026-09-01: the six dispatch sites are each a single
+   `switch (formView_)` — Mix key/display routing folded into
+   `onKeyUpdateMixRoute()`/`onDisplayMixView()`, the Transpose encoder extracted to
+   `onEncoderTranspose()`. (A function-pointer table was judged worse than the
+   switches: same one-case-per-view property, more indirection.)_
+5. **Extraction pass** (§1.4) — ✅ **Done 2026-09-01** (the high-value subset):
+   the F1 page gesture (select/solo/loop-range) extracted to `handlePageGesture()`
+   shared by Seq + Notes; the engine's step-param ranges + field writes consolidated
+   into `kStepParamLo/Hi[]` + `get/putStepParam()` (one source of truth for
+   `editStepParam`/`editParamDefault`/`clearStepParamLock`); `kViewNames` defined
+   once at file scope; zoom plumbing deleted (`zoomLevel_`/`kZoomMults`/`kPageMax`,
+   `key16toStep` is one line); `Track::startstep` + `OmniSeq::potMode` marked
+   RESERVED (layout-frozen by the v8 save format, never read). Remaining
+   (opportunistic only): the single copy/paste-buffer ideal, the F2 track-select and
+   scale-marshalling micro-dups.
+   Also 2026-09-01: **track copy** shipped — Mix hold-source-track, **key 18 arms**
+   (press once = "COPY PAT TO?" pattern-only via `setTrackData` (tracks[0]); twice =
+   "COPY ALL TO?" full `setSeq` + hue), then tap destination track key(s); release the
+   held track to cancel; unarmed taps are inert (accidental-copy guard, user respec).
+   Armed state self-clears outside Mix/hold (`updateShortcutMode`). Hardware-verified
+   (all 5 states) along with a dispatch-refactor regression sweep (all six views, Seq
+   hold-step + F1 page gesture, Transpose params page enter/exit).
 6. **Persistence** (§1.5). ✅ **Done 2026-08-29**: on the **RP2040 (V3)** the full
    pattern bank persists to the board's **LittleFS** flash filesystem (1 MB partition,
    `/formbank.dat`): a validated header (magic + `kOmniSaveVersion` + pattern/track
@@ -418,8 +437,10 @@ Ordered; each step is independently landable.
      itself was intact and both round-trips passed, so this was almost certainly a
      stray injected tap on a style key during blind QA driving, not a firmware bug.
      Watch for it recurring in normal use.)
-10. **Spec sync** — update `FORM_REDESIGN.md` for the drift in §3 and the decisions in
-   §4, so the doc matches what the PR ships.
+10. **Spec sync**. ✅ **Done 2026-08-31**: `FORM_REDESIGN.md` gained an as-built
+    status header + a refreshed "Still open" list; `FORM_IMPLEMENTATION.md` marked
+    complete phase-by-phase; `src/form/DESIGN_NOTES.md` marked historical;
+    `FORM_USER_GUIDE.md` reviewed/corrected same day.
 
 Open UI proposals (§4.4) come **after** the PR, alongside the planned new features.
 

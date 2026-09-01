@@ -218,6 +218,9 @@ private:
 	bool pageGestureDone_ = false;  // a range gesture consumed this F1+page press group
 	void onKeyUpdateStep(OMXKeypadEvent e);
 	bool onEncoderStep(Encoder::Update enc);   // returns true if the Step view consumed the encoder
+	// F1 + page keys (3-6): shared select / solo / loop-range gesture (Seq + Notes views)
+	void handlePageGesture(FormOmni::FormMachineOmni *omni, uint8_t p, OMXKeypadEvent e);
+	bool onEncoderTranspose(int dir);          // Transpose params page; false = machine's pattern editor
 	bool onEncoderButtonStep();                // returns true if consumed
 	void onDisplayStepMenu();                  // render a param page (held step values / defaults)
 	// Render the page-1 track overview (+ F1/F2 overlay). keyboardMode (MI view) hides the page
@@ -227,11 +230,13 @@ private:
 	void updateStepLEDs();
 	void onDisplayStep();
 	void onKeyUpdateMix(OMXKeypadEvent e);     // Mix-view track keys (mute/solo/select)
+	bool onKeyUpdateMixRoute(OMXKeypadEvent e); // Mix key routing; false = machine F3 fall-through
 	void onKeyUpdateMixHold(OMXKeypadEvent e); // low-row per-track controls while holding a track
 	void onKeyUpdateMixStep(OMXKeypadEvent e);     // low-row taps audition the selected track's steps
 	void onKeyUpdateMixStepMute(OMXKeypadEvent e); // F1 + low-row toggles the selected track's step mutes
 	void updateMixHoldLEDs();                  // paint those controls on the low row
 	int8_t heldTrackKey_ = -1; // track key held right now in Mix (for K5 hue), -1 = none
+	uint8_t mixCopyMode_ = 0;  // armed track copy while holding a track: 0 off, 1 pattern, 2 all
 	// Mix encoder pages (flat cursor): 0 = track overview, 1-8 = LEVELS (per-track
 	// default-velocity mixer), 9-12 = TRACK (Mute/Solo/Gate/Rate). Click = select/edit.
 	uint8_t mixCursor_ = 0;
@@ -247,6 +252,7 @@ private:
 	uint16_t mixHeldStepMask_ = 0;
 	int8_t mixHeldStepKey_ = -1; // most recent held step (focus for the lock display)
 	bool onEncoderMix(int dir); // encoder turn in the Mix view. consumed?
+	void onDisplayMixView();    // Mix display routing: F1/F2/F3 screens, else the encoder pages
 	void onDisplayMix();        // render the Mix view's encoder pages
 	// Shared CC-page edit (Mix + MI): cell 0-4 = a pot-bank CC slot (live value + send),
 	// cell 5 = the track's pot bank. The P-Lock-on-held-step gesture stays Mix-only.

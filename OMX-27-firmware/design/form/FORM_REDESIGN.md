@@ -1,5 +1,46 @@
 # FORM — Redesign Proposal (v2 interaction model)
 
+> ## As-built status (2026-08-31)
+> This spec is now **implemented and shipped** on branch `q7-2026-3-Form-Seq-Upgrade`,
+> with deliberate deviations. The running record of what was built, fixed, and verified
+> is [`FORM_V2_REVIEW.md`](FORM_V2_REVIEW.md); the user-facing manual is
+> [`FORM_USER_GUIDE.md`](FORM_USER_GUIDE.md). Read the body below as the *original
+> design*, corrected by this list:
+>
+> **Built as specced:** single engine / 8 tracks (§0 — the machine abstraction is now
+> fully deleted, not just dormant); pot banks per track (§2); P-Locks (§3); the six
+> views (§4) incl. the shared track page, Patterns w/ switch styles + chaining, and
+> musical live recording (§7, count-in dropped); 4×16 pages w/ per-page length (§5);
+> value palettes with encoder fine-edit (§4.2); step/pattern copy-paste (§3.5).
+>
+> **Built differently (deliberate):**
+> - **View switching is AUX-only** — the §4.0 page-1 *encoder* view selector was built,
+>   then removed (commit `d3496b7`); the encoder everywhere follows one select/edit model.
+> - **Pages live on F1 + keys 3-6** (select / double-tap solo / hold-two range), not on
+>   the AUX layer (§6): the AUX layer stays transport + views only, and is now **modal**
+>   (its free keys are inert rather than falling through).
+> - **"Hold a mode key = set default" (§4.2) was superseded**: defaults are set on the
+>   Seq *param pages*, where the top row is the selected param's palette (steps held =
+>   those steps; nothing held = the track default) with palette LEDs — covers every
+>   param incl. Nudge/Accum.
+> - **Config lives by role, not in one menu (§2.5)**: Seq's menu = step params + the
+>   Notes editor only; the track/global params (incl. BPM/scale) are the **Mix** menu;
+>   the Transpose view carries its own TPOS/TYPE/TPAT page. The planned first-page
+>   2-octave mini-keyboard was dropped — the MI view is the keyboard.
+> - **CC meter (§2/decision 16 vs 29):** resolved as *transient* (shows ~1 s after a
+>   knob moves, track pages only). The Mix **CC page** (bars + big bank digit +
+>   visible P-Locks + in-mode Pot Config) became the primary knob surface instead.
+> - **Colors:** the as-built step-mode colors differ from the §9 table (see code).
+>
+> **Beyond the spec (unplanned, shipped):** the **TOOLS view** (AUX+19: rotate/mirror/
+> shuffle/humanize/quantize/transpose/scale-snap/vel-random/chance-random/euclid/grids,
+> with live generator previews and Seq-style hold editing); the Mix **LEVELS** velocity
+> mixer and **CC page**; **LittleFS pattern-bank persistence** on V3 (+ FRAM-glitch
+> boot hardening); per-track live-play routing + in-mode Pot Config; the SysEx remote
+> QA rig; the interface collapse + ~1,500-line dead-code removal + a 17-bug fix pass.
+>
+> **Still open** — see the updated §10 "Still open" list at the bottom.
+
 A rework of FORM's interaction model, replacing the confusing **knob-mode matrix** with a
 small set of **views** and **pot banks** (like MI mode). Much of this is now **built** — the
 shell, Mix, and Step views ship, with sections marked _**built**_ describing the actual
@@ -528,14 +569,32 @@ Longer material comes from the 4 pages (§5), not from zooming a 64-step lane.
     cut to the buffer + cleared, an empty slot receives it (move a pattern between slots). The
     Step-view P-Lock no longer pops a "CC" message — the top CC meter already conveys the value.
 
-### Still open
-- **RAM ceilings / per-platform trims** — real pattern / page / track counts per build
-  (V3 fullest; Teensy 3.1 / 4 tighter). Decide the trims once we measure.
-- **Pattern extras** — full **song mode** (edit/save chains, not just live chaining).
-- **Count-in** (§7) — dropped: this is a MIDI-only device, so there is no click to count
-  against. (Transpose view is built; needs a functional MIDI QA pass.)
-- **P-Lock step tint (MAGENTA)**, the **4-line page indicator**, and the **CC meter on non-track
-  views** — not drawn yet.
+### Still open (updated 2026-09-01)
+- **RAM**: re-measured — `sizeof(FormPattern)` = **10,576 B**, 16 patterns ≈ 165 KB
+  (V3 ok; Teensy 3.1 capped at 2 patterns, no bank persistence off-V3). Fine today;
+  re-measure before growing the data model.
+- **Single copy/paste-buffer ideal** (§3.5) — several buffers still exist (step,
+  pattern); opportunistic only.
+
+**Closed 2026-09-01:**
+- P-Lock magenta tint + persistent 4-line page indicator — **won't build** (user call:
+  not needed).
+- CC meter on non-track views — resolved as transient/track-page-only.
+- Song mode — **won't build**; live chaining via the Chained switch style suffices.
+- Track copy — **built**, as *Mix: hold source track → key 18 arms (once = "COPY PAT
+  TO?" pattern only; twice = "COPY ALL TO?" settings + colour too) → tap destination
+  track key(s)*; releasing the source cancels, unarmed taps do nothing (accidental-copy
+  guard). Replaces the planned 25/26 buffer pair (those keys are the colour presets now).
+- Code debt — **done**: the six view dispatch sites are each one `switch (formView_)`
+  (Mix key/display routing folded into `onKeyUpdateMixRoute`/`onDisplayMixView`,
+  Transpose encoder extracted to `onEncoderTranspose`); zoom plumbing deleted
+  (`zoomLevel_`/`kZoomMults` gone, `key16toStep` is one line); `Track::startstep` and
+  `potMode` marked RESERVED (kept only for the v8 save layout); the step-param
+  ranges/field-writes consolidated into `kStepParamLo/Hi` + `get/putStepParam` (one
+  source of truth for edit/default/clear-lock); the F1 page gesture extracted to
+  `handlePageGesture` (Seq + Notes share it); `kViewNames` defined once.
+
+*(Count-in stays dropped — MIDI-only device, nothing to count against.)*
 
 ---
 

@@ -1,5 +1,13 @@
 # FORM Sequencer — Design Notes & Status
 
+> **HISTORICAL (2026-08-31):** this is the pre-v2 audit of the original machine-based
+> FORM. The v2 rework (see `design/form/FORM_V2_REVIEW.md`) has since superseded it:
+> the machine-type vision (§4a) was deliberately dropped (single engine, the interface
+> deleted), the dead features (§4b) were wired or removed (CC P-Locks now send, FILL is
+> Mix-F2, monophonic works, `startstep` remains dead-but-known), the §5 bugs are fixed
+> (incl. the shuffle/random ranges and the save-format version byte), and the §6
+> roadmap's Tier-1 is complete. Kept for context on how FORM got here.
+
 _A review of the intended design, what shipped, where it stands, what's missing,
 and how it could be improved. Sources: the spec comments in
 [`omx_mode_form.h`](omx_mode_form.h), the v1.14–1.15 release notes, and a

@@ -1,5 +1,24 @@
 # FORM v2 — Implementation Plan
 
+> ## Status (2026-08-31): COMPLETE — all phases shipped (some differently)
+> - **Phases 0-1** (form2 scaffolding/PatternStore): superseded — the shipping data
+>   layer is `FormPattern` (OmniSeq×8, `src/form/form_patterns.h`); the `form2/` files
+>   were deleted except `form2_config.h` (per-platform caps). Real measured size:
+>   **10,576 B/pattern** (not 9,296) → 16 patterns ≈ 165 KB on V3; **Teensy 3.1 = 2**.
+> - **Phase 2** (single-engine collapse): done late but fully — `FormMachineInterface`
+>   is deleted, the shell owns concrete `FormMachineOmni` tracks, zero downcasts.
+> - **Phases 3-11**: done (views, Step editor, Mix, copy/paste, Notes/MI/Transpose,
+>   menus, Patterns, live recording) — see `FORM_REDESIGN.md`'s as-built header for
+>   the deliberate deviations (AUX-only view switching, pages on F1, config split
+>   between the Seq and Mix menus, etc.).
+> - **Phase 12** (persistence + polish): the pattern bank persists to **LittleFS on
+>   the RP2040 V3** (`/formbank.dat`, versioned header, boot-restore + FRAM-glitch
+>   recovery); **Teensy builds persist the active pattern only** (no filesystem).
+>   Polish beyond plan: the TOOLS view, Mix LEVELS/CC pages, param-page palettes.
+> - **Phase 13** (retire v1): done — dead v1 UI, the machine abstraction, zoom modes,
+>   and `setTest` scaffolding are gone (~1,500 lines removed).
+> - `FORM_V2_REVIEW.md` is the authoritative record of the work, bugs, and QA.
+
 A build order that turns [`FORM_REDESIGN.md`](FORM_REDESIGN.md) into firmware. Read that
 first for the *what*; this is the *how* and the *in what order*. Grounded in the current
 tree (`src/form/…`, `src/hardware/storage.h`, `src/modes/…`).

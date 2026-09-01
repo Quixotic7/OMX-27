@@ -326,6 +326,16 @@ namespace FormOmni
 
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }
+        // Mix track-copy "Copy Pat": replace only the pattern (steps/pages/play mode/step
+        // defaults), keeping this track's settings (channel, rate, gate, transpose, banks…).
+        void setTrackData(const Track &t)
+        {
+            seq_.tracks[0] = t;
+            sanitizeSeq();
+            seqDynamic_.Reset();
+            ratchetDivs_ = 0;
+            ratchetStepIdx_ = -1;
+        }
         void setSeq(const OmniSeq &s)
         {
             seq_ = s;
@@ -363,7 +373,6 @@ namespace FormOmni
         int8_t auditionNotes_[16][6];
 
         uint8_t activePage_ = 0;
-        uint8_t zoomLevel_ = 0;
 
         OmniTransposePattern transpPat_;
 
