@@ -28,18 +28,18 @@ void OmxScreensaver::onPotChanged(int potIndex, int prevValue, int newValue, int
 
 void OmxScreensaver::updateScreenSaverState()
 {
-	static unsigned long lastDbg = 0;
-	if (millis() - lastDbg > 500)
+	if (forced_)
 	{
-		lastDbg = millis();
-		Serial.println((String) "SSDBG tick counter=" + (unsigned long)screenSaverCounter + " active=" + screenSaverActive);
+		// Started via start() (CONFIG test action). Stays on regardless of
+		// counter resets (e.g. running clocks) until real user input ends it.
+		screenSaverActive = true;
+		return;
 	}
 	if (screensaverEnabled && screenSaverCounter > (unsigned long)screensaverTimeoutSec * 1000UL)
 	{
 		if (!screenSaverActive)
         {
             screenSaverActive = true;
-            Serial.println("SSDBG activate");
         }
     }
 	else if (screenSaverCounter < 10)
@@ -52,8 +52,6 @@ void OmxScreensaver::updateScreenSaverState()
 	}
 	else
 	{
-		if (screenSaverActive)
-			Serial.println("SSDBG deactivate (counter reset)");
 		screenSaverActive = false;
 		nextStepTimeSS = millis();
 	}
@@ -80,20 +78,17 @@ void OmxScreensaver::onDisplayUpdate()
 }
 void OmxScreensaver::resetCounter()
 {
-	static unsigned long lastRstDbg = 0;
-	if (millis() - lastRstDbg > 500)
-	{
-		lastRstDbg = millis();
-		Serial.println("SSDBG resetCounter");
-	}
 	screenSaverCounter = 0;
 }
 void OmxScreensaver::start()
 {
-	// Jump the inactivity counter past the timeout so the next
-	// updateScreenSaverState() activates the screensaver.
+	forced_ = true;
 	screenSaverCounter = (unsigned long)screensaverTimeoutSec * 1000UL + 100;
-	Serial.println((String) "SSDBG start() counter=" + (unsigned long)screenSaverCounter + " timeout=" + screensaverTimeoutSec + " enabled=" + screensaverEnabled);
+}
+void OmxScreensaver::userActivity()
+{
+	forced_ = false;
+	screenSaverCounter = 0;
 }
 void OmxScreensaver::updateLEDs()
 {

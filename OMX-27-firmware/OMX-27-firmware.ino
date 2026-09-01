@@ -99,7 +99,7 @@ void omxInjectInput(const uint8_t *d, unsigned n)
 		return;
 	// Injected input counts as user activity: without this the screensaver blanks the
 	// OLED mid-QA while injected events keep silently mutating mode state underneath.
-	omxScreensaver.resetCounter();
+	omxScreensaver.userActivity();
 	sysSettings.screenSaverMode = false;
 	switch (d[5])
 	{
@@ -862,7 +862,6 @@ void loop()
 #endif
 		if (seqPlaying || omxUtil.areClocksRunning())
 		{
-			{ static unsigned long t=0; if (millis()-t>500){t=millis(); Serial.println("SSDBG rst:clocks");} }
 			omxScreensaver.resetCounter(); // screenSaverCounter = 0;
 		}
 		omxUtil.advanceClock(activeOmxMode, passed);
@@ -880,7 +879,6 @@ void loop()
 	// (initial frame after enable + steady self-heal of any dropped frames).
 	if (nornsLink.mirrorEnabled())
 	{
-		{ static unsigned long t=0; if (millis()-t>500){t=millis(); Serial.println("SSDBG rst:mirror");} }
 		omxScreensaver.resetCounter();
 		static uint32_t lastMirrorPush = 0;
 		if ((uint32_t)(millis() - lastMirrorPush) > 500)
@@ -921,8 +919,7 @@ void loop()
 	if (u.active())
 	{
 		auto amt = u.accel(1);		   // where 5 is the acceleration factor if you want it, 0 if you don't)
-		{ static unsigned long t=0; if (millis()-t>500){t=millis(); Serial.println("SSDBG rst:enc");} }
-		omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+		omxScreensaver.userActivity(); // screenSaverCounter = 0;
 		nornsLink.markActivity();
 									   //    	Serial.println(u.dir() < 0 ? "ccw " : "cw ");
 									   //    	Serial.println(amt);
@@ -962,7 +959,7 @@ void loop()
 	{
 	// SHORT PRESS
 	case Button::Down:				   // Serial.println("Button down");
-		omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+		omxScreensaver.userActivity(); // screenSaverCounter = 0;
 		nornsLink.markActivity();
 
 		// what page are we on?
@@ -1034,7 +1031,7 @@ void loop()
 
 		if (e.down())
 		{
-			omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+			omxScreensaver.userActivity(); // screenSaverCounter = 0;
 			nornsLink.markActivity();
 			midiSettings.keyState[thisKey] = true;
 		}
