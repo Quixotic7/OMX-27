@@ -233,7 +233,7 @@ namespace FormOmni
         void mixMenuEnter();       // position the menu at the track/global pages (Mix)
         bool mixMenuAtStart();     // true at the Mix menu's first page/param (back boundary)
         // Set when the POTS machine-menu cell is clicked; the shell consumes it to open Pot Config.
-        bool takePotConfigRequest() { bool r = potConfigRequested_; potConfigRequested_ = false; return r; }
+        int8_t takeActionRequest() { int8_t r = actionRequested_; actionRequested_ = -1; return r; }
         void setSelStepByKey(uint8_t key16); // point step-scoped menu edits at this step
 
         // v2 Step menu (P-Lockable params). pid: 0 Vel,1 Nudge,2 Len,3 MFX,4 Prob,5 Cond,6 Func,7 Accum.
@@ -419,7 +419,7 @@ namespace FormOmni
 
         bool prevCondWasTrue_ = false;
         bool fillActive_ = false;
-        bool potConfigRequested_ = false; // POTS machine-menu cell clicked; shell opens Pot Config
+        int8_t actionRequested_ = -1; // ACTIONS menu cell clicked (0 QNT / 1 CLR / 2 POTS); -1 = none
         bool firstLoop_ = false;
 
         bool setDirtyOnceMessageClears_ = false;

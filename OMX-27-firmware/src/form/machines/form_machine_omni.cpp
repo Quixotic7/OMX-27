@@ -98,7 +98,7 @@ namespace FormOmni
         trackParams_.addPage(4);  // OMNIPAGE_SEQMIDI: Chan, Mono, SendMidi, SendCV
         trackParams_.addPage(4);  // OMNIPAGE_TIMINGS: BPM, Rate, Swing, Swing Div
         trackParams_.addPage(4);  // OMNIPAGE_SCALE: Root, Scale, Lock, Group
-        trackParams_.addPage(1);  // OMNIPAGE_POTS: single "open Pot Config" cell
+        trackParams_.addPage(3);  // OMNIPAGE_POTS: the ACTIONS page (Quant / Clear / Pots)
 
         tPatParams_.addPage(17);
     }
@@ -2436,7 +2436,7 @@ namespace FormOmni
         // hijacking every click there into the CC editor.
         if ((omniUiMode_ == OMNIUIMODE_CONFIG || omniUiMode_ == OMNIUIMODE_MIX) &&
             trackParams_.getSelPage() == OMNIPAGE_POTS)
-            potConfigRequested_ = true;
+            actionRequested_ = (int8_t)trackParams_.getSelParam(); // 0 QNT / 1 CLR / 2 POTS
     }
     bool FormMachineOmni::onKeyUpdate(OMXKeypadEvent e)
     {
@@ -2801,9 +2801,11 @@ namespace FormOmni
             return false;
         case OMNIPAGE_POTS:
         {
-            // Single action cell: ">" = click the encoder to open the Pot Config submode.
-            const char *labels[4] = {"POTS", "", "", ""};
-            String vals[4] = {">", "", "", ""};
+            // ACTIONS (menu-map PG05): Quant / Clear / Pot Config — click a cell to fire
+            // (the shell runs the action via takeActionRequest).
+            const char *labels[4] = {"QNT", "CLR", "POTS", ""};
+            // square, x, open circle, filled circle - ´µ¶·
+            String vals[4] = {"@", "µ", "@", ""};
             dispParamGrid(labels, vals, selParam);
         }
             return false;

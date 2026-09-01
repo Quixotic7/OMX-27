@@ -697,8 +697,8 @@ void OmxModeForm::onDisplayMI()
 		String vals[4];
 		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
 		vals[1] = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
-		vals[2] = scaleConfig.lockScale ? "On" : "--";
-		vals[3] = scaleConfig.group16 ? "On" : "--";
+		vals[2] = scaleConfig.lockScale ? "Ĉ" : "Ć";
+		vals[3] = scaleConfig.group16 ? "Ĉ" : "Ć";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 1, !getEncoderSelect());
@@ -727,7 +727,7 @@ void OmxModeForm::onDisplayMI()
 		const char *labels[4] = {"MCRO", "MPOT", "", ""};
 		String vals[4];
 		vals[0] = String(macromodes[constrain(midiMacroConfig.midiMacro, 0, nummacromodes)]);
-		vals[1] = omxFormGlobal.macroConsumesPots ? "On" : "--";
+		vals[1] = omxFormGlobal.macroConsumesPots ? "Ĉ" : "Ć";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), "", ""};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 8, !getEncoderSelect());
@@ -755,13 +755,12 @@ void OmxModeForm::onDisplayMI()
 		omxDisp.dispOptionCombo("Clear Track?", kYesNo, 2, clearSel_, true);
 		return;
 	}
-	// Actions page (cursor 10-12): QUANTIZE amount + CLEAR + POTS — click to fire/open.
+	// Actions page (cursor 10-12): QUANTIZE + CLEAR + POTS — click to fire/open
+	// (@ = opens a submenu, µ = destructive).
 	if (miCursor_ >= 10 && miCursor_ <= 12)
 	{
 		const char *labels[4] = {"QUANT", "CLEAR", "POTS", ""};
-		String qv = String(recQuantize_);
-		// §4 label rule: text values overflow the cell — ">" = click the encoder to open.
-		const char *values[4] = {qv.c_str(), ">", ">", ""};
+		const char *values[4] = {"@", "µ", "@", ""};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 10, false);
 		return;
@@ -1487,8 +1486,8 @@ void OmxModeForm::onDisplayNotes()
 		// §4 label rules: SCALE shows a number (the name pops as a message on change);
 		// LOCK/GROUP show On/-- — full words overflow the cell.
 		vals[1] = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
-		vals[2] = scaleConfig.lockScale ? "On" : "--";
-		vals[3] = scaleConfig.group16 ? "On" : "--";
+		vals[2] = scaleConfig.lockScale ? "Ĉ" : "Ć";
+		vals[3] = scaleConfig.group16 ? "Ĉ" : "Ć";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 8, !getEncoderSelect());
@@ -1515,11 +1514,11 @@ void OmxModeForm::onDisplayNotes()
 		return;
 	}
 
-	// ACTIONS (cursor 20-22): Quant / Clear / Pots — ">" cells, click to fire.
+	// ACTIONS (cursor 20-22): Quant / Clear / Pots — click to fire (@ = submenu, µ = destructive).
 	if (notesCursor_ >= 20)
 	{
 		const char *labels[4] = {"QNT", "CLR", "POTS", ""};
-		const char *values[4] = {">", ">", ">", ""};
+		const char *values[4] = {"@", "µ", "@", ""};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 20, false);
 		return;
@@ -2962,19 +2961,19 @@ void OmxModeForm::onDisplayStep()
 		String vals[4];
 		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
 		vals[1] = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
-		vals[2] = scaleConfig.lockScale ? "On" : "--";
-		vals[3] = scaleConfig.group16 ? "On" : "--";
+		vals[2] = scaleConfig.lockScale ? "Ĉ" : "Ć";
+		vals[3] = scaleConfig.group16 ? "Ĉ" : "Ć";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, !getEncoderSelect());
 		return;
 	}
 
-	// ACTIONS page (6): Quant / Clear / Pots — ">" cells, click to fire.
+	// ACTIONS page (6): Quant / Clear / Pots — click to fire (@ = submenu, µ = destructive).
 	if (stepMenuPage_ == 6)
 	{
 		const char *labels[4] = {"QNT", "CLR", "POTS", ""};
-		const char *values[4] = {">", ">", ">", ""};
+		const char *values[4] = {"@", "µ", "@", ""};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, false);
 		return;
@@ -3929,8 +3928,8 @@ void OmxModeForm::onDisplayMix()
 		auto omni = getSelectedMachine();
 		const char *labels[4] = {"MUTE", "SOLO", "GATE", "RATE"};
 		String vals[4];
-		vals[0] = omni->getMute() ? "On" : "--";
-		vals[1] = omni->getSolo() ? "On" : "--";
+		vals[0] = omni->getMute() ? "Ĉ" : "Ć";
+		vals[1] = omni->getSolo() ? "Ĉ" : "Ć";
 		vals[2] = omni->gateBox();
 		vals[3] = String(kSeqRates[omni->getRate()]); // full "1:n" pops while turning
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
@@ -3972,7 +3971,30 @@ void OmxModeForm::onEncoderButtonDown()
 
 	auto selMachine = getSelectedMachine();
 	selMachine->onEncoderButtonDown();
-	if (selMachine->takePotConfigRequest()) // POTS cell in the machine menu (Mix cursor 20 / Seq)
+	int8_t action = selMachine->takeActionRequest(); // ACTIONS page in the machine menu (Mix)
+	if (action == 0)
+	{
+		clearReturnView_ = -1; // the quant submenu renders in MI; return here after
+		if (formView_ != FORMVIEW_MI)
+		{
+			clearReturnView_ = (int8_t)formView_;
+			setFormView(FORMVIEW_MI, true);
+		}
+		quantEnterSubmenu();
+		return;
+	}
+	if (action == 1)
+	{
+		clearReturnView_ = (formView_ == FORMVIEW_MI) ? (int8_t)-1 : (int8_t)formView_;
+		if (formView_ != FORMVIEW_MI)
+			setFormView(FORMVIEW_MI, true);
+		miClearSub_ = true;
+		clearSel_ = 0;
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return;
+	}
+	if (action == 2)
 	{
 		openPotConfig();
 		return;
