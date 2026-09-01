@@ -213,7 +213,8 @@ Order = encoder order within the view. Format:
 
 **TRANSPOSE** (AUX+15)
 - GROUP GR05 TPOSE — message "TRANSPOSE"
-  1. PG19 TPAT EDITOR - BUG: Clicking any parameter with encoder is opening up CC editor, only works while holding AUX. Needs to be decoupled from the PG14 CC page 
+  1. PG19 TPAT EDITOR *(bug fixed 2026-09-01: a stale machine-menu POTS page hijacked
+     clicks into the CC editor — the Pot Config request is now gated to the menu views)*
 - GROUP GR06 TPOSE PARAMS — message "TPOSE PARAMS" *(as built: this popup already exists)*
   2. PG20 TPOSE PARAMS
 
@@ -230,16 +231,19 @@ Order = encoder order within the view. Format:
   2. PG05 ACTIONS
 
 **PATTERNS** (AUX+17)
-MISSING FEATURE: No way to use F1/F2 to copy and cut paste patterns. F3 + Pattern should clear.
+*(done 2026-09-01: F1+slot = copy · F2+slot = cut (filled) / paste (empty) · F3+slot =
+clear; quick-tap 1/2 still copy/paste the active pattern)*
 - GROUP GR14 PATTERNS — no message (the view-switch popup covers it)
   1. PG21 PATTERNS
 
-**MI** (AUX+18) — *live play*
+**MI** (AUX+18) — *live play* *(built 2026-09-01; PG17B placed after PG17, in the MIDI
+group — it wasn't assigned a view, adjust if wanted elsewhere)*
 - GROUP GR10 KEYS — no message
   1. PG16 MI KEYBOARD
 - GROUP GR11 MIDI — no message
   1. PG11 SCALE
   2. PG17 MI MIDI
+  3. PG17B MACROS
 - GROUP GR13 ACTIONS — no message
   1. PG18 MI ACTIONS
 - GROUP GR12 CC — no message

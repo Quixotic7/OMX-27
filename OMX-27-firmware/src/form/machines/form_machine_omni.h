@@ -223,6 +223,7 @@ namespace FormOmni
         // v2 SEQ menu handoff: after the container's custom Vel/.../Accum pages, delegate to
         // this machine's native param menu (Notes/CC/Transpose/track params, same as MIX view).
         void seqMenuEnter();       // position the menu at the first delegated page (Notes)
+        void seqMenuEnterEnd();    // position it at that page's last param (entering from the right)
         bool seqMenuAtStart();     // true when on that first page/param (for the back boundary)
         // Transpose view's second page: the track's live-transpose params (SEQTPOSE).
         bool transMenuAtEnd(); // at the pattern editor's last cell (LEN)

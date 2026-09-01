@@ -253,6 +253,7 @@ private:
 	int8_t mixHeldStepKey_ = -1; // most recent held step (focus for the lock display)
 	bool onEncoderMix(int dir); // encoder turn in the Mix view. consumed?
 	void onDisplayMixView();    // Mix display routing: F1/F2/F3 screens, else the encoder pages
+	void onDisplayCCPage(uint8_t sel, uint16_t heldMask, int8_t heldKey); // shared CC page (Seq/MI)
 	void onDisplayMix();        // render the Mix view's encoder pages
 	// Shared CC-page edit (Mix + MI): cell 0-4 = a pot-bank CC slot (live value + send),
 	// cell 5 = the track's pot bank. The P-Lock-on-held-step gesture stays Mix-only.
@@ -300,11 +301,10 @@ private:
 	// kNumMachines: 0 overview · 1..kNumMachines LEVELS · then 5 CC slots + bank + "CC" title ·
 	// then the 4-cell TRACK grid · then the machine param menu. (For 8 tracks these are the
 	// original 9-13/14/15/16-19/20.)
-	static const uint8_t kMixCcStart = kNumMachines + 1;  // first of 5 CC-slot cursors
-	static const uint8_t kMixCcBank  = kNumMachines + 6;  // big bank-number cursor
-	static const uint8_t kMixCcTitle = kNumMachines + 7;  // selectable "CC" title cursor
-	static const uint8_t kMixTrack   = kNumMachines + 8;  // first of the 4 TRACK-grid cursors
-	static const uint8_t kMixMenu    = kNumMachines + 12; // machine param menu cursor (last)
+	// Mix cursor map (menu-map §4): 0 overview · 1-8 LEVELS · TRACK grid · machine menu.
+	// (The CC page moved to the Seq view — Seq owns step P-Locks.)
+	static const uint8_t kMixTrack   = kNumMachines + 1; // first of the 4 TRACK-grid cursors
+	static const uint8_t kMixMenu    = kNumMachines + 5; // machine param menu cursor (last)
 
 	SubModePreset presetManager;
 

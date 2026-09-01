@@ -884,6 +884,10 @@ namespace FormOmni
     {
         trackParams_.setSelPageAndParam(OMNIPAGE_STEPNOTES, 0);
     }
+    void FormMachineOmni::seqMenuEnterEnd() // enter from the right (backing off SCALE)
+    {
+        trackParams_.setSelPageAndParam(OMNIPAGE_STEPNOTES, 6);
+    }
     bool FormMachineOmni::seqMenuAtStart()
     {
         return trackParams_.getSelPage() == OMNIPAGE_STEPNOTES && trackParams_.getSelParam() == 0;
@@ -1746,6 +1750,16 @@ namespace FormOmni
             {
                 trackParams_.changeParam(enc.dir());
 
+                // Menu map: the transpose params page lives in the Transpose view now —
+                // skip it when walking the Mix menu.
+                if (trackParams_.getSelPage() == OMNIPAGE_SEQTPOSE)
+                {
+                    if (enc.dir() > 0)
+                        trackParams_.setSelPageAndParam(OMNIPAGE_SEQMIDI, 0);
+                    else
+                        trackParams_.setSelPageAndParam(OMNIPAGE_TRACKMODES, 2);
+                }
+
                 // if (trackParams_.getSelPage() != prevPage)
                 // {
                 //     switch (trackParams_.getSelPage())
@@ -2415,9 +2429,13 @@ namespace FormOmni
     }
     void FormMachineOmni::onEncoderButtonDown()
     {
-        // Clicking the POTS cell in the machine menu (Mix cursor 19 / Seq page 3) asks the shell
-        // to open the shared Pot Config submode — the machine can't reach auxMacroManager_ itself.
-        if (trackParams_.getSelPage() == OMNIPAGE_POTS)
+        // Clicking the POTS cell in the machine menu asks the shell to open the shared
+        // Pot Config submode — the machine can't reach auxMacroManager_ itself. Only while
+        // the machine menu is actually showing: other machine-owned views (Transpose's
+        // TPAT editor) fall through here too, and a stale selPage left on POTS was
+        // hijacking every click there into the CC editor.
+        if ((omniUiMode_ == OMNIUIMODE_CONFIG || omniUiMode_ == OMNIUIMODE_MIX) &&
+            trackParams_.getSelPage() == OMNIPAGE_POTS)
             potConfigRequested_ = true;
     }
     bool FormMachineOmni::onKeyUpdate(OMXKeypadEvent e)
@@ -2539,21 +2557,21 @@ namespace FormOmni
             }
         }
         break;
-        // Transpose, Transpose Mode, Apply Transpose Pat
+        // Apply Transpose Pat, Transpose, Transpose Mode (menu-map PG20 order)
         case OMNIPAGE_SEQTPOSE:
         {
             if (param == 0)
             {
-                seq_.transpose = constrain(seq_.transpose + amtSlow, -64, 64);
+                seq_.applyTransPat = constrain(seq_.applyTransPat + amtSlow, 0, 1);
             }
             else if (param == 1)
             {
-                seq_.transposeMode = constrain(seq_.transposeMode + amtSlow, 0, TRANPOSEMODE_COUNT - 1);
-                omxDisp.displayMessage(kTranspModeLongMsg[seq_.transposeMode]);
+                seq_.transpose = constrain(seq_.transpose + amtSlow, -64, 64);
             }
             else if (param == 2)
             {
-                seq_.applyTransPat = constrain(seq_.applyTransPat + amtSlow, 0, 1);
+                seq_.transposeMode = constrain(seq_.transposeMode + amtSlow, 0, TRANPOSEMODE_COUNT - 1);
+                omxDisp.displayMessage(kTranspModeLongMsg[seq_.transposeMode]);
             }
         }
         break;
@@ -2739,11 +2757,11 @@ namespace FormOmni
             return false;
         case OMNIPAGE_SEQTPOSE:
         {
-            const char *labels[4] = {"TPOS", "TYPE", "TPAT", ""};
+            const char *labels[4] = {"TPAT", "TPOS", "TYPE", ""};
             String vals[4];
-            vals[0] = String(seq_.transpose);
-            vals[1] = kTranspModeShort[seq_.transposeMode];
-            vals[2] = seq_.applyTransPat == 1 ? "On" : "--";
+            vals[0] = seq_.applyTransPat == 1 ? "On" : "--";
+            vals[1] = String(seq_.transpose);
+            vals[2] = kTranspModeShort[seq_.transposeMode];
             dispParamGrid(labels, vals, selParam);
         }
             return false;

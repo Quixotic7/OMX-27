@@ -398,12 +398,19 @@ void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
 		uint8_t idx = k - 11;
 		if (idx >= FORM_NUM_PATTERNS)
 			return;
-		// Hold F1 + slot = instant jump, overriding the switch style (works in any mode).
+		// Hold F1 + slot = copy that slot into the buffer (paste with F2 on an empty slot).
 		if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
 		{
 			patF1Used_ = true; // F1 acted as a modifier -> no quick-copy on its release
-			queuedPattern_ = -1;
-			switchPattern(idx);
+			if (idx == activePattern_)
+				snapshotActivePattern(); // the live machines are the freshest copy
+			if (patternBuffer_ == nullptr)
+				patternBuffer_ = new FormPattern();
+			if (patternBuffer_ != nullptr)
+			{
+				*patternBuffer_ = patterns_[idx];
+				omxDisp.displayMessage("COPY " + String(idx + 1));
+			}
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 			return;
@@ -413,6 +420,8 @@ void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
 		if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
 		{
 			patF2Used_ = true; // F2 acted as a modifier -> no quick-paste on its release
+			if (idx == activePattern_)
+				snapshotActivePattern(); // the array copy is stale for the active slot
 			if (patternHasContent(idx))
 			{
 				if (patternBuffer_ == nullptr)
@@ -431,6 +440,18 @@ void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
 					loadPatternIntoMachines(activePattern_);
 				omxDisp.displayMessage("PASTE");
 			}
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+			return;
+		}
+		// Hold F3 + slot = clear that slot (no buffer involved — copy first if you need it).
+		if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
+		{
+			patF1Used_ = patF2Used_ = true; // F3 = both keys; suppress their quick actions
+			clearPattern(idx);
+			if (idx == activePattern_)
+				loadPatternIntoMachines(activePattern_);
+			omxDisp.displayMessage("CLEAR " + String(idx + 1));
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 			return;
@@ -460,6 +481,23 @@ void OmxModeForm::onKeyUpdatePatterns(OMXKeypadEvent e)
 
 void OmxModeForm::onDisplayPatterns()
 {
+	// Holding a modifier shows what the slot keys will do (like Seq's F-hold overlays).
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
+	{
+		omxDisp.dispGenericModeLabel("CLEAR SLOT", 0, 0);
+		return;
+	}
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1)
+	{
+		omxDisp.dispGenericModeLabel("COPY SLOT", 0, 0);
+		return;
+	}
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
+	{
+		omxDisp.dispGenericModeLabel("CUT PASTE", 0, 0);
+		return;
+	}
+
 	// Switch-progress bar: Next Bar tracks the bar, the rest track the selected track's loop.
 	float progress = 0.0f;
 	if (omxFormGlobal.isPlaying)
@@ -573,6 +611,8 @@ bool OmxModeForm::onEncoderMI(int dir)
 		omxLeds.setDirty();
 		return true;
 	}
+	// Cursor map (menu-map §4): 0 keys · 1-4 SCALE · 5-7 MIDI · 8-9 MACROS ·
+	// 10-12 ACTIONS · 13-18 CC · 19 CC title.
 	auto omni = getSelectedMachine();
 	if (miCursor_ >= 1 && miCursor_ <= 4) // scale params
 		notesEditScaleParam(miCursor_ - 1, dir);
@@ -584,13 +624,14 @@ bool OmxModeForm::onEncoderMI(int dir)
 		midiSettings.octave = constrain(midiSettings.octave + dir, -5, 4);
 	else if (miCursor_ == 8) // AUX macro select: Off / M8 / NRN / DEL
 		midiMacroConfig.midiMacro = constrain(midiMacroConfig.midiMacro + dir, 0, nummacromodes);
-	else if (miCursor_ >= 9 && miCursor_ <= 14) // CC page (slots + bank), shared with Mix
-		editCCPage(miCursor_ - 9, dir);
-	else if (miCursor_ == 19) // MPOT: may a selected macro take the pots in FORM? (default no)
+	else if (miCursor_ == 9) // MPOT: may a selected macro take the pots in FORM? (default no)
 	{
 		omxFormGlobal.macroConsumesPots = (dir > 0);
 		auxMacroManager_.setMacrosConsumePots(omxFormGlobal.macroConsumesPots);
 	}
+	else if (miCursor_ >= 13 && miCursor_ <= 18) // CC page (slots + bank), shared renderer
+		editCCPage(miCursor_ - 13, dir);
+	// 10-12 = action cells (click to fire); 19 = the CC title (click opens the editor)
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 	return true;
@@ -616,17 +657,18 @@ bool OmxModeForm::onEncoderButtonMI()
 		closeClearSub();
 		return true;
 	}
-	if (miCursor_ == 15) // the selectable "CC" title: open the CC-number editor for this bank
+	if (miCursor_ == 19) // the selectable "CC" title: open the CC-number editor for this bank
 	{
 		openPotConfig();
 		return true;
 	}
-	if (miCursor_ == 16)
+	if (miCursor_ == 10)
 	{
+		clearReturnView_ = -1; // opened from the MI menu -> stay in MI on exit
 		quantEnterSubmenu();
 		return true;
 	}
-	if (miCursor_ == 17)
+	if (miCursor_ == 11)
 	{
 		miClearSub_ = true; // open the Yes/No confirm submenu (default NO)
 		clearSel_ = 0;
@@ -634,7 +676,7 @@ bool OmxModeForm::onEncoderButtonMI()
 		omxDisp.setDirty();
 		return true;
 	}
-	if (miCursor_ == 18)
+	if (miCursor_ == 12)
 	{
 		openPotConfig();
 		return true;
@@ -663,40 +705,40 @@ void OmxModeForm::onDisplayMI()
 		return;
 	}
 
-	// MIDI page (cursor 5-8): Channel / Velocity / Octave / Macro. Velocity is the per-track
-	// default that also governs AUX-macro play; Macro selects the AUX macro (Off/M8/NRN/DEL).
-	if (miCursor_ >= 5 && miCursor_ <= 8)
+	// MIDI page (cursor 5-7): Channel / Velocity / Octave. Velocity is the per-track
+	// default that also governs AUX-macro play.
+	if (miCursor_ >= 5 && miCursor_ <= 7)
 	{
-		const char *labels[4] = {"CHAN", "VEL", "OCT", "MACRO"};
+		const char *labels[4] = {"CHAN", "VEL", "OCT", ""};
 		String vals[4];
 		vals[0] = String(omni->getChannel() + 1);
 		vals[1] = omni->paramDefaultBox(0);
 		vals[2] = String((int)midiSettings.octave);
-		vals[3] = String(macromodes[constrain(midiMacroConfig.midiMacro, 0, nummacromodes)]);
-		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
+		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), ""};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 5, !getEncoderSelect());
 		return;
 	}
 
-	// CC page (cursor 9-15): 5 pot-bank CC slots + the big bank number + the selectable CC
-	// title (click = open the CC-number editor), reusing the Mix CC renderer. No P-Locks here
-	// — MI's low row plays the keyboard, not steps.
-	if (miCursor_ >= 9 && miCursor_ <= 15)
+	// MACROS page (cursor 8-9): AUX macro select (Off/M8/NRN/DEL) + MPOT (may the macro
+	// take the pots in FORM).
+	if (miCursor_ >= 8 && miCursor_ <= 9)
 	{
-		int8_t vals[5];
-		for (uint8_t i = 0; i < 5; i++)
-			vals[i] = (int8_t)ccBankRow()[i];
-		uint8_t sel = miCursor_ - 9; // 0-4 slots, 5 = bank number, 6 = the "CC" title
-		char vbuf[14];
-		if (sel < 5)
-			snprintf(vbuf, sizeof(vbuf), "C%u %d", (unsigned)omni->potLockCC(sel), (int)ccBankRow()[sel]);
-		else if (sel == 5)
-			snprintf(vbuf, sizeof(vbuf), "BANK %u", (unsigned)(omni->getPotBank() + 1));
-		else
-			snprintf(vbuf, sizeof(vbuf), "EDIT"); // title selected: click opens the CC editor
-		omxDisp.dispMixLevels("CC", vbuf, vals, 5, sel, !getEncoderSelect(),
-							  nullptr, (int8_t)(omni->getPotBank() + 1));
+		const char *labels[4] = {"MCRO", "MPOT", "", ""};
+		String vals[4];
+		vals[0] = String(macromodes[constrain(midiMacroConfig.midiMacro, 0, nummacromodes)]);
+		vals[1] = omxFormGlobal.macroConsumesPots ? "On" : "--";
+		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), "", ""};
+		bool locked[4] = {false, false, false, false};
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 8, !getEncoderSelect());
+		return;
+	}
+
+	// CC page (cursor 13-19): the shared renderer. No P-Locks here — MI's low row plays
+	// the keyboard, not steps.
+	if (miCursor_ >= 13 && miCursor_ <= 19)
+	{
+		onDisplayCCPage(miCursor_ - 13, 0, -1);
 		return;
 	}
 
@@ -713,18 +755,15 @@ void OmxModeForm::onDisplayMI()
 		omxDisp.dispOptionCombo("Clear Track?", kYesNo, 2, clearSel_, true);
 		return;
 	}
-	// Actions page (cursor 16-19): QUANTIZE amount + CLEAR + POTS (click to open) + MPOT (a
-	// toggle: does a selected macro take the pots in FORM). Only MPOT is edit-turnable.
-	if (miCursor_ >= 16 && miCursor_ <= 19)
+	// Actions page (cursor 10-12): QUANTIZE amount + CLEAR + POTS — click to fire/open.
+	if (miCursor_ >= 10 && miCursor_ <= 12)
 	{
-		const char *labels[4] = {"QUANT", "CLEAR", "POTS", "MPOT"};
+		const char *labels[4] = {"QUANT", "CLEAR", "POTS", ""};
 		String qv = String(recQuantize_);
-		String mp = omxFormGlobal.macroConsumesPots ? "On" : "--";
 		// §4 label rule: text values overflow the cell — ">" = click the encoder to open.
-		const char *values[4] = {qv.c_str(), ">", ">", mp.c_str()};
+		const char *values[4] = {qv.c_str(), ">", ">", ""};
 		bool locked[4] = {false, false, false, false};
-		bool editingMpot = (miCursor_ == 19 && !getEncoderSelect());
-		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 16, editingMpot);
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 10, false);
 		return;
 	}
 
@@ -895,6 +934,11 @@ void OmxModeForm::quantExitSubmenu(bool apply)
 			omni->setStepNudge(s, quantOrigNudges_[s]); // restore
 	}
 	miQuantSub_ = false;
+	if (clearReturnView_ >= 0) // opened from another view's ACTIONS page: go back
+	{
+		setFormView((uint8_t)clearReturnView_, true);
+		clearReturnView_ = -1;
+	}
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 }
@@ -969,7 +1013,14 @@ bool OmxModeForm::onEncoderNotes(int dir)
 		return true;
 	if (getEncoderSelect())
 	{
-		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 20); // 20 = POTS action
+		uint8_t prev = notesCursor_;
+		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 22); // 20-22 = ACTIONS
+		// Group messages (menu map): STEP LOCKS = the step-param grids, ACTIONS at the end.
+		// (The notes/scale groups pop nothing.)
+		if (notesCursor_ >= 20 && prev < 20)
+			omxDisp.displayMessage("ACTIONS");
+		else if (notesCursor_ >= 12 && notesCursor_ < 20 && (prev < 12 || prev >= 20))
+			omxDisp.displayMessage("STEP LOCKS");
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 		return true;
@@ -991,16 +1042,33 @@ bool OmxModeForm::onEncoderNotes(int dir)
 		notesEditScaleParam(notesCursor_ - 8, dir);
 	else if (notesCursor_ <= 19) // step params (pid 0-7)
 		omni->editStepParam(notesSelStep_, notesCursor_ - 12, dir);
-	// cursor 20 = POTS action (no turn edit; opens on click)
+	// cursors 20-22 = ACTIONS (Quant / Clear / Pots — no turn edit; fire on click)
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 	return true;
 }
 
-// Encoder click in the Notes view: POTS action opens Pot Config; otherwise toggle select/edit.
+// Encoder click in the Notes view: the ACTIONS cells fire; otherwise toggle select/edit.
 bool OmxModeForm::onEncoderButtonNotes()
 {
 	if (notesCursor_ == 20)
+	{
+		clearReturnView_ = FORMVIEW_NOTES; // the submenu renders in MI; come back here
+		setFormView(FORMVIEW_MI, true);
+		quantEnterSubmenu();
+		return true;
+	}
+	if (notesCursor_ == 21)
+	{
+		clearReturnView_ = FORMVIEW_NOTES;
+		setFormView(FORMVIEW_MI, true);
+		miClearSub_ = true;
+		clearSel_ = 0;
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
+	if (notesCursor_ == 22)
 	{
 		openPotConfig();
 		return true;
@@ -1447,13 +1515,13 @@ void OmxModeForm::onDisplayNotes()
 		return;
 	}
 
-	// POTS action (cursor 20): ">" = click the encoder to open the shared Pot Config submode.
-	if (notesCursor_ == 20)
+	// ACTIONS (cursor 20-22): Quant / Clear / Pots — ">" cells, click to fire.
+	if (notesCursor_ >= 20)
 	{
-		const char *labels[4] = {"POTS", "", "", ""};
-		const char *values[4] = {">", "", "", ""};
+		const char *labels[4] = {"QNT", "CLR", "POTS", ""};
+		const char *values[4] = {">", ">", ">", ""};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, 0, false);
+		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 20, false);
 		return;
 	}
 
@@ -2525,24 +2593,24 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		return true;
 	auto omni = getSelectedMachine();
 
-	// Machine menu (page 3+): let the machine navigate/edit (it reads getEncoderSelect() too),
-	// except turning left off its first page in SELECT mode returns to the custom TRIG page.
-	if (stepMenuPage_ == 3)
+	// Machine menu (page 4, STEPNOTES): let the machine navigate/edit (it reads
+	// getEncoderSelect() too), except backing off its first param returns to the CC page
+	// and forward off its end crosses into the TRACK SETUP group (SCALE page).
+	if (stepMenuPage_ == 4)
 	{
 		if (getEncoderSelect() && dir < 0 && omni->seqMenuAtStart())
 		{
-			stepMenuPage_ = 2;
-			stepMenuSel_ = 3;
+			stepMenuPage_ = 3; // back to the CC page's title cell
+			stepMenuSel_ = 6;
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 			return true;
 		}
-		// The notes page is the SEQ menu's only machine page — the track/global params
-		// live in the MIX view now (Seq = programming steps, Mix = track level). Turning
-		// forward off its end lands on the POTS action page.
 		if (getEncoderSelect() && dir > 0 && omni->seqMenuAtEnd())
 		{
-			stepMenuPage_ = 4; // POTS action, after the notes editor
+			stepMenuPage_ = 5; // SCALE — first page of the TRACK SETUP group
+			stepMenuSel_ = 0;
+			omxDisp.displayMessage("TRACK SETUP");
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 			return true;
@@ -2550,15 +2618,96 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		return false; // forward to the machine
 	}
 
-	// POTS action page (4): after the notes menu. Turning back returns to the notes editor;
-	// the click (onEncoderButtonStep) opens the shared Pot Config submode.
-	if (stepMenuPage_ == 4)
+	// CC page (3): 5 slots + bank + title. A held low-row step makes the turn write that
+	// step's CC P-Lock (a hold is an edit gesture); otherwise select navigates / edit
+	// bumps the live value (or the bank).
+	if (stepMenuPage_ == 3)
 	{
-		if (dir < 0)
+		if (heldStepMask_ != 0 && stepMenuSel_ < 5)
 		{
-			stepMenuPage_ = 3;
+			uint8_t slot = stepMenuSel_;
+			for (uint8_t st = 0; st < 16; st++)
+				if (heldStepMask_ & (1 << st))
+				{
+					int base = omni->getStepPotLock(st, slot);
+					if (base < 0)
+						base = ccBankRow()[slot];
+					omni->setStepPotLock(st, slot, (int8_t)constrain(base + dir, 0, 127));
+				}
+			stepEdited_ = true;
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+			return true;
+		}
+		if (!getEncoderSelect())
+		{
+			if (stepMenuSel_ <= 5)
+				editCCPage(stepMenuSel_, dir); // slots 0-4 + bank; the title has no turn edit
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+			return true;
+		}
+		// Select: walk the 7 cells, then into the machine's STEPNOTES page.
+		int s = (int)stepMenuSel_ + dir;
+		if (s > 6)
+		{
+			stepMenuPage_ = 4;
 			omni->seqMenuEnter();
 		}
+		else if (s < 0)
+		{
+			stepMenuPage_ = 2;
+			stepMenuSel_ = 3;
+		}
+		else
+			stepMenuSel_ = (uint8_t)s;
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
+
+	// SCALE page (5, TRACK SETUP group): 4 grid cells; back off the start returns to the
+	// notes editor (STEP group), forward off the end lands on ACTIONS.
+	if (stepMenuPage_ == 5)
+	{
+		if (!getEncoderSelect())
+		{
+			notesEditScaleParam(stepMenuSel_, dir);
+			omxDisp.setDirty();
+			return true;
+		}
+		int s = (int)stepMenuSel_ + dir;
+		if (s > 3)
+		{
+			stepMenuPage_ = 6;
+			stepMenuSel_ = 0;
+		}
+		else if (s < 0)
+		{
+			stepMenuPage_ = 4;
+			omni->seqMenuEnterEnd();
+			omxDisp.displayMessage("STEP");
+		}
+		else
+			stepMenuSel_ = (uint8_t)s;
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return true;
+	}
+
+	// ACTIONS page (6): QNT / CLR / POTS action cells (click fires them).
+	if (stepMenuPage_ == 6)
+	{
+		if (!getEncoderSelect())
+			return true; // actions have no turn edit
+		int s = (int)stepMenuSel_ + dir;
+		if (s < 0)
+		{
+			stepMenuPage_ = 5;
+			stepMenuSel_ = 3;
+		}
+		else
+			stepMenuSel_ = (uint8_t)constrain(s, 0, 2);
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 		return true;
@@ -2566,7 +2715,7 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 
 	// Holding a step on a custom param page always edits the selected param (a hold is an edit
 	// gesture), regardless of select/edit mode.
-	if (heldStepMask_ != 0 && stepMenuPage_ != 0)
+	if (heldStepMask_ != 0 && (stepMenuPage_ == 1 || stepMenuPage_ == 2))
 	{
 		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
 		int delta = enc.accel(1);
@@ -2644,14 +2793,13 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		return true;
 	}
 
-	// SELECT mode: navigate the custom cursor [overview=0, params 1..8], then into the machine menu.
+	// SELECT mode: navigate the custom cursor [overview=0, params 1..8], then the CC page.
 	int idx = (stepMenuPage_ == 0) ? 0 : (1 + (stepMenuPage_ - 1) * 4 + stepMenuSel_);
 	idx += dir;
 	if (idx > 8)
 	{
-		stepMenuPage_ = 3; // enter the machine menu
-		omni->seqMenuEnter();
-		omxDisp.displayMessage("STEP NOTES");
+		stepMenuPage_ = 3; // CC page (still the STEP group — no popup)
+		stepMenuSel_ = 0;
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 		return true;
@@ -2679,15 +2827,52 @@ bool OmxModeForm::onEncoderButtonStep()
 {
 	if (formView_ != FORMVIEW_STEP)
 		return false;
-	if (stepMenuPage_ == 4) // POTS action page: open the shared Pot Config submode
+	if (stepMenuPage_ == 6) // ACTIONS: Quant / Clear / Pots
 	{
-		openPotConfig();
+		if (stepMenuSel_ == 0)
+		{
+			clearReturnView_ = FORMVIEW_STEP; // the submenu renders in MI; come back here
+			setFormView(FORMVIEW_MI, true);
+			quantEnterSubmenu();
+		}
+		else if (stepMenuSel_ == 1)
+		{
+			clearReturnView_ = FORMVIEW_STEP;
+			setFormView(FORMVIEW_MI, true);
+			miClearSub_ = true;
+			clearSel_ = 0;
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		else
+			openPotConfig();
 		return true;
 	}
-	if (stepMenuPage_ == 3)
+	if (stepMenuPage_ == 3) // CC page
+	{
+		// Click while holding step(s) on a slot = clear that slot's P-Lock.
+		if (heldStepMask_ != 0 && stepMenuSel_ < 5)
+		{
+			auto omni = getSelectedMachine();
+			for (uint8_t st = 0; st < 16; st++)
+				if (heldStepMask_ & (1 << st))
+					omni->setStepPotLock(st, stepMenuSel_, -1);
+			stepEdited_ = true;
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+			return true;
+		}
+		if (stepMenuSel_ == 6) // the selectable "CC" title: open the CC-number editor
+		{
+			openPotConfig();
+			return true;
+		}
+		return false; // otherwise toggle the global select/edit
+	}
+	if (stepMenuPage_ == 4)
 		return false; // machine menu: falls through to toggle the global select/edit
 	// Holding a step on a param page: clear that param's P-Lock (a distinct action, not select/edit).
-	if (heldStepMask_ != 0 && stepMenuPage_ != 0)
+	if (heldStepMask_ != 0 && (stepMenuPage_ == 1 || stepMenuPage_ == 2))
 	{
 		uint8_t pid = (stepMenuPage_ - 1) * 4 + stepMenuSel_;
 		auto omni = getSelectedMachine();
@@ -2756,20 +2941,42 @@ void OmxModeForm::onDisplayStep()
 		return;
 	}
 
-	// Machine menu (page 3): the machine renders it natively (Notes/CC/Transpose/track params).
+	// CC page (3): shared renderer; held low-row steps show/edit that step's P-Locks.
 	if (stepMenuPage_ == 3)
+	{
+		onDisplayCCPage(stepMenuSel_, heldStepMask_, heldStepKey_);
+		return;
+	}
+
+	// Machine menu (page 4): the STEPNOTES editor, machine-rendered.
+	if (stepMenuPage_ == 4)
 	{
 		omni->onDisplayUpdate();
 		return;
 	}
 
-	// POTS action page (4): ">" = click the encoder to open the shared Pot Config submode.
-	if (stepMenuPage_ == 4)
+	// SCALE page (5, TRACK SETUP group): Root / Scale / Lock / Group.
+	if (stepMenuPage_ == 5)
 	{
-		const char *labels[4] = {"POTS", "", "", ""};
-		const char *values[4] = {">", "", "", ""};
+		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
+		String vals[4];
+		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
+		vals[1] = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
+		vals[2] = scaleConfig.lockScale ? "On" : "--";
+		vals[3] = scaleConfig.group16 ? "On" : "--";
+		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, 0, false);
+		omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, !getEncoderSelect());
+		return;
+	}
+
+	// ACTIONS page (6): Quant / Clear / Pots — ">" cells, click to fire.
+	if (stepMenuPage_ == 6)
+	{
+		const char *labels[4] = {"QNT", "CLR", "POTS", ""};
+		const char *values[4] = {">", ">", ">", ""};
+		bool locked[4] = {false, false, false, false};
+		omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, false);
 		return;
 	}
 
@@ -3602,25 +3809,6 @@ bool OmxModeForm::onEncoderMix(int dir)
 {
 	if (dir == 0)
 		return true;
-	// A held low-row step on a CC slot is an edit gesture (like the Step view's
-	// hold-step): the turn always writes that step's P-Lock, regardless of
-	// select/edit mode — the encoder click stays free to clear the lock.
-	if (mixHeldStepMask_ != 0 && mixCursor_ >= kMixCcStart && mixCursor_ < kMixCcBank)
-	{
-		uint8_t slot = mixCursor_ - kMixCcStart;
-		auto omni = getSelectedMachine();
-		for (uint8_t st = 0; st < 16; st++)
-			if (mixHeldStepMask_ & (1 << st))
-			{
-				int base = omni->getStepPotLock(st, slot);
-				if (base < 0)
-					base = ccBankRow()[slot];
-				omni->setStepPotLock(st, slot, (int8_t)constrain(base + dir, 0, 127));
-			}
-		omxDisp.setDirty();
-		omxLeds.setDirty();
-		return true;
-	}
 	// In the track/global param menu (last cursor): the machine navigates/edits its own
 	// pages; backing off the first page returns to the TRACK grid.
 	if (mixCursor_ == kMixMenu)
@@ -3640,10 +3828,12 @@ bool OmxModeForm::onEncoderMix(int dir)
 		uint8_t prev = mixCursor_;
 		mixCursor_ = (uint8_t)constrain((int)mixCursor_ + dir, 0, kMixMenu);
 		if (mixCursor_ == kMixMenu && prev != kMixMenu)
-		{
 			getSelectedMachine()->mixMenuEnter();
-			omxDisp.displayMessage("TRACK PARAMS");
-		}
+		// Group messages (menu map): MIX = overview + LEVELS, TRACK = grid + menu.
+		if (prev < kMixTrack && mixCursor_ >= kMixTrack)
+			omxDisp.displayMessage("TRACK");
+		else if (prev >= kMixTrack && mixCursor_ < kMixTrack)
+			omxDisp.displayMessage("MIX");
 		omxDisp.setDirty();
 		return true;
 	}
@@ -3661,11 +3851,6 @@ bool OmxModeForm::onEncoderMix(int dir)
 	{
 		machines_[mixCursor_ - 1]->editParamDefault(0, dir);
 	}
-	else if (mixCursor_ <= kMixCcBank) // CC page: 5 slots + bank number (shared with MI)
-	{
-		editCCPage(mixCursor_ - kMixCcStart, dir);
-	}
-	// kMixCcTitle = the selectable "CC" title (no turn edit; click opens the CC editor)
 	else if (mixCursor_ >= kMixTrack) // TRACK grid
 	{
 		auto omni = getSelectedMachine();
@@ -3686,6 +3871,40 @@ bool OmxModeForm::onEncoderMix(int dir)
 	return true;
 }
 
+// Shared CC-page renderer (Seq page 3 + MI): 5 slots + bank + selectable title.
+// heldMask/heldKey: held low-row steps (that step's P-Locks show instead of live values).
+void OmxModeForm::onDisplayCCPage(uint8_t sel, uint16_t heldMask, int8_t heldKey)
+{
+	auto omni = getSelectedMachine();
+	bool held = (heldMask != 0);
+	int8_t vals[5];
+	bool locked[5];
+	for (uint8_t i = 0; i < 5; i++)
+	{
+		int8_t lockVal = held && heldKey >= 0 ? omni->getStepPotLock(heldKey, i) : (int8_t)-1;
+		locked[i] = lockVal >= 0;
+		// Holding a step shows THAT step's locks (no bar = unlocked slot);
+		// otherwise the live last-sent values.
+		vals[i] = held ? lockVal : (int8_t)ccBankRow()[i];
+	}
+	char tbuf[12], vbuf[14];
+	snprintf(tbuf, sizeof(tbuf), held ? "CC LOCK" : "CC");
+	if (sel < 5)
+	{
+		int v = held ? vals[sel] : (int)ccBankRow()[sel];
+		if (v < 0)
+			snprintf(vbuf, sizeof(vbuf), "C%u --", (unsigned)omni->potLockCC(sel));
+		else
+			snprintf(vbuf, sizeof(vbuf), "C%u %d", (unsigned)omni->potLockCC(sel), v);
+	}
+	else if (sel == 5)
+		snprintf(vbuf, sizeof(vbuf), "BANK %u", (unsigned)(omni->getPotBank() + 1));
+	else
+		snprintf(vbuf, sizeof(vbuf), "EDIT"); // title selected: click opens the CC editor
+	omxDisp.dispMixLevels(tbuf, vbuf, vals, 5, sel, !getEncoderSelect(),
+						  held ? locked : nullptr, (int8_t)(omni->getPotBank() + 1));
+}
+
 // Render the Mix view's encoder pages.
 void OmxModeForm::onDisplayMix()
 {
@@ -3698,39 +3917,6 @@ void OmxModeForm::onDisplayMix()
 		char vbuf[12];
 		snprintf(vbuf, sizeof(vbuf), "T%u %u", (unsigned)(sel + 1), (unsigned)vals[sel]);
 		omxDisp.dispMixLevels("LEVELS", vbuf, vals, kNumMachines, sel, !getEncoderSelect());
-		return;
-	}
-	if (mixCursor_ >= kMixCcStart && mixCursor_ <= kMixCcTitle) // CC: 5 slots + bank + CC title
-	{
-		auto omni = getSelectedMachine();
-		bool held = (mixHeldStepMask_ != 0);
-		int8_t vals[5];
-		bool locked[5];
-		for (uint8_t i = 0; i < 5; i++)
-		{
-			int8_t lockVal = held && mixHeldStepKey_ >= 0 ? omni->getStepPotLock(mixHeldStepKey_, i) : (int8_t)-1;
-			locked[i] = lockVal >= 0;
-			// Holding a step shows THAT step's locks (no bar = unlocked slot);
-			// otherwise the live last-sent values.
-			vals[i] = held ? lockVal : (int8_t)ccBankRow()[i];
-		}
-		uint8_t sel = mixCursor_ - kMixCcStart; // 0-4 slots, 5 = bank number, 6 = the "CC" title
-		char tbuf[12], vbuf[14];
-		snprintf(tbuf, sizeof(tbuf), held ? "CC LOCK" : "CC");
-		if (sel < 5)
-		{
-			int v = held ? vals[sel] : (int)ccBankRow()[sel];
-			if (v < 0)
-				snprintf(vbuf, sizeof(vbuf), "C%u --", (unsigned)omni->potLockCC(sel));
-			else
-				snprintf(vbuf, sizeof(vbuf), "C%u %d", (unsigned)omni->potLockCC(sel), v);
-		}
-		else if (sel == 5)
-			snprintf(vbuf, sizeof(vbuf), "BANK %u", (unsigned)(omni->getPotBank() + 1));
-		else
-			snprintf(vbuf, sizeof(vbuf), "EDIT"); // title selected: click opens the CC editor
-		omxDisp.dispMixLevels(tbuf, vbuf, vals, 5, sel, !getEncoderSelect(),
-							  held ? locked : nullptr, (int8_t)(omni->getPotBank() + 1));
 		return;
 	}
 	if (mixCursor_ == kMixMenu) // track/global param menu: the machine renders its pages
@@ -3779,25 +3965,6 @@ void OmxModeForm::onEncoderButtonDown()
 			return;
 		break;
 	case FORMVIEW_MIX:
-		// CC page: click while holding step(s) on a slot = clear that slot's P-Lock
-		// (the same click-clears-a-lock convention as the Step view's param pages).
-		if (mixHeldStepMask_ != 0 && mixCursor_ >= kMixCcStart && mixCursor_ < kMixCcBank)
-		{
-			uint8_t slot = mixCursor_ - kMixCcStart;
-			auto omni = getSelectedMachine();
-			for (uint8_t st = 0; st < 16; st++)
-				if (mixHeldStepMask_ & (1 << st))
-					omni->setStepPotLock(st, slot, -1);
-			omxDisp.setDirty();
-			omxLeds.setDirty();
-			return;
-		}
-		// CC page: click the selectable "CC" title to open the CC-number editor.
-		if (mixCursor_ == kMixCcTitle)
-		{
-			openPotConfig();
-			return;
-		}
 		break;
 	default:
 		break;
@@ -4033,9 +4200,9 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 	case FORMVIEW_STEP:
 		if (keyConsumed)
 			return;
-		// Machine menu (page 3): F1/F2/F3 still copy/paste/length; a plain step tap selects
-		// which step the notes/CC pages edit.
-		if (stepMenuPage_ == 3)
+		// Machine menu (page 4, STEPNOTES): F1/F2/F3 still copy/paste/length; a plain step
+		// tap selects which step the notes editor edits.
+		if (stepMenuPage_ == 4)
 		{
 			if (omxFormGlobal.shortcutMode != FORMSHORTCUT_NONE)
 			{
@@ -4181,9 +4348,9 @@ void OmxModeForm::updateLEDs()
 	switch (formView_)
 	{
 	case FORMVIEW_STEP:
-		if (stepMenuPage_ == 3)
+		if (stepMenuPage_ == 4)
 		{
-			getSelectedMachine()->updateLEDs(); // machine menu uses the machine's own LEDs
+			getSelectedMachine()->updateLEDs(); // STEPNOTES uses the machine's own LEDs
 			return;
 		}
 		updateStepLEDs();
