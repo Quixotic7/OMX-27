@@ -72,7 +72,7 @@ class Omx:
                 continue
             self.sysex(CMD_DRAW, c, *self._enc7(chunk))
             self.pump()          # keep input flowing while a frame streams out
-            time.sleep(0.004)    # pace so the device FIFO keeps up
+            time.sleep(0.002)    # pace so the device FIFO keeps up
         self.sysex(CMD_DRAW_UPD)
         self.last_frame = buf
 
@@ -230,7 +230,7 @@ def main():
                 led_sent = list(colors)
 
             # screen: at most 15fps, and only when something changed
-            if state["dirty"] and now - last_draw > 1.0 / 8:
+            if state["dirty"] and now - last_draw > 1.0 / 15:
                 last_draw = now
                 state["dirty"] = False
                 img = Image.new("1", (128, 32), 0)
