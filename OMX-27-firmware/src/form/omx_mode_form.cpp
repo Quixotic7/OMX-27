@@ -898,6 +898,29 @@ void OmxModeForm::flushRecHeld()
 
 // QUANTIZE submenu (entered by clicking the QUANT menu item). Snapshot the track's nudges so the
 // amount can be scrubbed and previewed live, then applied (click) or cancelled (AUX).
+// The Quant/Clear submenus render in the MI view. Opening them from another view's
+// ACTIONS page switches there and remembers both the view AND its menu position, so
+// closing lands exactly where the action was fired (setFormView resets the cursors).
+void OmxModeForm::submenuSetReturn()
+{
+	clearReturnView_ = (formView_ == FORMVIEW_MI) ? (int8_t)-1 : (int8_t)formView_;
+	subRetMixCursor_ = mixCursor_;
+	subRetNotesCursor_ = notesCursor_;
+	if (formView_ != FORMVIEW_MI)
+		setFormView(FORMVIEW_MI, true);
+}
+
+// Return to the view (and menu position) the submenu was opened from.
+void OmxModeForm::submenuReturn()
+{
+	if (clearReturnView_ < 0)
+		return;
+	setFormView((uint8_t)clearReturnView_, true);
+	mixCursor_ = subRetMixCursor_;     // Mix: back to the ACTIONS cell (the machine's
+	notesCursor_ = subRetNotesCursor_; // menu page survives in trackParams_)
+	clearReturnView_ = -1;             // Seq: stepMenuPage_/Sel_ are never reset — already fine
+}
+
 void OmxModeForm::quantEnterSubmenu()
 {
 	auto omni = getSelectedMachine();
@@ -933,11 +956,7 @@ void OmxModeForm::quantExitSubmenu(bool apply)
 			omni->setStepNudge(s, quantOrigNudges_[s]); // restore
 	}
 	miQuantSub_ = false;
-	if (clearReturnView_ >= 0) // opened from another view's ACTIONS page: go back
-	{
-		setFormView((uint8_t)clearReturnView_, true);
-		clearReturnView_ = -1;
-	}
+	submenuReturn(); // opened from another view's ACTIONS page: go back where we were
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 }
@@ -946,11 +965,7 @@ void OmxModeForm::quantExitSubmenu(bool apply)
 void OmxModeForm::closeClearSub()
 {
 	miClearSub_ = false;
-	if (clearReturnView_ >= 0)
-	{
-		setFormView((uint8_t)clearReturnView_, true);
-		clearReturnView_ = -1;
-	}
+	submenuReturn();
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 }
@@ -1052,15 +1067,13 @@ bool OmxModeForm::onEncoderButtonNotes()
 {
 	if (notesCursor_ == 20)
 	{
-		clearReturnView_ = FORMVIEW_NOTES; // the submenu renders in MI; come back here
-		setFormView(FORMVIEW_MI, true);
+		submenuSetReturn(); // the submenu renders in MI; come back here after
 		quantEnterSubmenu();
 		return true;
 	}
 	if (notesCursor_ == 21)
 	{
-		clearReturnView_ = FORMVIEW_NOTES;
-		setFormView(FORMVIEW_MI, true);
+		submenuSetReturn();
 		miClearSub_ = true;
 		clearSel_ = 0;
 		omxDisp.setDirty();
@@ -2830,14 +2843,12 @@ bool OmxModeForm::onEncoderButtonStep()
 	{
 		if (stepMenuSel_ == 0)
 		{
-			clearReturnView_ = FORMVIEW_STEP; // the submenu renders in MI; come back here
-			setFormView(FORMVIEW_MI, true);
+			submenuSetReturn(); // the submenu renders in MI; come back here after
 			quantEnterSubmenu();
 		}
 		else if (stepMenuSel_ == 1)
 		{
-			clearReturnView_ = FORMVIEW_STEP;
-			setFormView(FORMVIEW_MI, true);
+			submenuSetReturn();
 			miClearSub_ = true;
 			clearSel_ = 0;
 			omxDisp.setDirty();
@@ -3974,20 +3985,13 @@ void OmxModeForm::onEncoderButtonDown()
 	int8_t action = selMachine->takeActionRequest(); // ACTIONS page in the machine menu (Mix)
 	if (action == 0)
 	{
-		clearReturnView_ = -1; // the quant submenu renders in MI; return here after
-		if (formView_ != FORMVIEW_MI)
-		{
-			clearReturnView_ = (int8_t)formView_;
-			setFormView(FORMVIEW_MI, true);
-		}
+		submenuSetReturn(); // the quant submenu renders in MI; return here after
 		quantEnterSubmenu();
 		return;
 	}
 	if (action == 1)
 	{
-		clearReturnView_ = (formView_ == FORMVIEW_MI) ? (int8_t)-1 : (int8_t)formView_;
-		if (formView_ != FORMVIEW_MI)
-			setFormView(FORMVIEW_MI, true);
+		submenuSetReturn();
 		miClearSub_ = true;
 		clearSel_ = 0;
 		omxDisp.setDirty();
@@ -4321,10 +4325,8 @@ void OmxModeForm::onKeyHeldUpdate(OMXKeypadEvent e)
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX && e.key() == 3 && !miClearSub_)
 	{
 		// A hold does not arm (the release toggle is suppressed because it's not a quick click).
-		// Remember the current view so we can return to it, then show the CLEAR submenu (MI view).
-		clearReturnView_ = (formView_ == FORMVIEW_MI) ? (int8_t)-1 : (int8_t)formView_;
-		if (formView_ != FORMVIEW_MI)
-			setFormView(FORMVIEW_MI, true);
+		// Remember the current view + menu position, then show the CLEAR submenu (MI view).
+		submenuSetReturn();
 		miClearSub_ = true;
 		clearSel_ = 0;
 		omxDisp.setDirty();

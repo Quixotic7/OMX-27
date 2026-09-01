@@ -40,6 +40,16 @@ Two ways to switch:
 
 A selected cell/param is drawn **boxed**; while you're editing it, it's **inverted**.
 
+**Cell glyphs** (used across FORM's 4-cell param grids):
+- ☐ *(empty checkbox)* = **off** · ☑ *(checked)* = **on** — for toggles like Triplet, Mono,
+  Mute, Solo, Lock.
+- **↗-box** (`@`) = clicking this cell **opens a submenu** (Pot Config, Quantize).
+- **✕** (`µ`) = clicking this cell is a **destructive action** (Clear track).
+
+**Groups:** views organize their pages into named groups — crossing into a group with the
+encoder pops its name once (e.g. "TRACK" in Mix, "TRACK SETUP" / "STEP" in Seq, "STEP
+LOCKS" / "ACTIONS" in Notes).
+
 ---
 
 ## 3. Seven views, switched from the AUX layer
@@ -129,16 +139,17 @@ play on the **selected track's** MIDI channel and velocity.
 - **Keyboard (page 0)** — in EDIT, the encoder **changes the selected track**. Along the
   bottom, small bars show each active page with a moving playhead.
 - **SCALE** — Root / Scale / Lock / Group (shared global scale).
-- **MIDI** — **Chan / Vel / Oct / Macro**. Velocity is the track's default (it also governs
-  live play). **Macro** selects an AUX macro (Off / M8 / NRN / DEL) — see the note in §11.
-- **CC** — the track's 5 pot-bank knobs as bars, plus the **bank number**. Turning a knob
-  sends its CC live; the **"CC" title** is selectable — click it to edit which CC number each
-  knob sends (see §10).
-- **QUANT / CLEAR / POTS / MPOT** — the first three are actions (click to open):
-  **Quantize** pulls recorded nudges toward the grid by an amount you morph live; **Clear**
-  wipes the track's pattern (Yes/No); **Pots** opens the CC-number editor. **MPOT** is a
-  toggle (default **off**): whether a *selected* AUX macro is allowed to take the pots in
-  FORM — leave it off to keep the knobs on the track's CC bank (see §11).
+- **MIDI** — **Chan / Vel / Oct**. Velocity is the track's default (it also governs live
+  play).
+- **MACROS** — **Mcro** selects an AUX macro (Off / M8 / NRN / DEL) and **MPot** is a
+  toggle (default **off**): whether a *selected* macro may take the pots in FORM — leave
+  it off to keep the knobs on the track's CC bank (see the Macros note at the end).
+- **ACTIONS** — **Quant** (@) morphs recorded nudges toward the grid live, click again to
+  apply; **Clear** (µ) wipes the track's pattern (Yes/No); **Pots** (@) opens the
+  CC-number editor.
+- **CC** (last) — the track's 5 pot-bank knobs as bars, plus the **bank number**. Turning
+  a knob sends its CC live; the **"CC" title** is selectable — click it to edit which CC
+  number each knob sends (see §10).
 
 ---
 
@@ -156,9 +167,13 @@ This is the classic step programmer for the selected track.
 - **Hold a step and turn the encoder** to fine-edit the current mode's value directly
   (velocity/chance sweep with acceleration; in Note mode the turn shifts the chord by
   semitones).
-- **Turn the encoder** (nothing held) to walk the menu: the step **param pages** (a 4-cell
-  grid: Vel/Nudge/Len/MFX and Prob/Cond/Func/Accum), then the per-step **Notes editor**,
-  and finally a **POTS** action (click to open the CC-number editor).
+- **Turn the encoder** (nothing held) to walk the menu, organized in two groups. The
+  **STEP group**: the step **param pages** (a 4-cell grid: Vel/Nudge/Len/MFX and
+  Prob/Cond/Func/Accum), the **CC page** (5 CC bars + bank — hold a step + turn the
+  encoder on a slot to write that step's CC P-Lock, click to clear it, click the "CC"
+  title to edit CC numbers), and the per-step **Notes editor**. Then the **TRACK SETUP
+  group** (its name pops as you cross): the **SCALE page** and an **ACTIONS page**
+  (Quant @ / Clear µ / Pots @).
 - On a **param page**, the top row becomes the **selected param's value palette** — every
   param has one, including Nudge (9 keys, zero in the middle) and Accum (5 keys). With
   steps **held** it sets those steps (and P-Locks them); with nothing held it sets the
@@ -180,17 +195,17 @@ TO?"** (settings and colour too). While still holding the track, **tap a destina
 track key** to copy ("TRK n > m"); tap more keys to copy to several tracks. Release the
 held track to cancel. Destructive on the destination, like the tools.
 
-Turn the encoder (SELECT) to move through the MIX pages:
+Turn the encoder (SELECT) to move through the MIX pages, in two groups ("MIX" / "TRACK"
+pop as you cross between them):
 
-- **Overview** (EDIT-turn selects the track).
-- **LEVELS** — an 8-bar per-track **velocity mixer**; editing a bar sets that track's default
-  velocity (pushed to every step without its own velocity lock).
-- **CC** — the same 5-knob CC page as MI, **plus per-step P-Locks**: hold a low-row step and
-  turn a knob (or the encoder on a slot) to lock that step's CC; click a slot to clear it. The
-  **"CC" title** is selectable → click to edit the bank's CC numbers.
-- **TRACK** — Mute / Solo / Gate / Rate for the selected track.
-- **TRACK PARAMS** — the machine's full param menu (Length/MFX, modes, transpose, MIDI,
-  timings, scale, and a **POTS** action). Global **BPM** lives on the TIMINGS page.
+- **MIX group — Overview** (EDIT-turn selects the track) and **LEVELS**, an 8-bar
+  per-track **velocity mixer**; editing a bar sets that track's default velocity (pushed
+  to every step without its own velocity lock).
+- **TRACK group — TRACK grid** (Mute / Solo / Gate / Rate for the selected track) and the
+  machine's full param menu: Length/MFX, modes, MIDI, timings, scale, and an **ACTIONS**
+  page (Quant @ / Clear µ / Pots @). Global **BPM** lives on the TIMINGS page. (The
+  transpose params live in the **Transpose view**; the CC page lives in the **Seq view**,
+  where steps can be held for P-Locks.)
 
 ---
 
@@ -200,12 +215,13 @@ In FORM the **5 knobs are the selected track's pot bank** — each sends a mappe
 track's channel. A track can use any of the banks; switch banks on the **CC page** (the big
 bank number).
 
-- The **CC page** bars show each knob's last-sent value. Turn a knob to send + move its bar.
-- **Which CC number** each knob sends is set in **Pot Config**. Open it from the **POTS** menu
-  item (present in Mix, Seq, Notes, and MI) or by clicking the selectable **"CC" title** on
-  the CC page. Editing there changes what the current bank's knobs transmit; press AUX or the
-  Exit page to return.
-- **P-Locks** (Mix/Seq): hold a step and move a knob (or the encoder on a CC slot) to lock a
+- The **CC page** (in Seq and MI) bars show each knob's last-sent value. Turn a knob to
+  send + move its bar.
+- **Which CC number** each knob sends is set in **Pot Config**. Open it from the **Pots @**
+  cell on any ACTIONS page (Mix, Seq, Notes, MI) or by clicking the selectable **"CC"
+  title** on the CC page. Editing there changes what the current bank's knobs transmit;
+  press AUX or the Exit page to return.
+- **P-Locks** (Seq): hold a step and move a knob (or the encoder on a CC slot) to lock a
   per-step CC value; it fires when that step plays.
 
 ---
@@ -216,7 +232,10 @@ bank number).
 and settings) — switch patterns to build song sections. Tap a slot to switch/queue it. **Switch style**
 (keys 3–6) decides *when* a queued switch happens: **Finish Loop**, **Next Bar**, **Instant**,
 or **Chained** (build a chain of patterns). A progress bar shows when the switch will land.
-Copy/paste with the F1/F2 quick-tap + hold idiom.
+Slot operations (holding the modifier shows what the slots will do): **F1 + slot = copy**
+it to the buffer · **F2 + slot = cut** a filled slot / **paste** into an empty one ·
+**F3 + slot = clear** it. A *quick tap* of key 1/2 still copies/pastes the **active**
+pattern.
 
 **TRANSPOSE** — a 16-slot lane that transposes the track's notes per step (hold a step, pick a
 value; the encoder covers the full ±48 range while the palette keys are quick 0–9 shortcuts).
@@ -227,7 +246,8 @@ key — to return to the lane. Per-step **Accum** (Seq param page 2) makes indiv
 *walk* through this lane over successive loops for evolving, Metropolis-style lines.
 
 **NOTES** — a focused chord editor: pick a step, edit its up-to-6 notes as names or numbers,
-with the scale params and full step params on the same encoder walk.
+with the scale params, the full step params ("STEP LOCKS" group), and an ACTIONS page on
+the same encoder walk.
 
 **TOOLS** — **11 one-shot pattern operations** on the selected track. Turn the encoder to move
 through the tools (a tool's name pops as you cross into it); each tool's page shows its params
@@ -293,5 +313,5 @@ keys 9/10 = scope page/track · encoder click on a button also fires it.
 
 > **Heads-up on Macros:** an AUX macro (M8/NRN/DEL) can take over the pots. In FORM this is
 > **off by default** — a selected macro leaves the knobs on the track's CC bank. If you *want*
-> the macro to drive the knobs, turn **MPOT = On** (the 4th cell on the MI actions page). With
+> the macro to drive the knobs, turn **MPOT = On** (on the MI MACROS page). With
 > MPOT off, the CC-page bars track the knobs normally even while a macro is selected.

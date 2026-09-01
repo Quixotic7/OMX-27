@@ -237,6 +237,10 @@ private:
 	void updateMixHoldLEDs();                  // paint those controls on the low row
 	int8_t heldTrackKey_ = -1; // track key held right now in Mix (for K5 hue), -1 = none
 	uint8_t mixCopyMode_ = 0;  // armed track copy while holding a track: 0 off, 1 pattern, 2 all
+	// Quant/Clear submenu round-trip (they render in MI): view + menu position to restore.
+	void submenuSetReturn();
+	void submenuReturn();
+	uint8_t subRetMixCursor_ = 0, subRetNotesCursor_ = 0;
 	// Mix encoder pages (flat cursor): 0 = track overview, 1-8 = LEVELS (per-track
 	// default-velocity mixer), 9-12 = TRACK (Mute/Solo/Gate/Rate). Click = select/edit.
 	uint8_t mixCursor_ = 0;
