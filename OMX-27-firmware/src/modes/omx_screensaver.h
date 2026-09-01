@@ -16,6 +16,7 @@ public:
 	void resetCounter();
 
 	void updateScreenSaverState();
+	void start(); // force the screensaver on (CONFIG test action)
 	bool shouldShowScreenSaver();
 
 	void onEncoderChanged(Encoder::Update enc) override;

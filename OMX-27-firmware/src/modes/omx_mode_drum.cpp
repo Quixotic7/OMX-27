@@ -890,18 +890,7 @@ void OmxModeDrum::updateLEDs()
 		{
 			if (midiSettings.midiKeyState[q] == -1)
 			{
-				if (colorConfig.midiBg_Hue == 0)
-				{
-					strip.setPixelColor(q, LEDOFF);
-				}
-				else if (colorConfig.midiBg_Hue == 32)
-				{
-					strip.setPixelColor(q, LOWWHITE);
-				}
-				else
-				{
-					strip.setPixelColor(q, strip.ColorHSV(colorConfig.midiBg_Hue, colorConfig.midiBg_Sat, colorConfig.midiBg_Brightness));
-				}
+				strip.setPixelColor(q, LEDOFF);
 			}
 		}
 		strip.setPixelColor(0, RED);

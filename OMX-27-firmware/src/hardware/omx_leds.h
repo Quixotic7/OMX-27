@@ -25,6 +25,8 @@ public:
 	void updateBlinkStates();
 
 	int getKeyColor(MusicScales *scale, int pixel);
+	// Re-hues the root/in-scale colors when colorConfig.midiBg_Hue > 0
+	uint32_t applyMidiKeyTint(int keyColor);
 	void drawMidiLeds(MusicScales *scale);
 	void drawKeyboardScaleLEDs(MusicScales *scale, int rootColor, int inScaleColor, int offScaleColor);
 

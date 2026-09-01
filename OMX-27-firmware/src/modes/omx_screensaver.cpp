@@ -33,7 +33,6 @@ void OmxScreensaver::updateScreenSaverState()
 		if (!screenSaverActive)
         {
             screenSaverActive = true;
-            setScreenSaverColor();
         }
     }
 	else if (screenSaverCounter < 10)
@@ -73,6 +72,12 @@ void OmxScreensaver::onDisplayUpdate()
 void OmxScreensaver::resetCounter()
 {
 	screenSaverCounter = 0;
+}
+void OmxScreensaver::start()
+{
+	// Jump the inactivity counter past the timeout so the next
+	// updateScreenSaverState() activates the screensaver.
+	screenSaverCounter = (unsigned long)screensaverTimeoutSec * 1000UL + 100;
 }
 void OmxScreensaver::updateLEDs()
 {

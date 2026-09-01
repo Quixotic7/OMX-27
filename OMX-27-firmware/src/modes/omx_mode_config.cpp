@@ -7,6 +7,9 @@
 #include "../utils/omx_util.h"
 #include "../utils/cvNote_util.h"
 #include "sequencer.h"
+#include "omx_screensaver.h"
+
+extern OmxScreensaver omxScreensaver; // defined in the main .ino
 
 // saveToStorage() is a free function defined in the main .ino (saves header +
 // patterns). Forward-declared so the Save action can trigger a full save.
@@ -18,7 +21,8 @@ enum ConfigPage
 	CFGPAGE_MIDI,
 	CFGPAGE_SCALE,
 	CFGPAGE_CV,	   // In->CV, Trigger, -, Pots (launches pot config)
-	CFGPAGE_DISPLAY, // LED brightness, Screensaver, Timeout
+	CFGPAGE_LEDS,	// LED brightness, MI key hue
+	CFGPAGE_SSAVER, // Screensaver on/off, timeout, hue, test
 	CFGPAGE_SYSTEM, // Device ID, -, Save, Clear Storage
 	CFGPAGE_VERSION, // full-screen version label, like MIDI mode's last page
 	CFGPAGE_COUNT
@@ -30,7 +34,8 @@ OmxModeConfig::OmxModeConfig()
 	params.addPage(4); // MIDI   : Channel, Thru, Macro, Macro Ch
 	params.addPage(4); // SCALE  : Root, Scale, Lock, Group
 	params.addPage(4); // CV     : In->CV, Trigger, [gap], Pots
-	params.addPage(3); // DISPLAY: LED Bright, Screensaver, Timeout
+	params.addPage(2); // LEDS   : LED Bright, Key Hue
+	params.addPage(4); // SSAVER : On/Off, Timeout, Hue, Test
 	params.addPage(4); // SYSTEM : Device ID, [gap], Save, Clear Storage
 	params.addPage(1); // VERSION: rendered as a label
 }
@@ -105,6 +110,8 @@ bool OmxModeConfig::isActionParam(int8_t page, int8_t param)
 {
 	if (page == CFGPAGE_CV && param == 3)
 		return true; // Pots -> launch pot config
+	if (page == CFGPAGE_SSAVER && param == 3)
+		return true; // Test screensaver
 	if (page == CFGPAGE_SYSTEM && (param == 2 || param == 3))
 		return true; // Save / Clear Storage
 	return false;
@@ -149,6 +156,13 @@ void OmxModeConfig::doAction(int8_t page, int8_t param)
 	else if (page == CFGPAGE_SYSTEM && param == 3) // Clear Storage
 	{
 		enableSubmode(&omxUtil.subModeClearStorage);
+	}
+	else if (page == CFGPAGE_SSAVER && param == 3) // Test screensaver
+	{
+		if (screensaverEnabled)
+			omxScreensaver.start();
+		else
+			omxDisp.displayMessage("Saver Off");
 	}
 	omxDisp.setDirty();
 	omxLeds.setDirty();
@@ -281,17 +295,31 @@ void OmxModeConfig::onEncoderChangedEditParam(Encoder::Update enc)
 		else if (param == 1)
 			cvNoteUtil.triggerMode = constrain(cvNoteUtil.triggerMode + amt, 0, 1);
 		break;
-	case CFGPAGE_DISPLAY:
+	case CFGPAGE_LEDS:
 		if (param == 0) // LED brightness
 		{
 			ledBrightness = constrain(ledBrightness + amt, 5, 255);
 			strip.setBrightness(ledBrightness);
 			omxLeds.setDirty();
 		}
-		else if (param == 1) // Screensaver on/off
+		else if (param == 1) // MI key scale-color hue (0 = default colors)
+		{
+			int hue = constrain((colorConfig.midiBg_Hue >> 8) + amt, 0, 255);
+			colorConfig.midiBg_Hue = (uint16_t)(hue << 8);
+			omxLeds.setDirty();
+		}
+		break;
+	case CFGPAGE_SSAVER:
+		if (param == 0) // Screensaver on/off
 			screensaverEnabled = constrain(screensaverEnabled + amt, 0, 1);
-		else if (param == 2) // Screensaver timeout (seconds)
+		else if (param == 1) // Screensaver timeout (seconds)
 			screensaverTimeoutSec = constrain(screensaverTimeoutSec + amt * 5, 5, 3600);
+		else if (param == 2) // Screensaver hue
+		{
+			int hue = constrain((int)((colorConfig.screensaverColor > 65024 ? 0 : colorConfig.screensaverColor) >> 8) + amt, 0, 254);
+			colorConfig.screensaverColor = (uint32_t)(hue << 8);
+			omxLeds.setDirty();
+		}
 		break;
 	case CFGPAGE_SYSTEM:
 		if (param == 0) // Device ID
@@ -425,6 +453,25 @@ void OmxModeConfig::updateLEDs()
 			strip.setPixelColor(19 + p, col);
 		}
 	}
+
+	// Preview hues on part of the bottom row while their param is selected
+	if (page == CFGPAGE_LEDS && sel == 1)
+	{
+		// Root + in-scale colors as MI mode will render them
+		strip.setPixelColor(11, omxLeds.applyMidiKeyTint(ROOTNOTECOLOR));
+		for (uint8_t q = 12; q < 19; q++)
+		{
+			strip.setPixelColor(q, omxLeds.applyMidiKeyTint(INSCALECOLOR));
+		}
+	}
+	else if (page == CFGPAGE_SSAVER && sel == 2)
+	{
+		uint32_t previewColor = strip.gamma32(strip.ColorHSV(colorConfig.screensaverColor, 255, 255));
+		for (uint8_t q = 11; q < 19; q++)
+		{
+			strip.setPixelColor(q, previewColor);
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -489,10 +536,15 @@ void OmxModeConfig::onDisplayUpdate()
 		omxDisp.setLegend(1, "TRIG", cvNoteUtil.getTriggerModeDispName());
 		omxDisp.setLegend(3, "POTS", "Edit");
 		break;
-	case CFGPAGE_DISPLAY:
+	case CFGPAGE_LEDS:
 		omxDisp.setLegend(0, "BRHT", (int)ledBrightness);
-		omxDisp.setLegend(1, "SAVR", screensaverEnabled ? "ON" : "OFF");
-		omxDisp.setLegend(2, "TIME", (int)screensaverTimeoutSec);
+		omxDisp.setLegend(1, "KHUE", colorConfig.midiBg_Hue == 0, (int)(colorConfig.midiBg_Hue >> 8));
+		break;
+	case CFGPAGE_SSAVER:
+		omxDisp.setLegend(0, "SAVR", screensaverEnabled ? "ON" : "OFF");
+		omxDisp.setLegend(1, "TIME", (int)screensaverTimeoutSec);
+		omxDisp.setLegend(2, "HUE", (int)((colorConfig.screensaverColor > 65024 ? 0 : colorConfig.screensaverColor) >> 8));
+		omxDisp.setLegend(3, "TEST", "RUN");
 		break;
 	case CFGPAGE_SYSTEM:
 		omxDisp.setLegend(0, "DEV", (int)deviceID);

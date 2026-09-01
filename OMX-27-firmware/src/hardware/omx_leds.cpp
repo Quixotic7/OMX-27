@@ -98,6 +98,17 @@ int OmxLeds::getKeyColor(MusicScales *scale, int pixel)
 	}
 }
 
+uint32_t OmxLeds::applyMidiKeyTint(int keyColor)
+{
+	if (colorConfig.midiBg_Hue == 0)
+		return keyColor;
+	if (keyColor == ROOTNOTECOLOR) // pale/bright root, same structure as the default 0xA2A2FF
+		return strip.gamma32(strip.ColorHSV(colorConfig.midiBg_Hue, 160, 255));
+	if (keyColor == INSCALECOLOR) // dim saturated in-scale, like the default 0x000090
+		return strip.gamma32(strip.ColorHSV(colorConfig.midiBg_Hue, 255, 144));
+	return keyColor;
+}
+
 void OmxLeds::drawMidiLeds(MusicScales *scale)
 {
 	// updateBlinkStates();
@@ -120,18 +131,7 @@ void OmxLeds::drawMidiLeds(MusicScales *scale)
 		{
 			if (midiSettings.midiKeyState[q] == -1)
 			{
-				if (colorConfig.midiBg_Hue == 0)
-				{
-					strip.setPixelColor(q, LEDOFF);
-				}
-				else if (colorConfig.midiBg_Hue == 32)
-				{
-					strip.setPixelColor(q, LOWWHITE);
-				}
-				else
-				{
-					strip.setPixelColor(q, strip.ColorHSV(colorConfig.midiBg_Hue, colorConfig.midiBg_Sat, colorConfig.midiBg_Brightness));
-				}
+				strip.setPixelColor(q, LEDOFF);
 			}
 		}
 		strip.setPixelColor(0, RED);
@@ -157,18 +157,7 @@ void OmxLeds::drawMidiLeds(MusicScales *scale)
 			{
 				if (midiSettings.midiKeyState[q] == -1)
 				{
-					if (colorConfig.midiBg_Hue == 0)
-					{
-						strip.setPixelColor(q, getKeyColor(scale, q)); // set off or in scale
-					}
-					else if (colorConfig.midiBg_Hue == 32)
-					{
-						strip.setPixelColor(q, LOWWHITE);
-					}
-					else
-					{
-						strip.setPixelColor(q, strip.ColorHSV(colorConfig.midiBg_Hue, colorConfig.midiBg_Sat, colorConfig.midiBg_Brightness));
-					}
+					strip.setPixelColor(q, applyMidiKeyTint(getKeyColor(scale, q))); // set off or in scale
 				}
 				else
 				{
