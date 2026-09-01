@@ -41,6 +41,11 @@ public:
     void setMacroNoteOn(void (*fptr)(void *, uint8_t));
     void setMacroNoteOff(void (*fptr)(void *, uint8_t));
 
+    // Whether a selected macro may consume the pots (default true). A host mode (e.g. FORM) can
+    // turn this off on its own manager instance so a selected-but-not-entered macro doesn't
+    // steal the knobs.
+    void setMacrosConsumePots(bool b) { macrosConsumePots_ = b; }
+
     // Modes implement midifx in their own ways
     void setSelectMidiFXFPTR(void (*fptr)(void *, uint8_t, bool));
 
@@ -80,6 +85,7 @@ public:
 
 private:
     bool macroActive_;
+	bool macrosConsumePots_ = true; // host mode can disable (setMacrosConsumePots) — see FORM
 	bool mfxQuickEdit_ = false;
 	uint8_t quickEditMfxIndex_ = 0;
 

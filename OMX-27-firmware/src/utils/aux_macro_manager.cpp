@@ -245,7 +245,7 @@ bool AuxMacroManager::onPotChanged(int potIndex, int prevValue, int newValue, in
     auto activeMacro = getActiveMacro();
 
     bool macroConsumesPots = false;
-    if (activeMacro != nullptr)
+    if (macrosConsumePots_ && activeMacro != nullptr)
     {
         macroConsumesPots = activeMacro->consumesPots();
     }
@@ -393,6 +393,19 @@ bool AuxMacroManager::onKeyUpdateAuxMFXShortcuts(OMXKeypadEvent e, uint8_t selMF
                         mfxQuickEdit_ = true;
                         quickEditMfxIndex_ = selMFXIndex;
                         midiSettings.midiAUX = false;
+                        omxDisp.displayMessageTimed("MFX PASS", 5);
+                    }
+                    else
+                    {
+                        omxDisp.displayMessage(mfxOffMsg);
+                    }
+                }
+                else if (thisKey == 21) // Bypass-toggle the group's selected FX slot on/off
+                {
+                    keyConsumed = true;
+                    if (isMidiFXGroupIndexValid(selMFXIndex))
+                    {
+                        subModeMidiFx[selMFXIndex].toggleSelectedFXBypass();
                     }
                     else
                     {

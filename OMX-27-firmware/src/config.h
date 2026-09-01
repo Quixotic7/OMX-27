@@ -30,10 +30,10 @@ static inline float mapFloat(float x, float inMin, float inMax, float outMin, fl
 }
 
 /* * firmware metadata  */
-// OMX_VERSION = 1.15.0
+// OMX_VERSION = v1.15.3
 const int MAJOR_VERSION = 1;
 const int MINOR_VERSION = 15;
-const int POINT_VERSION = 0;
+const int POINT_VERSION = 3;
 extern const char* VERSION_STRING;
 
 // 1.13.2 - Adds CV Trigger modes for legato and regtrig

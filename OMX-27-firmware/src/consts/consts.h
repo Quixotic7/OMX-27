@@ -92,6 +92,6 @@ const uint8_t cvHightestNote = cvLowestNote + int(fullRangeV * 12) - 1;
 #define FONT_VALUES u8g2_font_7x14B_tf
 #define FONT_SYMB u8g2_font_9x15_m_symbols
 #define FONT_SYMB_BIG u8g2_font_cu12_h_symbols
-#define FONT_TENFAT u8g2_font_tenfatguys_tf
+#define FONT_TENFAT u8g2_font_tenfatguys_t_all // _t_all: FORM's Ć/Ĉ toggle glyphs are past the _tf range
 #define FONT_BIG u8g2_font_helvB18_tr
 #define FONT_CHAR16 u8g2_font_6x12_tf
