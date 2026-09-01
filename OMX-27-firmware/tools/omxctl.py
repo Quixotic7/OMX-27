@@ -42,6 +42,8 @@ def enc(n):
 def enc_click():          inp(0x02, 0); time.sleep(0.02); inp(0x02, 1)
 def enc_long():           inp(0x02, 2)
 def pot(k, v):            inp(0x03, k, v)
+def save_state():         inp(0x04)   # persist to storage (FRAM + FORM bank)
+def set_mode(m):          inp(0x05, m) # switch OMX mode (3 = FORM)
 
 # ---- screen mirror ----
 def _decode7(enc):

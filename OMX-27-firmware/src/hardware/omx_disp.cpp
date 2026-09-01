@@ -518,6 +518,891 @@ void OmxDisp::dispGenericModeLabel(const char *label, uint8_t numPages, int8_t s
 	}
 }
 
+static void drawKeyBoxRow(uint8_t count, const bool *fill, uint8_t y)
+{
+	const uint8_t bw = 6, bh = 4, pitch = 7;
+	uint8_t startX = (128 - (count * pitch - 1)) / 2;
+	for (uint8_t i = 0; i < count; i++)
+	{
+		int x = startX + i * pitch;
+		if (fill && fill[i])
+			display.fillRect(x, y, bw, bh, WHITE);
+		else
+			display.drawRect(x, y, bw, bh, WHITE);
+	}
+}
+
+// Play-direction icon, top-left at (x, y), 17w x 9h. Drawn with primitives (no bitmap data)
+// to exactly match design/form/UI/icons_track_playmodes.txt.
+// 0 fwd, 1 rev, 2 fwd-pong, 3 rev-pong, 4 random.
+static void drawPlayIcon(uint8_t mode, int x, int y)
+{
+	switch (mode)
+	{
+	case 0: // forward: right-triangle + dashes + endpoint tick
+		display.fillTriangle(x + 0, y + 0, x + 0, y + 8, x + 8, y + 4, WHITE);
+		display.drawPixel(x + 10, y + 4, WHITE);
+		display.drawPixel(x + 12, y + 4, WHITE);
+		display.drawPixel(x + 14, y + 4, WHITE);
+		display.drawFastVLine(x + 16, y + 3, 3, WHITE);
+		break;
+	case 1: // reverse: mirror of forward
+		display.fillTriangle(x + 16, y + 0, x + 16, y + 8, x + 8, y + 4, WHITE);
+		display.drawPixel(x + 6, y + 4, WHITE);
+		display.drawPixel(x + 4, y + 4, WHITE);
+		display.drawPixel(x + 2, y + 4, WHITE);
+		display.drawFastVLine(x + 0, y + 3, 3, WHITE);
+		break;
+	case 2: // fwd-pong: big right-tri, center dot, small left-tri + right end bar
+		display.fillTriangle(x + 0, y + 0, x + 0, y + 8, x + 8, y + 4, WHITE);
+		display.drawPixel(x + 10, y + 4, WHITE);
+		display.drawFastVLine(x + 16, y + 0, 9, WHITE);
+		display.fillTriangle(x + 16, y + 2, x + 16, y + 6, x + 12, y + 4, WHITE);
+		break;
+	case 3: // rev-pong: mirror of fwd-pong
+		display.fillTriangle(x + 16, y + 0, x + 16, y + 8, x + 8, y + 4, WHITE);
+		display.drawPixel(x + 6, y + 4, WHITE);
+		display.drawFastVLine(x + 0, y + 0, 9, WHITE);
+		display.fillTriangle(x + 0, y + 2, x + 0, y + 6, x + 4, y + 4, WHITE);
+		break;
+	case 4: // random: die outline with two pips
+		display.drawRoundRect(x + 4, y + 0, 9, 9, 1, WHITE);
+		display.fillRect(x + 9, y + 2, 2, 2, WHITE);
+		display.fillRect(x + 6, y + 5, 2, 2, WHITE);
+		break;
+	}
+}
+
+
+// A small folded-corner "page" icon (6x8) at top-left (x,y), filled or outline, in `color`.
+// Shared 16-step row renderer — the single source of truth for how sequencer steps look, used
+// by every step view. y = box top. stepState[i]: 0 empty (outline) · 1 has notes (solid) · 2
+// ghost (inset-top box + two inner dots). Steps >= pageLen render as short 3px boxes (pass 16
+// for none). marker = the step to tick beneath (-1 = none), used for playhead / focused step.
+static void drawStepRow(uint8_t y, const uint8_t *stepState, uint8_t pageLen, int8_t marker)
+{
+	const uint8_t bw = 6, bh = 6, pitch = 8;
+	uint8_t startX = (128 - (16 * pitch - (pitch - bw))) / 2;
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		int x = startX + i * pitch;
+		if (i < pageLen)
+		{
+			if (stepState[i] == 1)
+				display.fillRect(x, y, bw, bh, WHITE); // has notes = solid
+			else if (stepState[i] == 4)
+				display.fillRect(x + 1, y + 1, 4, 4, WHITE); // has notes + muted = inset block
+			else if (stepState[i] == 2)
+			{
+				// Ghost: box with an inset top edge and two inner dots.
+				display.fillRect(x + 1, y, 4, 1, WHITE);
+				display.drawFastVLine(x, y + 1, 4, WHITE);
+				display.drawFastVLine(x + 5, y + 1, 4, WHITE);
+				display.fillRect(x, y + 5, bw, 1, WHITE);
+				display.drawPixel(x + 2, y + 2, WHITE);
+				display.drawPixel(x + 4, y + 2, WHITE);
+			}
+			else if (stepState[i] == 3)
+			{
+				// Ghost + muted: inset block with top corners and a punched-out dot row.
+				display.drawPixel(x, y, WHITE);
+				display.drawPixel(x + 5, y, WHITE);
+				display.fillRect(x + 1, y + 1, 4, 1, WHITE);
+				display.drawPixel(x + 1, y + 2, WHITE);
+				display.drawPixel(x + 3, y + 2, WHITE);
+				display.fillRect(x + 1, y + 3, 4, 2, WHITE);
+			}
+			else
+				display.drawRect(x, y, bw, bh, WHITE); // empty = outline
+		}
+		else
+		{
+			// Beyond the page length: a short 3px box at the bottom.
+			int sy = y + bh - 3;
+			if (stepState[i] == 1 || stepState[i] == 4)
+				display.fillRect(x, sy, bw, 3, WHITE);
+			else
+				display.drawRect(x, sy, bw, 3, WHITE);
+		}
+		if ((int8_t)i == marker)
+			display.fillRect(x, y + bh + 1, bw, 1, WHITE);
+	}
+}
+
+static void drawPageIcon(int x, int y, bool filled, uint16_t color)
+{
+	if (filled)
+	{
+		display.fillRect(x, y, 4, 1, color);     // top: 4 wide
+		display.fillRect(x, y + 1, 5, 1, color); // diagonal fold: 5 wide
+		display.fillRect(x, y + 2, 6, 6, color); // body: 6 wide
+	}
+	else
+	{
+		display.drawLine(x, y, x + 3, y, color);         // top edge (to fold)
+		display.drawLine(x + 3, y, x + 5, y + 2, color); // folded diagonal
+		display.drawLine(x + 5, y + 2, x + 5, y + 7, color); // right
+		display.drawLine(x, y + 7, x + 5, y + 7, color); // bottom
+		display.drawLine(x, y, x, y + 7, color);         // left
+	}
+}
+
+void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
+							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
+							   uint8_t activePage, const uint8_t *stepState, int8_t playhead,
+							   uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport,
+							   const char *viewLabel, bool viewLabelSel, bool showPagesSteps, bool showCCMeter, uint8_t numTracks)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	if (showCCMeter)
+		drawCCMeter(); // transient top-row knob meter at y=0 (widgets sit at y>=2 for a 1px gap)
+	u8g2_display.setFontMode(1);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+
+	// --- track-state squares (top-left): filled = unmuted, outline = muted, selected underlined.
+	// Everything below the CC meter sits 1px down (y>=2) to give the top meter breathing room.
+	for (uint8_t t = 0; t < numTracks; t++)
+	{
+		int x = 1 + t * 6;
+		if (!trackMuted[t])
+			display.fillRect(x, 2, 4, 4, WHITE);
+		else
+			display.drawRect(x, 2, 4, 4, WHITE);
+		if (t == selTrack)
+			display.fillRect(x, 7, 4, 1, WHITE); // selected underline
+	}
+
+	// --- Transport widget (top-middle): play ▶ / stop ■ / record ●, active one filled.
+	if (transport == 1) display.fillTriangle(54, 2, 54, 6, 57, 4, WHITE);
+	else				display.drawTriangle(54, 2, 54, 6, 57, 4, WHITE);
+	if (transport == 0) display.fillRect(60, 2, 5, 5, WHITE);
+	else				display.drawRect(60, 2, 5, 5, WHITE);
+	if (transport == 2) display.fillCircle(69, 4, 2, WHITE);
+	else				display.drawCircle(69, 4, 2, WHITE);
+
+	// --- View tag (e.g. "MIX"): the page-1 view selector, top area right of the transport widget.
+	// Default = white text + underline; selected (encoder editing) = filled box + black text.
+	if (viewLabel)
+	{
+		u8g2_display.setFont(FONT_LABELS);
+		uint16_t vw = u8g2_display.getUTF8Width(viewLabel);
+		if (viewLabelSel)
+		{
+			display.fillRect(77, 1, vw + 3, 8, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+			u8g2_display.setCursor(78, 7);
+			u8g2_display.print(viewLabel);
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+			u8g2_display.setCursor(78, 7);
+			u8g2_display.print(viewLabel);
+			display.fillRect(78, 8, vw, 1, WHITE);
+		}
+	}
+
+	// --- BPM, top-right.
+	u8g2_display.setFont(FONT_LABELS);
+	char bpmStr[8];
+	snprintf(bpmStr, sizeof(bpmStr), "%u", (unsigned)bpm);
+	uint16_t bw = u8g2_display.getUTF8Width(bpmStr);
+	u8g2_display.setCursor(127 - bw, 7);
+	u8g2_display.print(bpmStr);
+
+	// --- Name row: "TRK n" (chunky) + play-mode icon + rate. Icon/rate are at FIXED positions
+	// so they don't shift with the (proportional) name width. F2 boxes + inverts the name.
+	u8g2_display.setFont(FONT_TENFAT);
+	uint16_t nameW = u8g2_display.getUTF8Width(trackName);
+	if (modOverlay == 2)
+	{
+		display.fillRect(0, 8, nameW + 4, 14, WHITE);
+		u8g2_display.setForegroundColor(BLACK);
+		u8g2_display.setBackgroundColor(WHITE);
+	}
+	else
+	{
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+	}
+	u8g2_display.setCursor(2, 20);
+	u8g2_display.print(trackName);
+
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	drawPlayIcon(playMode, 54, 11); // 17x9 icon, fixed x
+	u8g2_display.setFont(FONT_LABELS);
+	u8g2_display.setCursor(74, 19);
+	u8g2_display.print(rateStr);
+
+	// --- 4 page icons (right): filled = enabled, outline = muted, active underlined. F1 boxes +
+	// inverts the whole page section (it's what F1 controls). Hidden in the MI keyboard view.
+	if (showPagesSteps)
+	{
+		bool pageInv = (modOverlay == 1);
+		uint16_t pgFg = pageInv ? BLACK : WHITE;
+		if (pageInv)
+			display.fillRect(96, 7, 32, 15, WHITE); // section box
+		for (uint8_t p = 0; p < 4; p++)
+		{
+			int x = 98 + p * 8;
+			drawPageIcon(x, 9, (enabledPages & (1 << p)) != 0, pgFg);
+			if (p == activePage)
+				display.fillRect(x, 19, 6, 1, pgFg);
+		}
+	}
+
+	if (!showPagesSteps)
+		return; // MI keyboard view: no page icons, no step row
+
+	// --- Bottom: while holding F1/F2 with a label, a box over the step area names the modifier;
+	// otherwise the 16 step boxes (a boxed name with no label keeps the step row, e.g. Mix MUTE).
+	if (modOverlay != 0 && overlayLabel != nullptr)
+	{
+		display.fillRect(1, 23, 126, 9, WHITE); // inverted box
+		u8g2_display.setFont(FONT_LABELS);
+		u8g2_display.setForegroundColor(BLACK);
+		u8g2_display.setBackgroundColor(WHITE);
+		u8g2centerText(overlayLabel ? overlayLabel : "", 0, 30, 128, 8);
+		return;
+	}
+
+	drawStepRow(23, stepState, pageLen, playhead);
+}
+
+
+void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel, bool editing)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+
+	const int cw = 32;
+	for (uint8_t i = 0; i < 4; i++)
+	{
+		int x = i * cw;
+		bool valInv = (i == sel) && editing; // value box inverts while the encoder edits it
+
+		// Label (header): inverted only when that param is locked.
+		u8g2_display.setFont(FONT_LABELS);
+		if (locked[i])
+		{
+			display.fillRect(x + 2, 1, cw - 4, 10, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		u8g2centerText(labels[i], x, 9, cw, 8);
+
+		// Value: inverted box while editing this cell.
+		if (valInv)
+		{
+			display.fillRect(x + 2, 13, cw - 4, 18, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		u8g2_display.setFont(FONT_TENFAT);
+		u8g2centerText(values[i], x, 28, cw, 8);
+
+		// Selection box when navigating (not editing).
+		if (i == sel && !editing)
+			display.drawRect(x + 1, 0, cw - 2, 31, WHITE);
+	}
+}
+
+// FORM Mix bar pages (LEVELS: 8 per-track velocity bars; CC: 5 live CC values).
+// Title top-left, the selected item + value top-right; the selected slot is boxed and
+// inverts while the encoder is editing it. count = number of bars (128/count px each).
+void OmxDisp::dispMixLevels(const char *title, const char *valText, const int8_t *vals, uint8_t count, uint8_t sel, bool editing, const bool *locked, int8_t bigNum)
+{
+	if (count == 0 || count > 16)
+		return;
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_LABELS);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	u8g2centerText(title, 0, 9, 64, 8);
+	u8g2centerText(valText, 64, 9, 64, 8);
+	// The title is selectable (sel == count+1): box it — a shortcut to the CC-number editor.
+	if (sel == count + 1)
+		display.drawRect(0, 0, 63, 10, WHITE);
+
+	// With a big number on the right, the bars squeeze into the left 100px.
+	const uint8_t barsW = (bigNum >= 0) ? 100 : 128;
+	const uint8_t slotW = barsW / count, y0 = 11, h = 21; // bars area y 11..31
+	for (uint8_t i = 0; i < count; i++)
+	{
+		int x = i * slotW;
+		if (vals[i] >= 0) // negative = no bar (an unlocked slot while a step is held)
+		{
+			uint8_t bh = (uint8_t)((vals[i] * (h - 3)) / 127);
+			display.fillRect(x + 4, y0 + (h - 2 - bh), slotW - 8, bh + 1, WHITE);
+		}
+		if (locked != nullptr && locked[i]) // P-Lock marker: dot at the slot's top-right
+			display.fillRect(x + slotW - 6, y0 + 1, 3, 3, WHITE);
+		if (i == sel)
+		{
+			display.drawRect(x + 1, y0, slotW - 2, h, WHITE);
+			if (editing)
+				display.fillRect(x + 2, y0 + 1, slotW - 4, h - 2, INVERSE);
+		}
+	}
+
+	// Big TENFAT number on the right (the pot bank); sel == count selects it.
+	if (bigNum >= 0)
+	{
+		char nbuf[4];
+		snprintf(nbuf, sizeof(nbuf), "%d", bigNum);
+		bool numSel = (sel == count);
+		if (numSel && editing)
+		{
+			display.fillRect(barsW + 2, y0 + 1, 128 - barsW - 4, h - 2, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		u8g2_display.setFont(FONT_TENFAT);
+		u8g2centerText(nbuf, barsW, 28, 128 - barsW, 8);
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+		if (numSel && !editing)
+			display.drawRect(barsW + 1, y0, 128 - barsW - 2, h, WHITE);
+	}
+}
+
+// FORM Tools: action-tool page. Params (label+value pairs) on top, action "buttons"
+// beneath, the step row at the bottom. sel walks params (0..pCount-1) then buttons.
+// stepState == nullptr = the no-steps variant (taller cells + full-width button row).
+void OmxDisp::dispToolActionPage(const char *pLabels[], const char *pVals[], uint8_t pCount,
+								 const char *btnLabels[], uint8_t btnCount, int8_t sel, bool editing,
+								 const uint8_t *stepState, uint8_t pageLen, int8_t playhead)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_LABELS);
+
+	bool withSteps = stepState != nullptr;
+	uint8_t pRowH = withSteps ? 10 : 19;   // param row height
+	uint8_t bY = withSteps ? 11 : 21;      // buttons top
+	uint8_t bH = withSteps ? 10 : 10;      // buttons height
+
+	// Params: label left, value right inside each region.
+	uint8_t pw = pCount > 0 ? 128 / pCount : 128;
+	for (uint8_t i = 0; i < pCount; i++)
+	{
+		int x = i * pw;
+		bool isSel = (sel == (int8_t)i);
+		bool inv = isSel && editing;
+		if (inv)
+		{
+			display.fillRect(x + 1, 0, pw - 2, pRowH - 1, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		if (withSteps)
+		{
+			// One line: label left, value right.
+			u8g2_display.setCursor(x + 4, 8);
+			u8g2_display.print(pLabels[i]);
+			int vw = (int)strlen(pVals[i]) * 5; // crude width (FONT_LABELS ~5px/char)
+			u8g2_display.setCursor(x + pw - 4 - vw, 8);
+			u8g2_display.print(pVals[i]);
+		}
+		else
+		{
+			// Taller cells: label over value, both centered.
+			u8g2centerText(pLabels[i], x, 8, pw, 8);
+			u8g2centerText(pVals[i], x, 17, pw, 8);
+		}
+		if (isSel && !editing)
+			display.drawRect(x, 0, pw, pRowH, WHITE);
+	}
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+
+	// Buttons: centered labels in boxes; the selected button renders inverted.
+	if (btnCount > 0)
+	{
+		uint8_t bw = 128 / btnCount;
+		for (uint8_t i = 0; i < btnCount; i++)
+		{
+			int x = i * bw;
+			bool isSel = (sel == (int8_t)(pCount + i));
+			if (isSel)
+			{
+				display.fillRect(x + 2, bY, bw - 4, bH, WHITE);
+				u8g2_display.setForegroundColor(BLACK);
+				u8g2_display.setBackgroundColor(WHITE);
+			}
+			else
+			{
+				display.drawRect(x + 2, bY, bw - 4, bH, WHITE);
+				u8g2_display.setForegroundColor(WHITE);
+				u8g2_display.setBackgroundColor(BLACK);
+			}
+			u8g2centerText(btnLabels[i], x, bY + bH - 3, bw, 8);
+		}
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+	}
+
+	if (withSteps)
+		drawStepRow(23, stepState, pageLen, playhead);
+}
+
+// FORM Tools: VEL/CHANCE RANDOM page. A min/max range bar on top (sel 0 = min handle,
+// 1 = max handle), 16 tall per-step value bars beneath (sel 2+i = bar i; value < 0 = no
+// bar). No text — the layout is the interface.
+void OmxDisp::dispToolBarsPage(uint8_t vmin, uint8_t vmax, uint8_t vRange,
+							   const int16_t bars[16], const uint8_t styles[16], int16_t barMax,
+							   int8_t sel, bool editing, int8_t playhead)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// Range bar: baseline + the filled min..max span + two handles.
+	int minX = 2 + ((int)vmin * 123) / vRange;
+	int maxX = 2 + ((int)vmax * 123) / vRange;
+	if (maxX < minX) { int t = minX; minX = maxX; maxX = t; }
+	display.drawFastHLine(2, 3, 124, WHITE);
+	display.fillRect(minX, 2, maxX - minX + 1, 3, WHITE);
+	for (uint8_t h = 0; h < 2; h++)
+	{
+		int hx = h == 0 ? minX : maxX;
+		bool isSel = (sel == (int8_t)h);
+		if (isSel && editing)
+			display.fillRect(hx - 2, 0, 5, 7, WHITE);
+		else
+		{
+			display.drawFastVLine(hx, 0, 7, WHITE);
+			if (isSel)
+				display.drawRect(hx - 2, 0, 5, 7, WHITE);
+		}
+	}
+
+	// Per-step bars: filled = step with notes, outlined = ghost (on, no notes),
+	// baseline tick = no step.
+	const uint8_t y0 = 9, h = 23;
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		int x = i * 8;
+		if (styles[i] != 0 && bars[i] >= 0)
+		{
+			uint8_t bh = (uint8_t)(((int32_t)bars[i] * (h - 2)) / barMax);
+			if (styles[i] == 2)
+				display.drawRect(x + 2, y0 + (h - 1 - bh), 4, bh + 1, WHITE);
+			else
+				display.fillRect(x + 2, y0 + (h - 1 - bh), 4, bh + 1, WHITE);
+		}
+		else
+			display.drawFastHLine(x + 2, y0 + h - 1, 4, WHITE); // baseline tick = no step
+		if (sel == (int8_t)(2 + i))
+		{
+			if (editing)
+				display.fillRect(x, y0, 8, h, INVERSE);
+			else
+				display.drawRect(x, y0, 8, h, WHITE);
+		}
+		if (playhead == (int8_t)i)
+			display.fillRect(x + 3, 31, 2, 1, INVERSE);
+	}
+}
+
+// FORM Tools: generator page (EUCLID/GRIDS). Compact params on top, the live pattern
+// preview in the middle (the Euclidean mode's own tick rendering), the step row below.
+void OmxDisp::dispToolGenPage(const char *pLabels[], const char *pVals[], uint8_t pCount,
+							  int8_t sel, bool editing, bool *preview, uint8_t previewLen,
+							  const uint8_t *stepState, uint8_t pageLen, int8_t playhead)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_LABELS);
+
+	uint8_t pw = pCount > 0 ? 128 / pCount : 128;
+	for (uint8_t i = 0; i < pCount; i++)
+	{
+		int x = i * pw;
+		bool isSel = (sel == (int8_t)i);
+		bool inv = isSel && editing;
+		if (inv)
+		{
+			display.fillRect(x + 1, 0, pw - 2, 13, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		u8g2centerText(pLabels[i], x, 6, pw, 6);
+		u8g2centerText(pVals[i], x, 13, pw, 6);
+		if (isSel && !editing)
+			display.drawRect(x, 0, pw, 14, WHITE);
+	}
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+
+	// Live pattern preview, drawn with the Euclidean mode's renderer (ticks above y=22).
+	drawEuclidPattern(true, preview, previewLen, 22, false, false, 0);
+
+	drawStepRow(23, stepState, pageLen, playhead);
+}
+
+void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// Which keys are lit (chord) — same split as dispSeqKeyboard.
+	bool blackNotes[10];
+	bool whiteNotes[16];
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		if (i < 10) blackNotes[i] = false;
+		whiteNotes[i] = false;
+	}
+	for (uint8_t i = 0; i < 6; i++)
+	{
+		int8_t key = notesAsKeys[i];
+		if (key >= 1 && key <= 26)
+		{
+			if (key >= 11) whiteNotes[key - 11] = true;
+			else blackNotes[key - 1] = true;
+		}
+	}
+
+	// --- compact keyboard in the top ~20px (leaves the bottom for the step markers) ---
+	const uint8_t wkInc = 6, wkWidth = 7, wkStartX = 16, wkStartY = 0, wkHeight = 20;
+	const uint8_t bkInc = 6, bkWidth = 7, bkStartX = 13, bkStartY = 0, bkHeight = 12;
+
+	for (uint8_t i = 0; i < 16; i++)
+		if (!whiteNotes[i])
+			display.drawRect(wkStartX + (wkInc * i), wkStartY, wkWidth, wkHeight, WHITE);
+	for (uint8_t i = 0; i < 16; i++)
+		if (whiteNotes[i])
+		{
+			display.drawRect(wkStartX + (wkInc * i), wkStartY, wkWidth, wkHeight, BLACK);
+			display.fillRect(wkStartX + (wkInc * i) + 1, wkStartY, wkWidth - 2, wkHeight, WHITE);
+		}
+
+	uint8_t bOffset = 0;
+	for (uint8_t i = 0; i < 12; i++)
+	{
+		if (i == 1 || i == 3 || i == 6 || i == 8 || i == 11)
+			bOffset += 6;
+		uint8_t xStart = bkStartX + bOffset + (bkInc * i);
+		if (i > 0 && i < 11)
+		{
+			bool blackOn = blackNotes[i - 1];
+			if (blackOn)
+			{
+				display.fillRect(xStart, bkStartY, bkWidth, bkHeight, BLACK);
+				display.fillRect(xStart + 1, bkStartY + 1, bkWidth - 2, bkHeight - 2, WHITE);
+			}
+			else
+			{
+				display.fillRect(xStart, bkStartY, bkWidth, bkHeight, BLACK);
+				display.drawRect(xStart + 1, bkStartY + 1, bkWidth - 2, bkHeight - 2, WHITE);
+			}
+		}
+		else
+		{
+			display.fillRect(xStart, bkStartY, bkWidth, bkHeight, BLACK);
+			display.drawRect(xStart + 1, bkStartY + 1, bkWidth - 2, bkHeight - 2, WHITE);
+			display.fillRect(xStart + 2, bkStartY, bkWidth - 4, bkHeight - 1, BLACK);
+		}
+	}
+
+	display.fillRect(0, wkStartY, 16, wkHeight + 1, BLACK);	 // trim left side
+	display.fillRect(113, wkStartY, 15, wkHeight + 1, BLACK); // trim right side
+	display.drawLine(18, wkStartY, 110, wkStartY, WHITE);	 // cap the top
+	if (!whiteNotes[0])
+		display.drawLine(16, wkHeight - 8, 16, wkHeight - 1, WHITE); // left wall
+	if (!whiteNotes[15])
+		display.drawLine(112, wkHeight - 8, 112, wkHeight - 1, WHITE); // right wall
+
+	// --- 16 step-marker cells beneath the keyboard (shared renderer) ---
+	drawStepRow(23, stepState, pageLen, focus);
+}
+
+void OmxDisp::dispStepOverview(const char *modeName, const uint8_t *stepState, uint8_t pageLen, int8_t playhead, bool invertTitle)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// Mode name, chunky, centred on top (inverted when the title is armed for editing).
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_TENFAT);
+	if (invertTitle)
+	{
+		display.fillRect(0, 0, 128, 15, WHITE);
+		u8g2_display.setForegroundColor(BLACK);
+		u8g2_display.setBackgroundColor(WHITE);
+	}
+	else
+	{
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+	}
+	u8g2centerText(modeName, 0, 13, 128, 8);
+
+	// Step cells (shared renderer).
+	drawStepRow(23, stepState, pageLen, playhead);
+}
+
+void OmxDisp::drawCCMeter()
+{
+	const uint8_t count = NUM_CC_POTS; // 5
+	const uint8_t segW = 128 / count;  // 25
+	for (uint8_t i = 0; i < count; i++)
+	{
+		int v = potSettings.analogValues[i];
+		v = v < 0 ? 0 : (v > 127 ? 127 : v);
+		uint8_t len = (uint8_t)((long)v * (segW - 2) / 127); // leave a 2px gap between segments
+		if (len > 0)
+			display.fillRect(i * segW, 0, len, 1, WHITE);
+	}
+}
+
+void OmxDisp::dispNotesJump(const uint8_t *stepState, uint8_t pageLen, int8_t focus, uint8_t enabledPages, uint8_t activePage)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// "JUMP", chunky, left-aligned.
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_TENFAT);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	u8g2_display.setCursor(2, 16);
+	u8g2_display.print("JUMP");
+
+	// 4 page icons on the right — same x/y as the track page (dispSeqTrackPage).
+	for (uint8_t p = 0; p < 4; p++)
+	{
+		int x = 98 + p * 8;
+		drawPageIcon(x, 8, (enabledPages & (1 << p)) != 0, WHITE);
+		if (p == activePage)
+			display.fillRect(x, 18, 6, 1, WHITE);
+	}
+
+	drawStepRow(23, stepState, pageLen, focus);
+}
+
+void OmxDisp::dispNoteSlots(const char *slotNames[6], const char *header, uint8_t selected, bool encoderSelect)
+{
+	const char *headers[1] = {header};
+	dispCenteredSlots(FONT_LABELS, slotNames, 6, selected, encoderSelect, true, true, headers, 1);
+}
+
+void OmxDisp::dispTrackLength(const char *rateStr, uint8_t activeCount)
+{
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// Rate value, centred on top (chunky pixel font).
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_TENFAT);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	u8g2centerText(rateStr, 0, 15, 128, 8);
+
+	// Length bar: 16 cells at 8px pitch, each a 6px-wide box. Active steps are filled boxes;
+	// steps past the length are drawn as a thin dash. Every 4th active cell gets a 1px notch.
+	const int barTop = 17, barH = 14;
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		int x = i * 8;
+		if (i < activeCount)
+		{
+			display.fillRect(x + 1, barTop, 6, barH, WHITE);
+			if (i % 4 == 0)
+				display.drawFastVLine(x + 2, barTop + 5, 3, BLACK); // group-of-4 notch
+		}
+		else
+		{
+			display.fillRect(x + 1, barTop + 7, 6, 1, WHITE); // dash
+		}
+	}
+}
+
+void OmxDisp::drawPageBars(const uint8_t *pageLens, uint8_t enabledMask, int8_t playAbsStep)
+{
+	if (isMessageActive())
+		return;
+	// Gather the enabled pages and their total length (for proportional widths).
+	uint8_t pages[4], n = 0;
+	uint16_t totalLen = 0;
+	for (uint8_t p = 0; p < 4; p++)
+		if (enabledMask & (1 << p))
+		{
+			uint8_t pl = pageLens[p] == 0 ? 1 : pageLens[p];
+			pages[n++] = p;
+			totalLen += pl;
+		}
+	if (n == 0 || totalLen == 0)
+		return;
+
+	const int y = 24, h = 7, gap = 2;
+	int avail = 128 - (n - 1) * gap;
+	int8_t playPage = (playAbsStep >= 0) ? (int8_t)(playAbsStep / 16) : -1;
+	uint8_t playOff = (playAbsStep >= 0) ? (uint8_t)(playAbsStep % 16) : 0;
+
+	int x = 0;
+	for (uint8_t i = 0; i < n; i++)
+	{
+		uint8_t p = pages[i];
+		uint8_t pl = pageLens[p] == 0 ? 1 : pageLens[p];
+		int w = (int)lroundf((float)pl / (float)totalLen * (float)avail);
+		if (w < 3)
+			w = 3;
+		display.drawRect(x, y, w, h, WHITE);
+		// Playhead: fill the current step's sub-cell within the page it's on.
+		if (playPage == (int8_t)p && playOff < pl)
+		{
+			float cellW = (float)w / (float)pl;
+			int cx = x + (int)(playOff * cellW);
+			int cw = (int)(cellW + 0.5f);
+			if (cw < 1)
+				cw = 1;
+			if (cx + cw > x + w)
+				cw = x + w - cx;
+			display.fillRect(cx, y, cw, h, WHITE);
+		}
+		x += w + gap;
+	}
+}
+
+void OmxDisp::dispPatternPage(uint8_t pat, const char *styleName, const char *tag, float progress)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+
+	// Big pattern number, left (chunky pixel font).
+	char pbuf[6];
+	snprintf(pbuf, sizeof(pbuf), "P%u", (unsigned)(pat + 1));
+	u8g2_display.setFont(FONT_TENFAT);
+	u8g2_display.setCursor(4, 17);
+	u8g2_display.print(pbuf);
+
+	// Switch-style name, right-justified on top.
+	u8g2_display.setFont(FONT_LABELS);
+	uint16_t sw = u8g2_display.getUTF8Width(styleName);
+	u8g2_display.setCursor(126 - sw, 7);
+	u8g2_display.print(styleName);
+
+	// Queued / chain tag, right-justified under the style name.
+	if (tag && tag[0])
+	{
+		uint16_t tw = u8g2_display.getUTF8Width(tag);
+		u8g2_display.setCursor(126 - tw, 18);
+		u8g2_display.print(tag);
+	}
+
+	// Bottom progress bar: outline + a fill proportional to loop/bar progress (0-1).
+	const int by = 25, bh = 6;
+	display.drawRect(0, by, 128, bh, WHITE);
+	int fw = (int)(progress * 126.0f + 0.5f);
+	if (fw < 0)
+		fw = 0;
+	if (fw > 126)
+		fw = 126;
+	if (fw > 0)
+		display.fillRect(1, by + 1, fw, bh - 2, WHITE);
+}
+
+void OmxDisp::dispKeyFunctionSplit(const char *topLabel, const bool *topFill, uint8_t topCount,
+								   const char *bottomLabel, const bool *bottomFill, uint8_t bottomCount)
+{
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_TENFAT); // chunky pixel font
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+
+	if (bottomCount == 0 && (bottomLabel == nullptr || bottomLabel[0] == '\0'))
+	{
+		// Single-row layout: one label + one box row, vertically centred.
+		u8g2centerText(topLabel, 0, 10, 128, 8); // baseline ~8 (text y-1..8)
+		drawKeyBoxRow(topCount, topFill, 18);    // boxes y18-21
+		return;
+	}
+
+	// Two-row layout: TENFAT labels are ~12px tall, so the two labels and two box rows fill
+	// the 32px screen edge-to-edge with no spare gap.
+	u8g2centerText(topLabel, 0, 12, 128, 8);    // baseline ~10 (text y-1..10)
+	drawKeyBoxRow(topCount, topFill, 12);       // boxes y12-15
+	drawKeyBoxRow(bottomCount, bottomFill, 16); // boxes y16-19
+	u8g2centerText(bottomLabel, 0, 33, 128, 8); // baseline ~31 (text y20-31)
+}
+
 void OmxDisp::dispGenericModeLabelDoubleLine(const char *label1, const char *label2, uint8_t numPages, int8_t selectedPage)
 {
 	if (isMessageActive())
@@ -875,11 +1760,11 @@ void OmxDisp::dispParamBar(int8_t potValue, int8_t targetValue, int8_t minValue,
 
 void OmxDisp::dispSlots(const char *slotNames[], uint8_t slotCount, uint8_t selected, uint8_t animPos, bool encSelActive, bool showLabels, const char *labels[], uint8_t labelCount)
 {
-	// if (isMessageActive())
-	// {
-	//     renderMessage();
-	//     return;
-	// }
+	if (isMessageActive()) // popups (e.g. the hold-slot FX on/off confirm) render over the slot page
+	{
+		renderMessage();
+		return;
+	}
 
 	display.fillRect(0, 0, 128, 32, BLACK);
 

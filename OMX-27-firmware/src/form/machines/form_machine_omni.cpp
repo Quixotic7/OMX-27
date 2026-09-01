@@ -4,43 +4,47 @@
 #include "../../consts/colors.h"
 #include "../../consts/consts.h"
 #include "../../utils/omx_util.h"
+#include "../../midi/midi.h" // MM::sendControlChange for per-step CC locks
 #include "../../hardware/omx_disp.h"
 #include "../../hardware/omx_leds.h"
 #include "omni_note_editor.h"
+#include "../../modes/euclidean_sequencer.h" // EuclideanMath (static helpers) for the Euclid tool
+#include "../../modes/retro_grids.h"         // grids::GridsChannel for the Grids tool
 #include <U8g2_for_Adafruit_GFX.h>
 // #include <algorithm>
 
 namespace FormOmni
 {
+    // The machine menu (walked with the encoder from the Step machine-menu and from Mix).
+    // Opens on the specialized editors (STEPNOTES / STEPPOTS / TPAT — kept as-is per the
+    // FORM_V2_REVIEW.md §4 decisions); the seven param pages after them render in the
+    // shared dispStepParams grid. The old STEP1/STEPCONDITION pages are gone — the shell's
+    // Step param pages 1-2 (P-Lockable) cover those fields.
+    // The machine menu. The SEQ view walks only OMNIPAGE_STEPNOTES (its notes editor);
+    // the MIX view walks OMNIPAGE_TRACK..SCALE (track/global params) — Seq is for
+    // programming steps, Mix is for track-level control (FORM_V2_REVIEW.md).
+    // TPAT is not a menu page: it's the Transpose view's renderer id.
     enum OmniPage
     {
-        OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
-        OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
-        OMNIPAGE_STEPNOTES,
-        OMNIPAGE_STEPPOTS, 
-        OMNIPAGE_TRACK, // Length, MidiFX
-        OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode, 
-        OMNIPAGE_SEQMIX, // Mute, Solo, Gate
-        OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat, 
-        OMNIPAGE_SEQMIDI, // Midi Chan, MonoPhonic, SendMidi, SendCV
-        OMNIPAGE_TIMINGS, // BPM, Rate, Swing, Swing Division
-        OMNIPAGE_SCALE,
-        OMNIPAGE_TPAT, // SendMidi, SendCV
-        OMNIPAGE_NAV,  // Page, Zoom, UI Mode
-        OMNIPAGE_COUNT
+        OMNIPAGE_STEPNOTES,  // per-step notes editor (Seq menu)
+        OMNIPAGE_TRACK,      // Length, MidiFX          (Mix menu from here on)
+        OMNIPAGE_TRACKMODES, // Triplet, Direction, Mode
+        OMNIPAGE_SEQTPOSE,   // Transpose, Mode, Apply TPat
+        OMNIPAGE_SEQMIDI,    // Chan, Mono, SendMidi, SendCV
+        OMNIPAGE_TIMINGS,    // BPM, Rate, Swing, Swing Div
+        OMNIPAGE_SCALE,      // Root, Scale, Lock, Group
+        OMNIPAGE_POTS,       // click to open the shared Pot Config submode (Mix + Seq menus)
+        OMNIPAGE_COUNT,
+        OMNIPAGE_TPAT = OMNIPAGE_COUNT // Transpose-view render id (not in trackParams_)
     };
 
-    enum OmniStepPage
-    {
-        OSTEPPAGE_1,
-        OSTEPAGE_COUNT
-    };
+    // 2-char cell codes for the play modes (full kTrackModeMsg name pops while turning —
+    // §4 label rule: a dispStepParams cell fits <=3 digits of number or <=2 chars of text).
+    const char* kTrackModeShort[] = {"--", "PG", "RD", "R2", "SF", "SH"};
+    const char* kTranspModeShort[] = {"GI", "SE", "LI"};
 
     const char* kUIModeMsg[] = {"CONFIG", "MIX", "LENGTH", "TRANSPOSE", "STEP", "NOTE EDIT"};
 
-    const char* kPotMode[] = {"CC Step", "CC Fade"};
-
-    const char* kTranspModeMsg[] = {"GINT", "SEMI", "LINT"};
     const char* kTranspModeLongMsg[] = {"GBL INTERVAL", "SEMITONES", "LOC INTERVAL"};
 
     const char* kTrackModeMsg[] = {"NONE", "PONG", "RAND", "RND2", "SHUF", "SHLD"};
@@ -49,35 +53,8 @@ namespace FormOmni
     // 1, 2, 3, 4, 8, 16, 32, 64
     const uint8_t kRateShortcuts[] = {0, 1, 2, 3, 6, 9, 12, 15};
 
-    const uint8_t kZoomMults[] = {1,2,4};
-    const uint8_t kPageMax[] = {4,2,1};
-
-    // 0, 0.33333, 0.66666, 0.83333
-    // 0, 0.25, 0.5, 0.75, 1.0
-    // 0, 0.083333, 0.166666, 0.083333
-    // Percent, how much to nudge note forward to become a triplet note
-    const float kTripletNudge[] = {0.0f, 1.0f/3.0f, 1.0f/3.0f * 2.0f, 0.0f};
-
-    // Mod to use for swing
-    // 16th is 2
-    // 0S0S0S
-    // 00S00
-    // 10001000100010001000
-    const uint8_t kSwingDivisionMod[] = {2,4};
-
-    // const char *kTrigConditions[36] = {
-	// "1:1",
-	// "1:2", "2:2",
-	// "1:3", "2:3", "3:3",
-	// "1:4", "2:4", "3:4", "4:4",
-	// "1:5", "2:5", "3:5", "4:5", "5:5",
-	// "1:6", "2:6", "3:6", "4:6", "5:6", "6:6",
-	// "1:7", "2:7", "3:7", "4:7", "5:7", "6:7", "7:7",
-	// "1:8", "2:8", "3:8", "4:8", "5:8", "6:8", "7:8", "8:8"};
-
     const char* kConditionModes[9] = {"--", "FILL", "!FIL", "PRE", "!PRE", "NEI", "!NEI", "1ST", "!1ST"};
 
-    // Must be a quick way to calculate this
     uint8_t kTrigConditionsAB[35][2] = {
 	{1, 2},	{2, 2},
 	{1, 3},	{2, 3},	{3, 3},
@@ -87,49 +64,52 @@ namespace FormOmni
     {1, 7},	{2, 7},	{3, 7},	{4, 7},	{5, 7},	{6, 7},	{7, 7},
 	{1, 8},	{2, 8},	{3, 8},	{4, 8},	{5, 8},	{6, 8},	{7, 8},	{8, 8}};
 
-    // int sizeArray[sizeof(kTrigConditions)];
-
     // Off, Reset, Forward, Reverse, Jump Rand, Rand, Jump to step
     const char *kStepFuncs[7] = {"--", "RSET", "<<", ">>", "<>", "J?", "???"};
 
-    const int kStepFuncColors[7] = {RED, ORANGE, DKYELLOW, GREEN, MAGENTA, ROSE, DIMORANGE};
+    // v2 Step value palettes: len index for 0.5·0.75·1·2·4·6·8·16·32·64, and mfxIndex for Off + FX 1-5.
+    static const uint8_t kLenPalette[10] = {2, 3, 4, 5, 7, 9, 11, 19, 20, 22};
+    static const uint8_t kMfxPalette[6] = {0, 2, 3, 4, 5, 6};
 
     // Global param management so pages are same across machines
     ParamManager trackParams_;
-    ParamManager stepParams_;
     ParamManager tPatParams_;
 
-    bool paramsInit_ = false;
     bool neighborPrevTrigWasTrue_ = false;
 
     uint8_t omniUiMode_ = 0;
 
+    // The ParamManagers above are shared namespace globals. They must be populated
+    // AT RUNTIME, not from the constructor: omxModeForm is a global object, so its
+    // constructor (which news these OMNI machines) can run during static init BEFORE
+    // these ParamManager globals are themselves constructed -- in which case the
+    // ParamManager constructor later wipes any pages the OMNI ctor had added, leaving
+    // 0 pages and a param selector stuck on param 1. Keying on getNumPages() makes
+    // this idempotent and self-healing: loopUpdate() (runtime) rebuilds if wiped.
+    void FormMachineOmni::ensureParamsInit()
+    {
+        if (trackParams_.getNumPages() > 0)
+            return;
+
+        trackParams_.addPage(7);  // OMNIPAGE_STEPNOTES
+        trackParams_.addPage(2);  // OMNIPAGE_TRACK: Length, MidiFX
+        trackParams_.addPage(3);  // OMNIPAGE_TRACKMODES: Triplet, Direction, Mode
+        trackParams_.addPage(3);  // OMNIPAGE_SEQTPOSE: Transpose, Mode, Apply TPat
+        trackParams_.addPage(4);  // OMNIPAGE_SEQMIDI: Chan, Mono, SendMidi, SendCV
+        trackParams_.addPage(4);  // OMNIPAGE_TIMINGS: BPM, Rate, Swing, Swing Div
+        trackParams_.addPage(4);  // OMNIPAGE_SCALE: Root, Scale, Lock, Group
+        trackParams_.addPage(3);  // OMNIPAGE_POTS: the ACTIONS page (Quant / Clear / Pots)
+
+        tPatParams_.addPage(17);
+    }
+
     FormMachineOmni::FormMachineOmni()
     {
-        if (!paramsInit_)
-        {
-            trackParams_.addPage(4); // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
-            trackParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
-            trackParams_.addPage(7); // OMNIPAGE_STEPNOTES,
-            trackParams_.addPage(7); // OMNIPAGE_STEPPOTS,
-            trackParams_.addPage(4); // OMNIPAGE_TRACK, // Length, MidiFX
-            trackParams_.addPage(4); // OMNIPAGE_TRACKMODES, // Triplet Mode, Direction, Mode,
-            trackParams_.addPage(4); // OMNIPAGE_SEQMIX, // Mute, Solo, Gate
-            trackParams_.addPage(4); // OMNIPAGE_SEQTPOSE, // Transpose, Transpose Mode, Apply Transpose Pat,
-            trackParams_.addPage(4); // OMNIPAGE_SEQMIDI, // Midi Chan, MonoPhonic, SendMidi, SendCV
-            trackParams_.addPage(4); // OMNIPAGE_TIMINGS, // BPM, Rate, Swing, Swing Division
-            trackParams_.addPage(4); // OMNIPAGE_SCALE,
-            trackParams_.addPage(17); // OMNIPAGE_TPAT, // SendMidi, SendCV
+        ensureParamsInit();
 
-            stepParams_.addPage(4); // OMNIPAGE_STEP1, // Vel, Nudge, Length, MFX
-            stepParams_.addPage(4); // OMNIPAGE_STEPCONDITION, // Prob, Condition, Func, Accum
-            stepParams_.addPage(7); // OMNIPAGE_STEPNOTES,
-            stepParams_.addPage(7); // OMNIPAGE_STEPPOTS,
-
-            tPatParams_.addPage(17);
-
-            paramsInit_ = true;
-        }
+        for (uint8_t k = 0; k < 16; k++)
+            for (uint8_t i = 0; i < 6; i++)
+                auditionNotes_[k][i] = -1;
 
         resetPlayback();
 
@@ -139,94 +119,18 @@ namespace FormOmni
     {
     }
 
-    FormMachineInterface *FormMachineOmni::getClone()
-    {
-        auto clone = new FormMachineOmni();
-        return clone;
-    }
-
     ParamManager *FormMachineOmni::getParams()
     {
         return &trackParams_;
-
-        // switch (omniUiMode_)
-        // {
-        // case OMNIUIMODE_CONFIG:
-        // case OMNIUIMODE_MIX:
-        // {
-        //     if(stepHeld_)
-        //     {
-        //         return &stepParams_;
-        //     }
-        //     else
-        //     {
-        //         return &trackParams_;
-        //     }
-        // }
-        // break;
-        // case OMNIUIMODE_LENGTH:
-        // break;
-        // case OMNIUIMODE_TRANSPOSE:
-        //     return &tPatParams_;
-        // case OMNIUIMODE_STEP:
-        // case OMNIUIMODE_NOTEEDIT:
-        // break;
-        // }
-
-        // return &trackParams_;
     }
 
     void FormMachineOmni::onSelected()
     {
-        setPotPickups(OMNIPAGE_NAV);
-    }
-
-    void FormMachineOmni::setPotPickups(uint8_t page)
-    {
-        switch (page)
-        {
-        case OMNIPAGE_STEP1:
-        {
-            auto selStep = getSelStep();
-
-            omxFormGlobal.potPickups[0].SetValRemap(selStep->vel, 0, 127);
-            omxFormGlobal.potPickups[1].SetValRemap(selStep->nudge, -60, 60);
-            omxFormGlobal.potPickups[2].SetValRemap(selStep->len, 0, 22);
-            omxFormGlobal.potPickups[3].SetValRemap(selStep->mfxIndex, 0, 6);
-        }
-        break;
-        case OMNIPAGE_STEPCONDITION:
-            break;
-        case OMNIPAGE_STEPNOTES:
-            break;
-        case OMNIPAGE_STEPPOTS:
-            break;
-        case OMNIPAGE_NAV:
-        {
-            omxFormGlobal.potPickups[0].SetValRemap(activePage_, 0, kPageMax[zoomLevel_] - 1);
-            omxFormGlobal.potPickups[1].SetValRemap(zoomLevel_, 0, 2);
-            omxFormGlobal.potPickups[4].SetValRemap(omniUiMode_, 0, OMNIUIMODE_COUNT - 1);
-        }
-        break;
-        };
     }
 
     bool FormMachineOmni::doesConsumePots()
     {
         return true;
-        // switch (omniUiMode_)
-        // {
-        // case OMNIUIMODE_CONFIG:
-        // case OMNIUIMODE_MIX:
-        // case OMNIUIMODE_LENGTH:
-        // case OMNIUIMODE_TRANSPOSE:
-        // case OMNIUIMODE_COUNT:
-        //     return false;
-        // case OMNIUIMODE_STEP:
-        // case OMNIUIMODE_NOTEEDIT:
-        //     return true;
-        // }
-        // return false;
     }
 
     bool FormMachineOmni::doesConsumeDisplay()
@@ -236,10 +140,6 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         case OMNIUIMODE_LENGTH:
-            if (stepHeld_)
-            {
-                return true;
-            }
             return false;
         case OMNIUIMODE_TRANSPOSE:
         case OMNIUIMODE_STEP:
@@ -256,12 +156,6 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         case OMNIUIMODE_LENGTH:
-        {
-            if(stepHeld_)
-            {
-                return true;
-            }
-        }
             return false;
         case OMNIUIMODE_TRANSPOSE:
         case OMNIUIMODE_STEP:
@@ -275,9 +169,27 @@ namespace FormOmni
         return doesConsumeKeys();
     }
 
-    const char *FormMachineOmni::getF3shortcutName()
+    void FormMachineOmni::onEncoderChanged(Encoder::Update enc)
     {
-        return "LEN | RATE";
+        if (getEncoderSelect())
+            onEncoderChangedSelectParam(enc);
+        else
+            onEncoderChangedEditParam(enc);
+    }
+
+    void FormMachineOmni::seqNoteOn(MidiNoteGroup noteGroup, uint8_t midiFx)
+    {
+        if (context_ == nullptr || noteOnFuncPtr == nullptr)
+            return;
+        noteOnFuncPtr(context_, noteGroup, midiFx);
+    }
+
+    void FormMachineOmni::seqNoteOff(MidiNoteGroup noteGroup, uint8_t midiFx)
+    {
+        if (context_ == nullptr || noteOffFuncPtr == nullptr)
+            return;
+        noteGroup.noteOff = true;
+        noteOffFuncPtr(context_, noteGroup, midiFx);
     }
 
     bool FormMachineOmni::getEncoderSelect()
@@ -288,24 +200,8 @@ namespace FormOmni
         {
             shouldSelect = transpPat_.getEncoderSelect();
         }
-        else if (omniUiMode_ <= OMNIUIMODE_MIX)
-        {
-            shouldSelect = !stepHeld_;
-        }
 
 	    return omxFormGlobal.encoderSelect && !midiSettings.midiAUX && shouldSelect;
-    }
-
-    void FormMachineOmni::setTest()
-    {
-        auto track = getTrack();
-
-        track->len = 3;
-        track->steps[0].notes[0] = 60;
-        track->steps[1].notes[0] = 64;
-        track->steps[2].notes[0] = 67;
-        track->steps[3].notes[0] = 71;
-        onTrackLengthChanged();
     }
 
     void FormMachineOmni::playBackStateChanged(bool newIsPlaying)
@@ -320,8 +216,6 @@ namespace FormOmni
             // playingStep_ = 0;
             // ticksTilNextTrigger_ = 0;
             // ticksTilNextTriggerRate_ = 0;
-
-            playRateCounter_ = playingStep_;
 
             onRateChanged();
 
@@ -339,6 +233,9 @@ namespace FormOmni
                 seqNoteOff(noteGroup, n.getMidifFXIndex());
             }
             noteOns_.clear();
+
+            ratchetDivs_ = 0; // don't leave a ratchet pending across stop
+            ratchetStepIdx_ = -1;
 
             didNotesPlayThisStep_ = false;
         }
@@ -391,9 +288,9 @@ namespace FormOmni
     {
         // nextStepTime_ = seqConfig.lastClockMicros + ;
         playingStep_ = getRestartPos();
+        pongDir_ = getTrack()->playDirection == TRACKDIRECTION_FORWARD ? 1 : -1; // pong starts in the set direction
 
         grooveCounter_ = 0;
-        playRateCounter_ = 0;
         loopCounter_ = 0;
         loopCount_ = 0;
         firstLoop_ = true;
@@ -440,54 +337,342 @@ namespace FormOmni
         return &getTrack()->steps[selStep_];
     }
 
-    uint8_t FormMachineOmni::key16toStep(uint8_t key16)
+    // Clamp seq_ fields a raw pattern blit can't guarantee. Called from setSeq (bank load +
+    // pattern switch) and loadFromDisk (FRAM). Only the two fields whose valid range is
+    // narrower than their bitfield width can go bad: potBank (:3 = 0-7, but NUM_CC_BANKS
+    // pots banks) indexes past pots[][]; rate (:5 = 0-31, but kNumSeqRates entries) indexes
+    // past kSeqRates[] and feeds a `/ rate` divide. channel (:4) and potMode (:1) already
+    // can't exceed their valid range, so they need no clamp.
+    void FormMachineOmni::sanitizeSeq()
     {
-        uint8_t zoomMult = kZoomMults[zoomLevel_];
-
-        uint8_t view = 16 * zoomMult;
-
-        uint8_t page = min(activePage_, kPageMax[zoomLevel_]);
-
-        uint8_t stepIndex = (view * page) + (key16 * zoomMult);
-
-        return stepIndex;
+        if (seq_.potBank >= NUM_CC_BANKS)
+            seq_.potBank = 0;
+        if (seq_.rate >= kNumSeqRates)
+            seq_.rate = 9; // 1:16 default
     }
 
-    void FormMachineOmni::selStep(uint8_t stepIndex)
+    // ---- Tools view operations ----
+
+    // Gather the absolute step indices of a tool's scope in play order. The whole-loop scope is
+    // NOT contiguous in steps[]: pages live at p*16 and disabled pages / short-page tails are
+    // skipped, so it must map each loop position through positionToStep. The active-page scope is
+    // the page's own contiguous block. idx must hold up to 64 entries; returns the count.
+    uint8_t FormMachineOmni::toolScopeIndices(bool wholeTrack, uint8_t *idx)
     {
-        if (stepHeld_)
+        auto track = getTrack();
+        if (wholeTrack)
         {
-            // setPotPickups(OMNIPAGE_GBL1);
-            // Update pickups to new step
-            setPotPickups(trackParams_.getSelPage());
-            // stepHeld_ = false;
+            uint8_t len = (uint8_t)track->getLength(); // <= 64
+            for (uint8_t i = 0; i < len; i++)
+                idx[i] = track->positionToStep(i);
+            return len;
         }
-        selStep_ = key16toStep(stepIndex);
-
-        omniNoteEditor.setSelStep(selStep_);
+        uint8_t start = (uint8_t)(activePage_ * 16);
+        uint8_t len = getPageLen(activePage_);
+        for (uint8_t i = 0; i < len; i++)
+            idx[i] = start + i;
+        return len;
     }
 
-    void FormMachineOmni::stepHeld(uint8_t key16Index)
+    // Shift steps by one position. wholeTrack = the whole playing loop; otherwise just the active
+    // page. Operates over the scope's mapped indices so polymeter / disabled pages stay correct.
+    void FormMachineOmni::toolRotate(int8_t dir, bool wholeTrack)
     {
-        if(!stepHeld_)
+        auto track = getTrack();
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        if (len < 2 || dir == 0)
+            return;
+        if (dir > 0) // shift right: last -> first
         {
-            selStep(key16Index);
-            setPotPickups(trackParams_.getSelPage());
-            stepHeld_ = true;
+            Step tmp = track->steps[idx[len - 1]];
+            for (uint8_t i = len - 1; i > 0; i--)
+                track->steps[idx[i]] = track->steps[idx[i - 1]];
+            track->steps[idx[0]] = tmp;
+        }
+        else // shift left: first -> last
+        {
+            Step tmp = track->steps[idx[0]];
+            for (uint8_t i = 0; i < (uint8_t)(len - 1); i++)
+                track->steps[idx[i]] = track->steps[idx[i + 1]];
+            track->steps[idx[len - 1]] = tmp;
         }
     }
 
-    void FormMachineOmni::stepReleased(uint8_t key16Index)
+    void FormMachineOmni::toolMirror(bool wholeTrack)
     {
-        if(stepHeld_)
+        auto track = getTrack();
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = 0; i < len / 2; i++)
         {
-            uint8_t stepIndex = key16toStep(key16Index);
-            if(selStep_ == stepIndex)
+            Step tmp = track->steps[idx[i]];
+            track->steps[idx[i]] = track->steps[idx[len - 1 - i]];
+            track->steps[idx[len - 1 - i]] = tmp;
+        }
+    }
+
+    void FormMachineOmni::toolShuffle(bool wholeTrack)
+    {
+        auto track = getTrack();
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = len; i > 1; i--) // Fisher-Yates
+        {
+            uint8_t j = (uint8_t)random(0, i); // 0..i-1
+            Step tmp = track->steps[idx[i - 1]];
+            track->steps[idx[i - 1]] = track->steps[idx[j]];
+            track->steps[idx[j]] = tmp;
+        }
+    }
+
+    void FormMachineOmni::toolScaleRemap(bool wholeTrack)
+    {
+        if (omxFormGlobal.musicScale == nullptr)
+            return;
+        auto track = getTrack();
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = 0; i < len; i++)
+            for (uint8_t n = 0; n < 6; n++)
             {
-                setPotPickups(OMNIPAGE_NAV);
-                stepHeld_ = false;
+                int8_t note = track->steps[idx[i]].notes[n];
+                if (note >= 0)
+                    track->steps[idx[i]].notes[n] = omxFormGlobal.musicScale->remapNoteToScale((uint8_t)note);
+            }
+    }
+
+    void FormMachineOmni::toolQuantize(uint8_t amtPct, bool wholeTrack)
+    {
+        amtPct = constrain(amtPct, 0, 100);
+        auto track = getTrack();
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = 0; i < len; i++)
+            track->steps[idx[i]].nudge = (int8_t)((int)track->steps[idx[i]].nudge * (100 - amtPct) / 100);
+    }
+
+    void FormMachineOmni::toolChanceRnd(uint8_t pmin, uint8_t pmax)
+    {
+        if (pmin > pmax)
+        {
+            uint8_t t = pmin; pmin = pmax; pmax = t;
+        }
+        auto track = getTrack();
+        for (uint8_t st = 0; st < 64; st++)
+            if (track->steps[st].isOn())
+                track->steps[st].prob = random(pmin, pmax + 1);
+    }
+
+    void FormMachineOmni::toolTranspose(int8_t semis, bool wholeTrack)
+    {
+        auto track = getTrack();
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = 0; i < len; i++)
+            for (uint8_t n = 0; n < 6; n++)
+            {
+                int8_t note = track->steps[idx[i]].notes[n];
+                if (note >= 0)
+                    track->steps[idx[i]].notes[n] = (int8_t)constrain(note + semis, 0, 127);
+            }
+    }
+
+    void FormMachineOmni::toolRandomVel(uint8_t vmin, uint8_t vmax)
+    {
+        if (vmin > vmax)
+        {
+            uint8_t t = vmin; vmin = vmax; vmax = t;
+        }
+        auto track = getTrack();
+        for (uint8_t st = 0; st < 64; st++)
+            if (track->steps[st].hasNotes())
+                track->steps[st].vel = random(vmin, vmax + 1);
+    }
+
+    void FormMachineOmni::toolHumanize(uint8_t amtPct, bool wholeTrack)
+    {
+        int range = (int)(60L * constrain(amtPct, 0, 100) / 100); // nudge is +/-60
+        auto track = getTrack();
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = 0; i < len; i++)
+            if (track->steps[idx[i]].isOn())
+                track->steps[idx[i]].nudge = (int8_t)random(-range, range + 1);
+    }
+
+    // Apply a boolean rhythm over the current scope's steps (page or whole loop, via
+    // toolScopeIndices): on-steps trigger (empty ones are stamped with middle C),
+    // off-steps are silenced (notes + trig cleared).
+    void FormMachineOmni::applyRhythmScope(const bool *pattern, const uint8_t *vels, bool wholeTrack)
+    {
+        auto track = getTrack();
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        for (uint8_t i = 0; i < len; i++)
+        {
+            Step *s = &track->steps[idx[i]];
+            if (pattern[i])
+            {
+                s->trig = 1;
+                if (!s->hasNotes())
+                    s->notes[0] = 60;
+                if (vels != nullptr)
+                    s->vel = vels[i];
+            }
+            else
+            {
+                for (uint8_t n = 0; n < 6; n++)
+                    s->notes[n] = -1;
+                s->trig = 0;
             }
         }
+    }
+
+    // Build the euclidean rhythm for the current scope. Fills pattern[0..len-1] (len is the
+    // scope length, <= 64; generation caps at EuclideanMath's 32 and tiles beyond). Also the
+    // shell's live preview source, so what applies is exactly what previews.
+    uint8_t FormMachineOmni::buildEuclidPattern(uint8_t pulses, uint8_t rot, bool wholeTrack, bool *pattern)
+    {
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        uint8_t genLen = len > euclidean::EuclideanMath::kPatternSize ? euclidean::EuclideanMath::kPatternSize : len;
+        bool gen[euclidean::EuclideanMath::kPatternSize];
+        euclidean::EuclideanMath::clearPattern(gen);
+        if (genLen > 0)
+        {
+            euclidean::EuclideanMath::generateEuclidPattern(gen, pulses > genLen ? genLen : pulses, genLen);
+            uint8_t r = rot % genLen;
+            if (r > 0)
+                euclidean::EuclideanMath::rotatePattern(gen, genLen, r);
+        }
+        for (uint8_t i = 0; i < len; i++)
+            pattern[i] = genLen > 0 ? gen[i % genLen] : false;
+        return len;
+    }
+
+    // Build the grids rhythm (+ level-derived velocities) for the current scope.
+    uint8_t FormMachineOmni::buildGridsPattern(uint8_t inst, uint8_t x, uint8_t y, uint8_t density, bool wholeTrack, bool *pattern, uint8_t *vels)
+    {
+        uint8_t idx[64];
+        uint8_t len = toolScopeIndices(wholeTrack, idx);
+        grids::GridsChannel channel;
+        const uint8_t threshold = (uint8_t)~density;
+        for (uint8_t i = 0; i < len; i++)
+        {
+            channel.setStep((uint8_t)((i * 2) % 32)); // 32-step drum map at 8th resolution
+            uint8_t level = channel.level(inst, x, y);
+            pattern[i] = level > threshold;
+            // Velocity from how far above the threshold the level sits (like GridsWrapper).
+            vels[i] = pattern[i] ? (uint8_t)constrain(32 + (int)(95.f * float(level - threshold) / float(256 - threshold)), 32, 127) : 100;
+        }
+        return len;
+    }
+
+    void FormMachineOmni::toolEuclid(uint8_t pulses, uint8_t rot, bool wholeTrack)
+    {
+        bool pattern[64];
+        buildEuclidPattern(pulses, rot, wholeTrack, pattern);
+        applyRhythmScope(pattern, nullptr, wholeTrack);
+    }
+
+    void FormMachineOmni::toolGrids(uint8_t inst, uint8_t x, uint8_t y, uint8_t density, bool wholeTrack)
+    {
+        bool pattern[64];
+        uint8_t vels[64];
+        buildGridsPattern(inst, x, y, density, wholeTrack, pattern, vels);
+        applyRhythmScope(pattern, vels, wholeTrack);
+    }
+
+    uint8_t FormMachineOmni::potLockCC(uint8_t slot)
+    {
+        return (slot < NUM_CC_POTS) ? pots[seq_.potBank][slot] : 0;
+    }
+
+    // Send one pot-bank slot's CC live on the track's channel (the Mix CC page's
+    // encoder edits go through here — same path a physical knob turn takes).
+    void FormMachineOmni::sendPotCC(uint8_t slot, uint8_t val)
+    {
+        if (slot >= NUM_CC_POTS || !seq_.sendMidi)
+            return;
+        MM::sendControlChange(pots[seq_.potBank][slot], val, seq_.channel + 1);
+    }
+
+    void FormMachineOmni::recordNoteToStep(uint8_t absStep, int8_t note)
+    {
+        if (note < 0 || note > 127 || absStep >= 64)
+            return;
+        auto track = getTrack();
+        Step *s = &track->steps[absStep];
+        bool wasEmpty = !s->hasNotes();
+        for (uint8_t i = 0; i < 6; i++)
+            if (s->notes[i] == note)
+                return; // already there
+        for (uint8_t i = 0; i < 6; i++)
+            if (s->notes[i] < 0)
+            {
+                s->notes[i] = note;
+                if (wasEmpty)
+                    s->vel = (uint8_t)track->paramDefaults[0]; // recorded velocity = track default
+                return;
+            }
+    }
+
+    uint8_t FormMachineOmni::recordResolveStep(uint8_t quantizePct, int8_t &nudgeOut)
+    {
+        nudgeOut = 0;
+        auto track = getTrack();
+        uint16_t total = track->totalLen();
+        if (total == 0)
+            return 255;
+        // How far into the current step we are (0 at the step start, ->1 approaching the next).
+        float frac = (ticksPerStep_ > 0) ? (1.0f - (float)ticksTilNextTriggerRate_ / (float)ticksPerStep_) : 0.0f;
+        uint16_t pos = playingStep_;
+        float nudgeFrac; // signed offset from the chosen step, in [-0.5, +0.5] of a step
+        if (frac < 0.5f)
+            nudgeFrac = frac; // played late on the current step -> positive (delay) nudge
+        else
+        {
+            pos = (uint16_t)((playingStep_ + 1) % total); // round up to the next step
+            nudgeFrac = -(1.0f - frac);                    // played early -> negative nudge
+        }
+        // Nudge scaled by the quantize strength: 100% => 0 (hard snap), 0% => full played offset.
+        if (quantizePct > 100)
+            quantizePct = 100;
+        int16_t nudge = (int16_t)lroundf(nudgeFrac * 60.0f * (float)(100 - quantizePct) / 100.0f);
+        nudgeOut = (int8_t)constrain((int)nudge, -60, 60);
+        return track->positionToStep(pos);
+    }
+
+    // Map a held-note duration (in steps) to the nearest LEN value (getStepLenMult is the inverse).
+    static uint8_t lenFromSteps(float steps)
+    {
+        if (steps <= 0.1875f) return 0; // 0.125
+        if (steps <= 0.375f) return 1;  // 0.25
+        if (steps <= 0.625f) return 2;  // 0.5
+        if (steps <= 0.875f) return 3;  // 0.75
+        if (steps <= 16.5f)             // len 4..19 => 1..16 steps (len-3)
+        {
+            int v = (int)lroundf(steps) + 3;
+            return (uint8_t)(v < 4 ? 4 : v);
+        }
+        // Long notes snap to the palette's bar values: 16 / 32 / 48 / 64 steps.
+        if (steps <= 24.0f) return 19; // 16 steps (1 bar)
+        if (steps <= 40.0f) return 20; // 32 (2 bar)
+        if (steps <= 56.0f) return 21; // 48 (3 bar)
+        return 22;                     // 64 (4 bar)
+    }
+
+    void FormMachineOmni::recordNoteLen(uint8_t absStep, float durationSteps)
+    {
+        if (absStep >= 64 || durationSteps <= 0.0f)
+            return;
+        getTrack()->steps[absStep].len = lenFromSteps(durationSteps);
+    }
+
+    uint8_t FormMachineOmni::key16toStep(uint8_t key16)
+    {
+        return (uint8_t)(16 * min(activePage_, (uint8_t)3) + key16);
     }
 
     void FormMachineOmni::copyStep(uint8_t keyIndex)
@@ -515,6 +700,497 @@ namespace FormOmni
         uint8_t stepIndex = key16toStep(keyIndex);
 
         getTrack()->steps[stepIndex].CopyFrom(&bufferedStep_);
+    }
+
+    // ---- v2 Step value palettes ----
+
+    // v2 nudge palette: 9 keys spanning -60..+60 with a true zero on key 5.
+    static const int8_t kNudgePalette[9] = {-60, -45, -30, -15, 0, 15, 30, 45, 60};
+
+    // Which P-Lock bit a Step-view edit mode owns (-1 = none, e.g. Note).
+    // Modes 8/9 are the param-page pseudo-modes for Nudge / Accum (no StepMode of
+    // their own — they only exist as palettes on the Seq param pages).
+    static int8_t stepModeToLock(uint8_t mode)
+    {
+        switch (mode)
+        {
+        case 1: return SLOCK_VEL;
+        case 2: return SLOCK_LEN;
+        case 3: return SLOCK_REPEAT;
+        case 4: return SLOCK_PROB;
+        case 5: return SLOCK_COND;
+        case 6: return SLOCK_FUNC;
+        case 7: return SLOCK_MFX;
+        case 8: return SLOCK_NUDGE;
+        case 9: return SLOCK_ACCUM;
+        default: return -1;
+        }
+    }
+
+    uint8_t FormMachineOmni::stepPaletteCount(uint8_t mode)
+    {
+        switch (mode)
+        {
+        case 1: return 10;             // velocity
+        case 2: return 10;             // length
+        case 3: return 4;              // repeat
+        case 4: return 10;             // chance
+        case 5: return 10;             // math (1 Fill, 2 !Fill, 3-6 ratio A, 7-10 ratio B)
+        case 6: return STEPFUNC_COUNT; // function
+        case 7: return 6;              // midi fx (Off + FX 1-5)
+        case 8: return 9;              // nudge (-60..+60, zero on key 5)
+        case 9: return 5;              // accum (0-4)
+        default: return 0;             // note = handled elsewhere
+        }
+    }
+
+    void FormMachineOmni::setStepPalette(uint8_t key16, uint8_t mode, uint8_t p)
+    {
+        if (key16 >= 16) return;
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        s->trig = 1; // locking a value turns the step on (ghost step if it has no notes)
+        int8_t lock = stepModeToLock(mode);
+        if (lock >= 0) s->setLock(lock); // setting a value P-Locks that param
+        switch (mode)
+        {
+        case 1: s->vel = constrain(((int)(p + 1) * 127) / 10, 1, 127); break;
+        case 2: if (p < 10) s->len = kLenPalette[p]; break;
+        case 3: if (p < 4) s->repeat = p; break;
+        case 4: s->prob = constrain((int)(p + 1) * 10, 1, 100); break;
+        case 5:
+        {
+            if (p == 0) { s->condition = 1; break; } // Fill
+            if (p == 1) { s->condition = 2; break; } // !Fill
+            uint8_t a = 1, b = 1;
+            if (s->condition >= 9) { a = kTrigConditionsAB[s->condition - 9][0]; b = kTrigConditionsAB[s->condition - 9][1]; }
+            if (p >= 2 && p <= 5) { a = (p - 2) + 1; if (b < a) b = a; }
+            else if (p >= 6 && p <= 9) { b = (p - 6) + 1; if (a > b) a = b; }
+            for (uint8_t i = 0; i < 35; i++)
+                if (kTrigConditionsAB[i][0] == a && kTrigConditionsAB[i][1] == b) { s->condition = 9 + i; break; }
+            break;
+        }
+        case 6: if (p < STEPFUNC_COUNT) s->func = p; break;
+        case 7: if (p < 6) s->mfxIndex = kMfxPalette[p]; break;
+        case 8: if (p < 9) s->nudge = kNudgePalette[p]; break;
+        case 9: if (p < 5) s->accumTPat = p; break;
+        }
+    }
+
+    // Set a param DEFAULT from a value-palette key (same mapping as setStepPalette),
+    // pushing it to every step without its own lock (via editParamDefault's logic).
+    void FormMachineOmni::setParamDefaultPalette(uint8_t mode, uint8_t p)
+    {
+        Track *t = getTrack();
+        int pid = -1, v = 0;
+        switch (mode)
+        {
+        case 1: pid = 0; v = constrain(((int)(p + 1) * 127) / 10, 1, 127); break;
+        case 2: if (p < 10) { pid = 2; v = kLenPalette[p]; } break;
+        case 4: pid = 4; v = constrain((int)(p + 1) * 10, 1, 100); break;
+        case 5:
+        {
+            pid = 5;
+            uint8_t cur = (uint8_t)t->paramDefaults[5];
+            if (p == 0) { v = 1; break; }      // Fill
+            if (p == 1) { v = 2; break; }      // !Fill
+            uint8_t a = 1, b = 1;
+            if (cur >= 9) { a = kTrigConditionsAB[cur - 9][0]; b = kTrigConditionsAB[cur - 9][1]; }
+            if (p >= 2 && p <= 5) { a = (p - 2) + 1; if (b < a) b = a; }
+            else if (p >= 6 && p <= 9) { b = (p - 6) + 1; if (a > b) a = b; }
+            v = cur;
+            for (uint8_t i = 0; i < 35; i++)
+                if (kTrigConditionsAB[i][0] == a && kTrigConditionsAB[i][1] == b) { v = 9 + i; break; }
+            break;
+        }
+        case 6: if (p < STEPFUNC_COUNT) { pid = 6; v = p; } break;
+        case 7: if (p < 6) { pid = 3; v = kMfxPalette[p]; } break;
+        case 8: if (p < 9) { pid = 1; v = kNudgePalette[p]; } break;
+        case 9: if (p < 5) { pid = 7; v = p; } break;
+        }
+        if (pid < 0)
+            return;
+        editParamDefault((uint8_t)pid, v - (int)t->paramDefaults[pid]);
+    }
+
+    int16_t FormMachineOmni::stepPaletteSelected(uint8_t key16, uint8_t mode)
+    {
+        if (key16 >= 16) return -1;
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        switch (mode)
+        {
+        case 1: return constrain(((int)s->vel * 10 + 63) / 127 - 1, 0, 9); // rounded inverse of the vel palette
+        case 2: for (uint8_t i = 0; i < 10; i++) if (kLenPalette[i] == s->len) return i; return -1;
+        case 3: return s->repeat;
+        case 4: return constrain(((int)s->prob / 10) - 1, 0, 9);
+        case 6: return (s->func < STEPFUNC_COUNT) ? s->func : -1;
+        case 7: for (uint8_t i = 0; i < 6; i++) if (kMfxPalette[i] == s->mfxIndex) return i; return -1;
+        case 8: for (uint8_t i = 0; i < 9; i++) if (kNudgePalette[i] == s->nudge) return i; return -1;
+        case 9: return s->accumTPat;
+        default: return -1; // math via stepMathInfo
+        }
+    }
+
+    // The DEFAULT's lit palette key for a mode (-1 = none) — mirrors stepPaletteSelected
+    // but reads the track's paramDefaults (for the param pages' no-hold palette LEDs).
+    int16_t FormMachineOmni::defaultPaletteSelected(uint8_t mode)
+    {
+        Track *t = getTrack();
+        switch (mode)
+        {
+        case 1: return constrain(((int)t->paramDefaults[0] * 10 + 63) / 127 - 1, 0, 9);
+        case 2: for (uint8_t i = 0; i < 10; i++) if (kLenPalette[i] == (uint8_t)t->paramDefaults[2]) return i; return -1;
+        case 4: return constrain(((int)t->paramDefaults[4] / 10) - 1, 0, 9);
+        case 6: return (t->paramDefaults[6] < STEPFUNC_COUNT) ? t->paramDefaults[6] : -1;
+        case 7: for (uint8_t i = 0; i < 6; i++) if (kMfxPalette[i] == (uint8_t)t->paramDefaults[3]) return i; return -1;
+        case 8: for (uint8_t i = 0; i < 9; i++) if (kNudgePalette[i] == t->paramDefaults[1]) return i; return -1;
+        case 9: return t->paramDefaults[7];
+        default: return -1;
+        }
+    }
+
+    void FormMachineOmni::setRateShortcut(uint8_t topKeyIndex)
+    {
+        if (topKeyIndex >= 8) return;
+        seq_.rate = kRateShortcuts[topKeyIndex];
+        omxDisp.displayMessage("RATE 1:" + String(kSeqRates[seq_.rate]));
+        onRateChanged();
+    }
+
+    int8_t FormMachineOmni::rateShortcutSel()
+    {
+        for (uint8_t i = 0; i < 8; i++)
+            if (kRateShortcuts[i] == seq_.rate)
+                return (int8_t)i;
+        return -1;
+    }
+
+    void FormMachineOmni::editGate(int amt)
+    {
+        seq_.gate = constrain((int)seq_.gate + amt, 0, 100);
+    }
+
+    void FormMachineOmni::editRate(int amt)
+    {
+        seq_.rate = constrain((int)seq_.rate + amt, 0, kNumSeqRates - 1);
+        onRateChanged();
+    }
+
+    String FormMachineOmni::gateBox()
+    {
+        return String((uint16_t)(getGateMult(seq_.gate) * 100));
+    }
+
+    void FormMachineOmni::seqMenuEnter()
+    {
+        trackParams_.setSelPageAndParam(OMNIPAGE_STEPNOTES, 0);
+    }
+    void FormMachineOmni::seqMenuEnterEnd() // enter from the right (backing off SCALE)
+    {
+        trackParams_.setSelPageAndParam(OMNIPAGE_STEPNOTES, 6);
+    }
+    bool FormMachineOmni::seqMenuAtStart()
+    {
+        return trackParams_.getSelPage() == OMNIPAGE_STEPNOTES && trackParams_.getSelParam() == 0;
+    }
+    bool FormMachineOmni::seqMenuAtEnd() // the SEQ menu is the notes page only
+    {
+        return trackParams_.getSelPage() == OMNIPAGE_STEPNOTES && trackParams_.getSelParam() == 6;
+    }
+    bool FormMachineOmni::transMenuAtEnd()
+    {
+        return tPatParams_.getSelParam() >= 16;
+    }
+    void FormMachineOmni::transParamsDraw(uint8_t sel)
+    {
+        drawPage(OMNIPAGE_SEQTPOSE, sel);
+    }
+    void FormMachineOmni::transParamsEdit(uint8_t sel, int dir)
+    {
+        editPage(OMNIPAGE_SEQTPOSE, sel, (int8_t)dir, (int8_t)dir);
+    }
+
+    void FormMachineOmni::mixMenuEnter() // the MIX menu = the track/global pages
+    {
+        trackParams_.setSelPageAndParam(OMNIPAGE_TRACK, 0);
+    }
+    bool FormMachineOmni::mixMenuAtStart()
+    {
+        return trackParams_.getSelPage() == OMNIPAGE_TRACK && trackParams_.getSelParam() == 0;
+    }
+    void FormMachineOmni::setSelStepByKey(uint8_t key16)
+    {
+        if (key16 < 16)
+            selStep_ = key16toStep(key16);
+    }
+
+    // ---- v2 Step menu params (P-Lockable) ----
+    static const uint8_t kStepParamLockBits[8] = {
+        SLOCK_VEL, SLOCK_NUDGE, SLOCK_LEN, SLOCK_MFX, SLOCK_PROB, SLOCK_COND, SLOCK_FUNC, SLOCK_ACCUM};
+    static const char *kStepParamLabels[8] = {"VEL", "NUDG", "LEN", "MFX", "PROB", "COND", "FUNC", "ACUM"};
+    // One range table + field accessors for the 8 P-Lockable step params — the single
+    // source of truth for editStepParam / editParamDefault / clearStepParamLock.
+    static const int16_t kStepParamLo[8] = {0, -60, 0, 0, 0, 0, 0, 0};
+    static const int16_t kStepParamHi[8] = {127, 60, 22, NUM_MIDIFX_GROUPS + 2 - 1, 100, 9 + 35 - 1, STEPFUNC_COUNT + 64 - 1, 4};
+
+    static int getStepParam(const Step *s, uint8_t pid)
+    {
+        switch (pid)
+        {
+        case 0: return s->vel;
+        case 1: return s->nudge;
+        case 2: return s->len;
+        case 3: return s->mfxIndex;
+        case 4: return s->prob;
+        case 5: return s->condition;
+        case 6: return s->func;
+        case 7: return s->accumTPat;
+        }
+        return 0;
+    }
+
+    static void putStepParam(Step *s, uint8_t pid, int v)
+    {
+        switch (pid)
+        {
+        case 0: s->vel = v; break;
+        case 1: s->nudge = v; break;
+        case 2: s->len = v; break;
+        case 3: s->mfxIndex = v; break;
+        case 4: s->prob = v; break;
+        case 5: s->condition = v; break;
+        case 6: s->func = v; break;
+        case 7: s->accumTPat = v; break;
+        }
+    }
+
+    const char *FormMachineOmni::stepParamLabel(uint8_t pid)
+    {
+        return pid < 8 ? kStepParamLabels[pid] : "";
+    }
+
+    String FormMachineOmni::stepParamValueString2(uint8_t key16, uint8_t pid)
+    {
+        if (key16 >= 16) return "";
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        switch (pid)
+        {
+        case 0: return String(s->vel);
+        case 1: return String(s->nudge);
+        case 2: return getStepLenString(s->len);
+        case 3: return s->mfxIndex == 0 ? String("OFF") : (s->mfxIndex == 1 ? String("TRK") : ("FX" + String(s->mfxIndex - 1)));
+        case 4: return String(s->prob);
+        case 5: return s->condition == 2 ? String("!FILL") : (s->condition == 1 ? String("FILL") : String(getCondChar(s->condition)));
+        case 6:
+            if (s->func >= STEPFUNC_COUNT) return "J" + String(s->func - STEPFUNC_COUNT + 1);
+            if (s->func == STEPFUNC_RANDJUMP) return String("J?");
+            return String(kStepFuncs[s->func]);
+        case 7: return String(s->accumTPat);
+        default: return "";
+        }
+    }
+
+    // Compact value for the param cell (<= ~4 chars). Floats < 1 drop the leading zero (".75").
+    String FormMachineOmni::formatParamBox(uint8_t pid, int v)
+    {
+        switch (pid)
+        {
+        case 0: return String(v);
+        case 1: return String(v);
+        case 2:
+        {
+            float m = getStepLenMult(v);
+            if (m < 1.0f) { String s = String(m, 2); return s.substring(1); } // "0.75" -> ".75"
+            if (m == (float)(int)m) return String((int)m);                    // whole: "1","16"
+            return String(m, 1);                                             // "1.2"
+        }
+        case 3: return v == 0 ? String("--") : (v == 1 ? String("T") : String(v - 1)); // -- / T / 1..5
+        case 4: return String(v);
+        case 5:
+        {
+            static const char *kCondBox[9] = {"--", "F", "!F", "P", "!P", "N", "!N", "1", "!1"};
+            if (v < 9) return String(kCondBox[v]);
+            return String(getCondChar(v)); // ratios "A:B"
+        }
+        case 6:
+            if (v >= STEPFUNC_COUNT) return "J" + String(v - STEPFUNC_COUNT + 1);
+            if (v == STEPFUNC_RESTART) return String("RT"); // "RSET" -> "RT"
+            return String(kStepFuncs[v]);
+        case 7: return String(v);
+        default: return "";
+        }
+    }
+
+    static int stepParamRawValue(FormOmni::Step *s, uint8_t pid)
+    {
+        switch (pid)
+        {
+        case 0: return s->vel;
+        case 1: return s->nudge;
+        case 2: return s->len;
+        case 3: return s->mfxIndex;
+        case 4: return s->prob;
+        case 5: return s->condition;
+        case 6: return s->func;
+        case 7: return s->accumTPat;
+        default: return 0;
+        }
+    }
+
+    int FormMachineOmni::stepParamValue(uint8_t key16, uint8_t pid)
+    {
+        if (key16 >= 16)
+            return 0;
+        Step *st = &getTrack()->steps[key16toStep(key16)];
+        return stepParamRawValue(st, pid);
+    }
+
+    String FormMachineOmni::stepParamBox(uint8_t key16, uint8_t pid)
+    {
+        if (key16 >= 16) return "";
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        return formatParamBox(pid, stepParamRawValue(s, pid));
+    }
+
+    String FormMachineOmni::paramDefaultBox(uint8_t pid)
+    {
+        if (pid >= 8) return "";
+        return formatParamBox(pid, getTrack()->paramDefaults[pid]);
+    }
+
+    // Edit a track default and push it to every step that hasn't locked that param.
+    void FormMachineOmni::editParamDefault(uint8_t pid, int delta)
+    {
+        if (pid >= 8) return;
+        Track *t = getTrack();
+        int v = constrain((int)t->paramDefaults[pid] + delta, kStepParamLo[pid], kStepParamHi[pid]);
+        t->paramDefaults[pid] = (int8_t)v;
+        uint8_t bit = kStepParamLockBits[pid];
+        for (uint8_t i = 0; i < 64; i++)
+        {
+            Step *s = &t->steps[i];
+            if (s->isLocked(bit)) continue;
+            putStepParam(s, pid, v);
+        }
+    }
+
+    bool FormMachineOmni::stepParamWide(uint8_t pid)
+    {
+        return pid == 5 || pid == 6; // Cond / Func can read long -> show the value popup while editing
+    }
+
+    void FormMachineOmni::editStepParam(uint8_t key16, uint8_t pid, int delta)
+    {
+        if (key16 >= 16 || pid >= 8) return;
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        putStepParam(s, pid, constrain(getStepParam(s, pid) + delta, kStepParamLo[pid], kStepParamHi[pid]));
+        s->trig = 1;
+        s->setLock(kStepParamLockBits[pid]);
+    }
+
+    bool FormMachineOmni::stepParamLocked(uint8_t key16, uint8_t pid)
+    {
+        if (key16 >= 16 || pid >= 8) return false;
+        return getTrack()->steps[key16toStep(key16)].isLocked(kStepParamLockBits[pid]);
+    }
+
+    void FormMachineOmni::clearStepParamLock(uint8_t key16, uint8_t pid)
+    {
+        if (key16 >= 16 || pid >= 8) return;
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        s->clearLock(kStepParamLockBits[pid]);
+        putStepParam(s, pid, getTrack()->paramDefaults[pid]); // revert to the track default
+    }
+
+    uint8_t FormMachineOmni::stepMathInfo(uint8_t key16, uint8_t &a, uint8_t &b)
+    {
+        a = b = 0;
+        if (key16 >= 16) return 0;
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        if (s->condition == 1) return 1; // Fill
+        if (s->condition == 2) return 2; // !Fill
+        if (s->condition >= 9)
+        {
+            a = kTrigConditionsAB[s->condition - 9][0];
+            b = kTrigConditionsAB[s->condition - 9][1];
+            return 3;
+        }
+        return 0;
+    }
+
+    String FormMachineOmni::stepValueString(uint8_t key16, uint8_t mode)
+    {
+        if (key16 >= 16) return "";
+        Step *s = &getTrack()->steps[key16toStep(key16)];
+        switch (mode)
+        {
+        case 1: return "VEL " + String(s->vel);
+        case 2: return getStepLenString(s->len);
+        case 3: return "x" + String(s->repeat + 1);
+        case 4: return String(s->prob) + "%";
+        case 5: return s->condition == 2 ? String("!FILL") : (s->condition == 1 ? String("FILL") : String(getCondChar(s->condition)));
+        case 6:
+            if (s->func >= STEPFUNC_COUNT) return "JMP > " + String(s->func - STEPFUNC_COUNT + 1);   // jump to step (1-based)
+            if (s->func == STEPFUNC_RANDJUMP) return String("JMP > ?");                               // random jump
+            return String(kStepFuncs[s->func]);
+        case 7: return s->mfxIndex == 0 ? String("OFF") : (s->mfxIndex == 1 ? String("TRK") : ("FX" + String(s->mfxIndex - 1)));
+        default: return "";
+        }
+    }
+
+    // Step-view edit mode -> menu param id (-1 = none, e.g. Note / Repeat which has no track default).
+    static int8_t stepModeToPid(uint8_t mode)
+    {
+        switch (mode)
+        {
+        case 1: return 0; // Vel
+        case 2: return 2; // Len
+        case 4: return 4; // Chance -> prob
+        case 5: return 5; // Math -> cond
+        case 6: return 6; // Func
+        case 7: return 3; // MFX
+        default: return -1;
+        }
+    }
+
+    void FormMachineOmni::resetStepValue(uint8_t key16, uint8_t mode)
+    {
+        if (key16 >= 16) return;
+        // Params with a track default: clear the lock and revert to that default.
+        int8_t pid = stepModeToPid(mode);
+        if (pid >= 0)
+        {
+            clearStepParamLock(key16, pid);
+            return;
+        }
+        // Repeat has no track default: clear its lock and reset to the built-in default.
+        if (mode == 3)
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            s->clearLock(SLOCK_REPEAT);
+            s->repeat = 0;
+        }
+    }
+
+    void FormMachineOmni::previewNote(int8_t note, bool on)
+    {
+        if (context_ == nullptr || note < 0 || note > 127) return;
+        MidiNoteGroup ng;
+        ng.channel = seq_.channel + 1;
+        ng.noteNumber = note;
+        ng.prevNoteNumber = note;
+        ng.velocity = on ? (uint8_t)getTrack()->paramDefaults[0] : 0; // track default velocity
+        ng.sendMidi = (bool)seq_.sendMidi;
+        ng.sendCV = (bool)seq_.sendCV;
+        ng.unknownLength = true; // send/stop directly — do NOT schedule a pending note-off
+        if (on)
+        {
+            ng.noteonMicros = seqConfig.lastClockMicros;
+            seqNoteOn(ng, 255);
+        }
+        else
+        {
+            seqNoteOff(ng, 255);
+        }
     }
 
     MidiNoteGroup FormMachineOmni::step2NoteGroup(uint8_t noteIndex, Step *step)
@@ -575,9 +1251,18 @@ namespace FormOmni
     bool FormMachineOmni::evaluateTrig(uint8_t stepIndex, Step *step)
     {
         if(step->mute == 1) return false;
-        if(step->prob == 100 && step->condition == 0) return true;
+        if(step->prob == 100 && step->condition == 0)
+        {
+            // An unconditional fire counts as "previous trig was true" for PRE/!PRE, the
+            // same as a passing probability roll below — otherwise PRE semantics differ
+            // between a prob-100 step and a prob-99 step that happened to pass.
+            prevCondWasTrue_ = true;
+            return true;
+        }
 
-        if (step->prob != 100 && (step->prob == 0 || random(100) > step->prob))
+        // random(100) is 0-99, so >= makes prob N fire exactly N% of the time
+        // (with > , prob 50 fired 51% and prob 99 fired always).
+        if (step->prob != 100 && (step->prob == 0 || random(100) >= step->prob))
         {
             prevCondWasTrue_ = false;
 			return false;
@@ -651,15 +1336,17 @@ namespace FormOmni
         // Steps move forward and reverse on last step
         case TRACKMODE_PONG:
         {
+            // Bounce a runtime direction so the track's set playDirection (the FWD/REV-pong
+            // intent) is not overwritten by playback.
             auto track = getTrack();
 
             if(currentStepIndex == 0)
             {
-                track->playDirection = TRACKDIRECTION_FORWARD;
+                pongDir_ = 1;
             }
             else if(currentStepIndex == track->len)
             {
-                track->playDirection = TRACKDIRECTION_REVERSE;
+                pongDir_ = -1;
             }
         }
         return -1;
@@ -667,7 +1354,7 @@ namespace FormOmni
         case TRACKMODE_RAND:
         {
             auto track = getTrack();
-            int8_t jumpstep = random(0, track->len);
+            int8_t jumpstep = random(0, track->getLength());
             return jumpstep;
         }
         break;
@@ -685,7 +1372,7 @@ namespace FormOmni
 
             while (jumpstep == currentStepIndex)
             {
-                jumpstep = random(0, track->len);
+                jumpstep = random(0, track->getLength());
             }
 
             return jumpstep;
@@ -741,7 +1428,7 @@ namespace FormOmni
 
         while (tempShuffleVec.size() > 0)
         {
-            uint8_t randIndex = random(0, tempShuffleVec.size() - 1);
+            uint8_t randIndex = random(0, tempShuffleVec.size()); // exclusive max: cover the last index
             shuffleVec.push_back(tempShuffleVec[randIndex]);
             tempShuffleVec.erase(tempShuffleVec.begin() + randIndex);
         }
@@ -767,12 +1454,9 @@ namespace FormOmni
         {
             auto track = getTrack();
 
+            // The jump target is an absolute step index; convert it to a playback position.
             uint8_t jumpStep = functionIndex - STEPFUNC_COUNT;
-
-            // Keep jump inside length
-            jumpStep = jumpStep % (track->len + 1);
-
-            return jumpStep;
+            return (int8_t)track->stepToPosition(jumpStep);
         }
 
         switch (functionIndex)
@@ -808,7 +1492,7 @@ namespace FormOmni
         case STEPFUNC_RANDJUMP:
         {
             auto track = getTrack();
-            int8_t jumpstep = random(0, track->len);
+            int8_t jumpstep = random(0, track->getLength());
             return jumpstep;
         }
         // Randomly does a function or NONE
@@ -864,7 +1548,7 @@ namespace FormOmni
         return noteNumber;
     }
 
-    void FormMachineOmni::triggerStep(Step *step, StepDynamic *stepDynamic)
+    void FormMachineOmni::triggerStep(Step *step, StepDynamic *stepDynamic, bool ratchetHit)
     {
         if(context_ == nullptr || noteOnFuncPtr == nullptr)
             return;
@@ -876,8 +1560,32 @@ namespace FormOmni
 
         if (seq_.mute == 0)
         {
+            // Per-step CC locks: send this step's pot values on the machine's pot-bank CCs,
+            // once on trigger.
+            if (seq_.sendMidi)
+            {
+                for (uint8_t p = 0; p < NUM_CC_POTS; p++)
+                {
+                    int8_t v = step->potVals[p];
+                    if (v >= 0)
+                        MM::sendControlChange(pots[seq_.potBank][p], v, seq_.channel + 1);
+                }
+            }
+
+            // Monophonic: play only the last set note of the step.
+            int8_t monoNoteIdx = -1;
+            if (seq_.monoPhonic)
+            {
+                for (int8_t i = 0; i < 6; i++)
+                    if (step->notes[i] >= 0 && step->notes[i] <= 127)
+                        monoNoteIdx = i;
+            }
+
             for (int8_t i = 0; i < 6; i++)
             {
+                if (seq_.monoPhonic && i != monoNoteIdx)
+                    continue;
+
                 int8_t noteNumber = step->notes[i];
 
                 if (noteNumber >= 0 && noteNumber <= 127)
@@ -898,13 +1606,14 @@ namespace FormOmni
                     // With nudge, two steps could fire at once,
                     // If a step already triggered a note,
                     // don't trigger same note again to avoid
-                    // overlapping note ons
+                    // overlapping note ons. Ratchet sub-hits are the exception: they intentionally
+                    // re-fire the same note within the step, so skip this de-dup for them.
                     for (auto n : triggeredNotes_)
                     {
-                        if (n.noteNumber == noteNumber)
+                        if (!ratchetHit && n.noteNumber == noteNumber)
                         {
                             noteTriggeredOnSameStep = true;
-                            continue;
+                            break;
                         }
                     }
 
@@ -964,15 +1673,69 @@ namespace FormOmni
             }
         }
 
-        // Increment steps tPat position
-        stepDynamic->tPatPos = (stepDynamic->tPatPos + step->accumTPat) % (seq_.transposePattern.len + 1);
+        // Increment steps tPat position (once per step, not on each ratchet sub-hit).
+        if (!ratchetHit)
+            stepDynamic->tPatPos = (stepDynamic->tPatPos + step->accumTPat) % (seq_.transposePattern.len + 1);
+    }
+
+    // Preview a step's programmed notes on a manual key press (Mix low-row audition).
+    // Plays the raw stored notes (no transpose / MIDI FX) so the note-off on key release
+    // reliably matches the note-on. key16 is the physical low-row key 0-15.
+    void FormMachineOmni::auditionStep(uint8_t key16, bool on)
+    {
+        if (context_ == nullptr || noteOnFuncPtr == nullptr || key16 >= 16)
+            return;
+
+        // Always release anything currently sounding on this key first.
+        for (int8_t i = 0; i < 6; i++)
+        {
+            int8_t n = auditionNotes_[key16][i];
+            if (n < 0)
+                continue;
+            MidiNoteGroup off;
+            off.channel = seq_.channel + 1;
+            off.noteNumber = n;
+            off.prevNoteNumber = n;
+            off.velocity = 0;
+            off.sendMidi = (bool)seq_.sendMidi;
+            off.sendCV = (bool)seq_.sendCV;
+            seqNoteOff(off, 255);
+            auditionNotes_[key16][i] = -1;
+        }
+
+        if (!on)
+            return;
+
+        uint8_t stepIndex = key16toStep(key16);
+        Step *step = &getTrack()->steps[stepIndex];
+
+        // Monophonic: only the last set note sounds.
+        int8_t monoNoteIdx = -1;
+        if (seq_.monoPhonic)
+            for (int8_t i = 0; i < 6; i++)
+                if (step->notes[i] >= 0 && step->notes[i] <= 127)
+                    monoNoteIdx = i;
+
+        for (int8_t i = 0; i < 6; i++)
+        {
+            if (seq_.monoPhonic && i != monoNoteIdx)
+                continue;
+
+            int8_t noteNumber = step->notes[i];
+            if (noteNumber < 0 || noteNumber > 127)
+                continue;
+
+            auto noteGroup = step2NoteGroup(i, step);
+            noteGroup.noteNumber = noteNumber;
+            noteGroup.prevNoteNumber = noteNumber;
+            noteGroup.noteOff = false;
+            noteGroup.noteonMicros = seqConfig.lastClockMicros;
+            seqNoteOn(noteGroup, 255);
+            auditionNotes_[key16][i] = noteNumber;
+        }
     }
 
     void FormMachineOmni::onEnabled()
-    {
-        stepHeld_ = false;
-    }
-    void FormMachineOmni::onDisabled()
     {
     }
 
@@ -984,25 +1747,17 @@ namespace FormOmni
         case OMNIUIMODE_MIX:
         case OMNIUIMODE_LENGTH:
         {
-            if (stepHeld_)
             {
-                stepParams_.changeParam(enc.dir());
-            }
-            else
-            {
-                int8_t prevPage = trackParams_.getSelPage();
-
                 trackParams_.changeParam(enc.dir());
 
-                int8_t newPage = trackParams_.getSelPage();
-
-                if (prevPage == OMNIPAGE_STEPPOTS && newPage == OMNIPAGE_TRACK)
+                // Menu map: the transpose params page lives in the Transpose view now —
+                // skip it when walking the Mix menu.
+                if (trackParams_.getSelPage() == OMNIPAGE_SEQTPOSE)
                 {
-                    omxDisp.displayMessage("Track Params");
-                }
-                else if (prevPage == OMNIPAGE_TRACK && newPage == OMNIPAGE_STEPPOTS)
-                {
-                    omxDisp.displayMessage("Step Params");
+                    if (enc.dir() > 0)
+                        trackParams_.setSelPageAndParam(OMNIPAGE_SEQMIDI, 0);
+                    else
+                        trackParams_.setSelPageAndParam(OMNIPAGE_TRACKMODES, 2);
                 }
 
                 // if (trackParams_.getSelPage() != prevPage)
@@ -1072,15 +1827,7 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         {
-            switch (selPage)
-            {
-            case OMNIPAGE_TPAT: // SendMidi, SendCV
-                transpPat_.onEncoderChangedEditParam(enc, selParam, &seq_.transposePattern);
-                break;
-            default:
-                editPage(selPage, selParam, amtSlow, amtFast);
-                break;
-            }
+            editPage(selPage, selParam, amtSlow, amtFast);
         }
         break;
         case OMNIUIMODE_LENGTH:
@@ -1109,7 +1856,6 @@ namespace FormOmni
             uint8_t prevMode = omniUiMode_;
             omniUiMode_ = newMode;
             onUIModeChanged(prevMode, newMode);
-            encoderSelect_ = true;
 
             if (!silent)
             {
@@ -1119,8 +1865,9 @@ namespace FormOmni
             omxLeds.setDirty();
             omxDisp.setDirty();
 
-		    omxFormGlobal.shortcutMode = FORMSHORTCUT_NONE;
-			midiSettings.midiAUX = false;
+            // v1 used to clear shortcutMode/midiAUX here — with live AUX view switching
+            // that killed the held AUX layer mid-switch. The shell owns AUX now:
+            // updateShortcutMode recomputes from the real key state every frame.
             setDirtyOnceMessageClears_ = true;
         }
     }
@@ -1132,94 +1879,24 @@ namespace FormOmni
             transpPat_.onUIEnabled();
         }
 
-        stepHeld_ = false;
-        // Tell Note editor it's been started for step mode
     }
 
     void FormMachineOmni::onPotChanged(int potIndex, int prevValue, int newValue, int analogDelta)
     {
         // Serial.println("onPotChanged: " + String(potIndex) + " " + String(prevValue) + " " + String(newValue));
 
-        // This guy is always setting the mode
-        if (potIndex == 4)
+        // v2: K5 no longer selects the UI mode — views live on the AUX layer (AUX+13-18).
+        // Knobs are the track's pot bank (§2): all 5 send their mapped CC live (below).
+
+        // The 5 knobs are the track's pot bank — send the mapped CC live on the track's own
+        // channel. The CC number comes from pots[bank][slot] (§2); the P-Lock path (hold step
+        // + pot, shell-side) locks the same slot per-step (§3). The v1 step-held pot editing
+        // that lived here is gone (velocity/length/etc. are key palettes now).
+        if (seq_.sendMidi && potIndex < NUM_CC_POTS)
         {
-            uint8_t newUIMode = omxFormGlobal.potPickups[4].UpdatePotGetMappedValue(prevValue, newValue, 0, OMNIUIMODE_COUNT - 1);
-            changeUIMode(newUIMode, true);
-            omxFormGlobal.potPickups[4].DisplayLabel(kUIModeMsg[omniUiMode_]);
-            return;
+            MM::sendControlChange(pots[seq_.potBank][potIndex], newValue, seq_.channel + 1);
+            omxDisp.setDirty(); // the top-row CC meter reflects the value; no popup
         }
-
-        if (stepHeld_)
-        {
-            auto page = stepParams_.getSelPage();
-
-            switch (page)
-            {
-            case OMNIPAGE_STEP1:
-            {
-                auto selStep = getSelStep();
-
-                if (potIndex == 0)
-                {
-                    selStep->vel = omxFormGlobal.potPickups[0].UpdatePotGetMappedValue(prevValue, newValue, 0, 127);
-                    omxFormGlobal.potPickups[0].DisplayValue("Velocity", selStep->vel);
-                }
-                else if (potIndex == 1)
-                {
-                    selStep->nudge = omxFormGlobal.potPickups[1].UpdatePotGetMappedValue(prevValue, newValue, -60, 60);
-                    int8_t nudgePerc = selStep->nudge / 60.0f * 100;
-                    tempString = "Nudge " + String(nudgePerc) + "%";
-                    omxFormGlobal.potPickups[1].DisplayLabel(tempString.c_str());
-                }
-                else if (potIndex == 2)
-                {
-                    selStep->len = omxFormGlobal.potPickups[2].UpdatePotGetMappedValue(prevValue, newValue, 0, 22);
-                    tempString = "Nt Length " + getStepLenString(selStep->len);
-                    omxFormGlobal.potPickups[2].DisplayLabel(tempString.c_str());
-                }
-                else if (potIndex == 3)
-                {
-                    selStep->mfxIndex = omxFormGlobal.potPickups[3].UpdatePotGetMappedValue(prevValue, newValue, 0, 6);
-                    tempString = "MidiFX " + (selStep->mfxIndex == 0 ? "Off" : selStep->mfxIndex == 1 ? "Track"
-                                                                                                      : String(selStep->mfxIndex - 1));
-                    omxFormGlobal.potPickups[3].DisplayLabel(tempString.c_str());
-                }
-            }
-            break;
-            case OMNIPAGE_STEPCONDITION:
-                break;
-            case OMNIPAGE_STEPNOTES:
-                break;
-            case OMNIPAGE_STEPPOTS:
-                break;
-            // case OMNIPAGE_GBL1:
-            //     break;
-            // case OMNIPAGE_1:
-            //     break;
-            // case OMNIPAGE_2:
-            //     break;
-            // case OMNIPAGE_3:
-            //     break;
-            // case OMNIPAGE_TPAT:
-            //     break;
-            };
-        }
-        else
-        {
-            if (potIndex == 0)
-            {
-                activePage_ = omxFormGlobal.potPickups[0].UpdatePotGetMappedValue(prevValue, newValue, 0, kPageMax[zoomLevel_] - 1);
-                omxFormGlobal.potPickups[0].DisplayValue("Page", activePage_ + 1);
-            }
-            else if (potIndex == 1)
-            {
-                zoomLevel_ = omxFormGlobal.potPickups[1].UpdatePotGetMappedValue(prevValue, newValue, 0, 2);
-                tempString = "Zoom " + String(kZoomMults[zoomLevel_]) + "x";
-                omxFormGlobal.potPickups[1].DisplayLabel(tempString.c_str());
-            }
-        }
-
-        
     }
 
     void FormMachineOmni::onClockTick()
@@ -1332,7 +2009,8 @@ namespace FormOmni
             auto track = getTrack();
             uint8_t length = track->len + 1;
 
-            auto currentStep = &track->steps[playingStep_];
+            // playingStep_ is a position (0..length-1); map it to the absolute step index.
+            auto currentStep = &track->steps[track->positionToStep(playingStep_)];
 
             bool shouldBeOnRate = currentStep->nudge == 0;
 
@@ -1383,7 +2061,9 @@ namespace FormOmni
                 functionStep = processStepFunction(currentStep->func);
             }
 
-            int8_t directionIncrement = track->playDirection == TRACKDIRECTION_FORWARD ? 1 : -1;
+            int8_t directionIncrement = (track->playMode == TRACKMODE_PONG)
+                                            ? pongDir_
+                                            : (track->playDirection == TRACKDIRECTION_FORWARD ? 1 : -1);
 
             uint8_t nextStepIndex;
 
@@ -1422,20 +2102,32 @@ namespace FormOmni
                 }
             }
             // uint8_t nextStepIndex = (playingStep_ + directionIncrement) % length;
-            auto nextStep = &track->steps[nextStepIndex];
+            auto nextStep = &track->steps[track->positionToStep(nextStepIndex)];
 
             if(shouldTriggerStep)
             {
                 auto trackDynamic = getDynamicTrack();
-                auto dynamicStep = &trackDynamic->steps[playingStep_];
+                auto dynamicStep = &trackDynamic->steps[track->positionToStep(playingStep_)];
 
                 triggerStep(currentStep, dynamicStep);
 
-                lastTriggeredStepState_ = true;
+                // Step repeat (ratchet): split the step into (repeat+1) even sub-hits.
+                if (currentStep->repeat > 0 && ticksPerStep_ > 1)
+                {
+                    ratchetStepIdx_ = (int8_t)track->positionToStep(playingStep_);
+                    ratchetDivs_ = currentStep->repeat + 1;
+                    ratchetHitIndex_ = 1;
+                    ratchetTotalTicks_ = ticksPerStep_;
+                    ratchetElapsed_ = 0;
+                }
+                else
+                {
+                    ratchetDivs_ = 0;
+                }
             }
             else
             {
-                lastTriggeredStepState_ = false;
+                ratchetDivs_ = 0; // a non-triggering step clears any pending ratchet
                 didNotesPlayThisStep_ = false;
             }
             lastTriggeredStepIndex_ = playingStep_;
@@ -1555,6 +2247,22 @@ namespace FormOmni
             }
         }
 
+        // Step repeat (ratchet): fire the queued sub-hits at round(k*total/divs) ticks into the
+        // step. Re-triggering the step note-offs the prior hit and note-ons again.
+        if (ratchetDivs_ > 1 && ratchetStepIdx_ >= 0 && ratchetHitIndex_ < ratchetDivs_)
+        {
+            ratchetElapsed_++;
+            int16_t target = (int16_t)(((int32_t)ratchetHitIndex_ * ratchetTotalTicks_) / ratchetDivs_);
+            if (ratchetElapsed_ >= target)
+            {
+                // Resolve the step from its index each hit — edits during playback may have
+                // re-initialised the step the original pointers referenced.
+                triggerStep(&getTrack()->steps[ratchetStepIdx_],
+                            &getDynamicTrack()->steps[ratchetStepIdx_], true);
+                ratchetHitIndex_++;
+            }
+        }
+
         ticksTilNextTrigger_--;
         ticksTilNext16Trigger_--;
         ticksTilNextTriggerRate_--;
@@ -1577,8 +2285,6 @@ namespace FormOmni
 
         ticksTilNextTrigger_ = ticksTilNext16Trigger_;
         ticksTilNextTriggerRate_ = ticksTilNext16Trigger_;
-
-        stepLengthMult_ = 16.0f / rate;
 
         stepMicros_ = clockConfig.step_micros * 16 / rate;
 
@@ -1630,7 +2336,6 @@ namespace FormOmni
         if (stepLenMult < 1.0f)
         {
             return String(stepLenMult, 2);
-            omxDisp.setLegend(2, "LEN", String(stepLenMult, 2));
         }
         else if (stepLenMult > 16)
         {
@@ -1676,6 +2381,7 @@ namespace FormOmni
 
     void FormMachineOmni::loopUpdate()
     {
+        ensureParamsInit(); // self-heal if pages were wiped by static-init ordering
         transpPat_.loopUpdate();
     }
 
@@ -1688,23 +2394,6 @@ namespace FormOmni
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         {
-            auto heldStep = getSelStep();
-
-            if(stepHeld_)
-            {
-                for (uint8_t i = 0; i < STEPFUNC_COUNT; i++)
-                {
-                    int keyColor = kStepFuncColors[i];
-
-                    if(i == heldStep->func)
-                    {
-                        keyColor = blinkState ? LEDOFF : keyColor;
-                    }
-
-                    strip.setPixelColor(1 + i, keyColor);
-                }
-            }
-
             auto track = getTrack();
 
             for (uint8_t i = 0; i < 16; i++)
@@ -1714,31 +2403,13 @@ namespace FormOmni
                 auto step = &track->steps[stepIndex];
                 int keyColor = (step->mute || !isInLen) ? LEDOFF : (step->hasNotes() ? LTBLUE : DKBLUE);
 
-                if (stepHeld_ && heldStep->func >= STEPFUNC_COUNT && (heldStep->func - STEPFUNC_COUNT) == stepIndex)
-                {
-                    keyColor = LTYELLOW;
-                }
-
                 strip.setPixelColor(11 + i, keyColor);
             }
 
             if(omxFormGlobal.isPlaying)
             {
-                // auto track = getTrack();
-                // uint8_t playingStepKey = playRateCounter_ % (16 * kZoomMults[zoomLevel_]);
-
-                // playingStepKey = map(playingStepKey, 0, 16 * kZoomMults[zoomLevel_], 0, 15);
-
-                // strip.setPixelColor(11 + playingStepKey, WHITE);
-
-                uint8_t playingStepKey = lastTriggeredStepIndex_ % (16 * kZoomMults[zoomLevel_]);
-
-                if (kZoomMults[zoomLevel_] > 1)
-                {
-                    playingStepKey = map(playingStepKey, 0, 16 * kZoomMults[zoomLevel_], 0, 15);
-                }
-
-                strip.setPixelColor(11 + playingStepKey, lastTriggeredStepState_ ? WHITE : RED);
+                uint8_t playingStepKey = lastTriggeredStepIndex_ % 16;
+                strip.setPixelColor(11 + playingStepKey, GREEN); // playhead: steady bright green
             }
         }
         break;
@@ -1759,6 +2430,14 @@ namespace FormOmni
     }
     void FormMachineOmni::onEncoderButtonDown()
     {
+        // Clicking the POTS cell in the machine menu asks the shell to open the shared
+        // Pot Config submode — the machine can't reach auxMacroManager_ itself. Only while
+        // the machine menu is actually showing: other machine-owned views (Transpose's
+        // TPAT editor) fall through here too, and a stale selPage left on POTS was
+        // hijacking every click there into the CC editor.
+        if ((omniUiMode_ == OMNIUIMODE_CONFIG || omniUiMode_ == OMNIUIMODE_MIX) &&
+            trackParams_.getSelPage() == OMNIPAGE_POTS)
+            actionRequested_ = (int8_t)trackParams_.getSelParam(); // 0 QNT / 1 CLR / 2 POTS
     }
     bool FormMachineOmni::onKeyUpdate(OMXKeypadEvent e)
     {
@@ -1770,316 +2449,56 @@ namespace FormOmni
         omxDisp.setDirty();
         omxLeds.setDirty();
 
-        if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
-        {
-            if(e.down())
-            {
-                if(thisKey == 3)
-                {
-                    auto track = getTrack();
-                    track->playDirection = track->playDirection == TRACKDIRECTION_FORWARD ? TRACKDIRECTION_REVERSE : TRACKDIRECTION_FORWARD;
-                    omxDisp.displayMessage(track->playDirection == TRACKDIRECTION_FORWARD ? ">>" : "<<");
-                }
-                else if (thisKey >= 13 && thisKey < 19)
-                {
-                    changeUIMode(thisKey - 13, false);
-                    setPotPickups(OMNIPAGE_NAV);
-                    return true;
-                }
-            }
-        }
-
+        // v2: the shell owns AUX, the step row, and the top row in every view. The only
+        // key events that still reach the machine are the Mix-view F3 fall-through
+        // (rate + flat track length) and the Transpose view's delegation. The old v1
+        // layers that lived here (AUX uiMode switch, step-hold mute/func/jump palette,
+        // F1/F2 step copy-cut/paste, double-click into the note editor) are gone.
         switch (omniUiMode_)
         {
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
         {
-            // Double click to enter note edit
-            if (!e.down() && thisKey >= 11 && e.clicks() == 2)
+            if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
             {
-                auto track = getTrack();
-
-                selStep(thisKey - 11);
-                stepReleased(thisKey - 11);
-                uint8_t stepIndex = key16toStep(thisKey - 11);
-                // reverse effects of quick click mute
-                track->steps[stepIndex].mute = !track->steps[stepIndex].mute;
-
-                changeUIMode(OMNIUIMODE_NOTEEDIT, false);
-                omxFormGlobal.auxBlock = true;
-                return true;
-            }
-
-            if (stepHeld_)
-            {
-                // Shortcut to set mute
-                if (e.quickClicked() && thisKey >= 11)
+                if (e.down() && thisKey >= 3 && thisKey <= 10)
                 {
-                    auto track = getTrack();
-
-                    selStep(thisKey - 11);
-                    stepReleased(thisKey - 11);
-                    uint8_t stepIndex = key16toStep(thisKey - 11);
-                    track->steps[stepIndex].mute = !track->steps[stepIndex].mute;
+                    seq_.rate = kRateShortcuts[thisKey - 3];
+                    omxDisp.displayMessage("RATE 1:" + String(kSeqRates[seq_.rate]));
+                    onRateChanged();
                 }
-                else if (e.down() && thisKey >= 1 && thisKey <= STEPFUNC_COUNT)
+                if (e.down() && thisKey >= 11 && thisKey < 27)
                 {
-                    auto step = getSelStep();
-
-                    step->func = thisKey - 1;
-                    omxDisp.displayMessage(kStepFuncs[step->func]);
-                }
-                // Shortcut to jump to another step
-                else if (e.down() && thisKey >= 11)
-                {
-                    uint8_t jumpStep = key16toStep(thisKey - 11);
-
-                    // Conditional might be unneeded, this should never be false
-                    if (jumpStep != selStep_)
-                    {
-                        auto step = getSelStep();
-
-                        step->func = jumpStep + STEPFUNC_COUNT;
-
-                        omxDisp.displayMessage("Jump to " + String(jumpStep + 1));
-                    }
-                }
-                // Release the held step key
-                if (!e.down() && thisKey >= 11)
-                {
-                    stepReleased(thisKey - 11);
-                }
-            }
-            else
-            {
-                switch (omxFormGlobal.shortcutMode)
-                {
-                case FORMSHORTCUT_NONE:
-                {
-                    if (thisKey >= 11 && thisKey < 27)
-                    {
-                        // Shortcut to set mute, not sure this is needed here
-                        if (e.quickClicked())
-                        {
-                            auto track = getTrack();
-
-                            selStep(thisKey - 11);
-                            stepReleased(thisKey - 11);
-                            uint8_t stepIndex = key16toStep(thisKey - 11);
-                            track->steps[stepIndex].mute = !track->steps[stepIndex].mute;
-                        }
-                        else if (e.down())
-                        {
-                            selStep(thisKey - 11);
-                            stepHeld(thisKey - 11);
-                        }
-                        else
-                        {
-                            stepReleased(thisKey - 11);
-                        }
-                    }
-                }
-                break;
-                case FORMSHORTCUT_AUX:
-                    break;
-                case FORMSHORTCUT_F1:
-                    if (e.down() && thisKey == 0)
-                    {
-                        changeUIMode(OMNIUIMODE_NOTEEDIT, false);
-                        omxFormGlobal.auxBlock = true;
-                        return true;
-                    }
-                    // Copy Paste
-                    else if (e.down() && thisKey >= 11 && thisKey < 27)
-                    {
-                        if (omxFormGlobal.shortcutPaste == false)
-                        {
-                            copyStep(thisKey - 11);
-                            omxFormGlobal.shortcutPaste = true;
-                        }
-                        else
-                        {
-                            pasteStep(thisKey - 11);
-                        }
-                    }
-                    break;
-                case FORMSHORTCUT_F2:
-                    // Cut Paste
-                    if (e.down() && thisKey >= 11 && thisKey < 27)
-                    {
-                        if (omxFormGlobal.shortcutPaste == false)
-                        {
-                            cutStep(thisKey - 11);
-                            omxFormGlobal.shortcutPaste = true;
-                        }
-                        else
-                        {
-                            pasteStep(thisKey - 11);
-                        }
-                    }
-                    break;
-                case FORMSHORTCUT_F3:
-                    // Set track length
-                    if (e.down() && thisKey >= 3 && thisKey <= 10)
-                    {
-                        seq_.rate = kRateShortcuts[thisKey - 3];
-                        omxDisp.displayMessage("RATE 1:" + String(kSeqRates[seq_.rate]));
-                        onRateChanged();
-                    }
-                    if (e.down() && thisKey >= 11 && thisKey < 27)
-                    {
-                        auto track = getTrack();
-
-                        uint8_t pageKey = (thisKey - 11) + (16 * min(activePage_, kPageMax[zoomLevel_] - 1));
-                        track->len = pageKey * kZoomMults[zoomLevel_] + (kZoomMults[zoomLevel_] - 1);
-                        onTrackLengthChanged();
-                        omxDisp.displayMessage("LENGTH " + String(track->getLength()));
-                    }
-                    break;
+                    uint8_t flatLen = (thisKey - 11) + (16 * min(activePage_, (uint8_t)3));
+                    setTrackLen(flatLen); // rebuild the page structure from a flat length
+                    omxDisp.displayMessage("LENGTH " + String(getTrack()->getLength()));
                 }
             }
         }
-        break;
-        case OMNIUIMODE_LENGTH:
         break;
         case OMNIUIMODE_TRANSPOSE:
         {
             transpPat_.onKeyUpdate(e, &tPatParams_, &seq_.transposePattern);
         }
         break;
-        case OMNIUIMODE_STEP:
-        case OMNIUIMODE_NOTEEDIT:
-            // if (e.down() && thisKey == 0)
-            // {
-            //     changeUIMode(OMNIUIMODE_MIX, false);
-            //     return true;
-            // }
-            omniNoteEditor.onKeyUpdate(e, getTrack());
+        default:
             break;
         }
         return false;
     }
     bool FormMachineOmni::onKeyHeldUpdate(OMXKeypadEvent e)
     {
-        // uint8_t thisKey = e.key();
-
-        switch (omniUiMode_)
-        {
-        case OMNIUIMODE_CONFIG:
-        case OMNIUIMODE_MIX:
-        {
-            switch (omxFormGlobal.shortcutMode)
-            {
-            case FORMSHORTCUT_NONE:
-            {
-                // if (thisKey >= 11 && thisKey < 27)
-                // {
-                //     stepHeld(thisKey - 11);
-                // }
-            }
-            break;
-            case FORMSHORTCUT_AUX:
-                break;
-            case FORMSHORTCUT_F1:
-                break;
-            case FORMSHORTCUT_F2:
-                break;
-            case FORMSHORTCUT_F3:
-                break;
-            }
-        }
-        break;
-        case OMNIUIMODE_LENGTH:
-        break;
-        case OMNIUIMODE_TRANSPOSE:
+        if (omniUiMode_ == OMNIUIMODE_TRANSPOSE)
         {
             transpPat_.onKeyHeldUpdate(e, &seq_.transposePattern);
         }
-        break;
-        case OMNIUIMODE_STEP:
-        case OMNIUIMODE_NOTEEDIT:
-            omniNoteEditor.onKeyHeldUpdate(e, getTrack());
-            break;
-        }
-
         return true;
-    }
-
-    bool FormMachineOmni::onKeyQuickClicked(OMXKeypadEvent e)
-    {
-        uint8_t thisKey = e.key();
-
-        switch (omniUiMode_)
-        {
-        case OMNIUIMODE_CONFIG:
-        case OMNIUIMODE_MIX:
-        break;
-        case OMNIUIMODE_LENGTH:
-        break;
-        case OMNIUIMODE_TRANSPOSE:
-        break;
-        case OMNIUIMODE_STEP:
-        case OMNIUIMODE_NOTEEDIT:
-            if (omxFormGlobal.auxBlock == false && thisKey == 0)
-            {
-                changeUIMode(OMNIUIMODE_MIX, false);
-                omxFormGlobal.auxBlock = true;
-                return true;
-            }
-            break;
-        }
-
-        return false;
     }
 
     void FormMachineOmni::editPage(uint8_t page, uint8_t param, int8_t amtSlow, int8_t amtFast)
     {
         switch (page)
         {
-        case OMNIPAGE_STEP1: // Vel, Nudge, Length, MFX
-        {
-            auto selStep = getSelStep();
-
-            if (param == 0)
-            {
-                selStep->vel = constrain(selStep->vel + amtFast, 0, 127);
-            }
-            else if (param == 1)
-            {
-                selStep->nudge = constrain(selStep->nudge + amtSlow, -60, 60);
-            }
-            else if (param == 2)
-            {
-                selStep->len = constrain(selStep->len + amtSlow, 0, 22);
-            }
-            else if (param == 3)
-            {
-                selStep->mfxIndex = constrain(selStep->mfxIndex + amtSlow, 0, NUM_MIDIFX_GROUPS + 2 - 1);
-            }
-        }
-        break;
-        case OMNIPAGE_STEPCONDITION: // Prob, Condition, Func, Accum
-        {
-            auto selStep = getSelStep();
-
-            if (param == 0)
-            {
-                selStep->prob = constrain(selStep->prob + amtFast, 0, 100);
-            }
-            else if (param == 1)
-            {
-                selStep->condition = constrain(selStep->condition + amtSlow, 0, 35);
-            }
-            else if (param == 2)
-            {
-                selStep->func = constrain(selStep->func + amtSlow, 0, STEPFUNC_COUNT + 64 - 1);
-            }
-            else if (param == 3)
-            {
-                selStep->accumTPat = constrain(selStep->accumTPat + amtSlow, 0, 4);
-            }
-        }
-        break;
         case OMNIPAGE_STEPNOTES:
         {
             auto selStep = getSelStep();
@@ -2093,24 +2512,6 @@ namespace FormOmni
             }
         }
         break;
-        case OMNIPAGE_STEPPOTS:
-        {
-            auto selStep = getSelStep();
-
-            if (param == 5)
-            {
-                seq_.potMode = constrain(seq_.potMode + amtSlow, 0, 1);
-            }
-            else if (param == 6)
-            {
-                seq_.potBank = constrain(seq_.potBank + amtSlow, 0, NUM_CC_BANKS - 1);
-            }
-            else
-            {
-                selStep->potVals[param] = constrain(selStep->potVals[param] + amtFast, -1, 127);
-            }
-        }
-        break;
         // Length, MidiFX
         case OMNIPAGE_TRACK:
         {
@@ -2118,8 +2519,9 @@ namespace FormOmni
 
             if (param == 0)
             {
-                track->len = constrain(track->len + amtSlow, 0, 63);
-                onTrackLengthChanged();
+                // Through setTrackLen so enabledPages/pageLen are rebuilt too — writing
+                // track->len directly desyncs them and the next syncLen() reverts the edit.
+                setTrackLen(constrain(track->len + amtSlow, 0, 63));
             }
             else if (param == 1)
             {
@@ -2127,7 +2529,7 @@ namespace FormOmni
             }
         }
         break;
-        // Triplet Mode, Direction, Mode,
+        // Triplet Mode, Direction, Mode
         case OMNIPAGE_TRACKMODES:
         {
             auto track = getTrack();
@@ -2139,7 +2541,7 @@ namespace FormOmni
             }
             else if (param == 1)
             {
-                // Reverse encoder direction since forward makes more sense to the right. 
+                // Reverse encoder direction since forward makes more sense to the right.
                 track->playDirection = constrain(track->playDirection - amtSlow, 0, 1);
             }
             else if (param == 2)
@@ -2151,41 +2553,26 @@ namespace FormOmni
                 {
                     calculateShuffle();
                 }
+                // The cell only fits a 2-char code — the full name shows while turning (§4 rule).
+                omxDisp.displayMessage(kTrackModeMsg[track->playMode]);
             }
         }
         break;
-        // Mute, Solo, Gate
-        case OMNIPAGE_SEQMIX:
-        {
-            if (param == 0)
-            {
-                seq_.mute = constrain(seq_.mute + amtSlow, 0, 1);
-            }
-            else if (param == 1)
-            {
-                seq_.solo = constrain(seq_.solo + amtSlow, 0, 1);
-            }
-            else if (param == 2)
-            {
-                seq_.gate = constrain(seq_.gate + amtFast, 0, 100);
-            }
-        }
-        break;
-        // Transpose, Transpose Mode, Apply Transpose Pat,
+        // Apply Transpose Pat, Transpose, Transpose Mode (menu-map PG20 order)
         case OMNIPAGE_SEQTPOSE:
         {
             if (param == 0)
             {
-                seq_.transpose = constrain(seq_.transpose + amtSlow, -64, 64);
+                seq_.applyTransPat = constrain(seq_.applyTransPat + amtSlow, 0, 1);
             }
             else if (param == 1)
             {
-                seq_.transposeMode = constrain(seq_.transposeMode + amtSlow, 0, TRANPOSEMODE_COUNT - 1);
-                omxDisp.displayMessage(kTranspModeLongMsg[seq_.transposeMode]);
+                seq_.transpose = constrain(seq_.transpose + amtSlow, -64, 64);
             }
             else if (param == 2)
             {
-                seq_.applyTransPat = constrain(seq_.applyTransPat + amtSlow, 0, 1);
+                seq_.transposeMode = constrain(seq_.transposeMode + amtSlow, 0, TRANPOSEMODE_COUNT - 1);
+                omxDisp.displayMessage(kTranspModeLongMsg[seq_.transposeMode]);
             }
         }
         break;
@@ -2229,6 +2616,7 @@ namespace FormOmni
             {
                 seq_.rate = constrain(seq_.rate + amtSlow, 0, kNumSeqRates - 1);
                 onRateChanged();
+                omxDisp.displayMessage("RATE 1:" + String(kSeqRates[seq_.rate])); // §4: full form while turning
             }
             else if (param == 2)
             {
@@ -2237,6 +2625,7 @@ namespace FormOmni
             else if (param == 3)
             {
                 track->swingDivision = constrain(track->swingDivision + amtSlow, 0, 1);
+                omxDisp.displayMessage(track->swingDivision == 0 ? "SWING 16th" : "SWING 8th");
             }
         }
         break;
@@ -2299,52 +2688,25 @@ namespace FormOmni
             }
         }
         break;
-        case OMNIPAGE_TPAT: // SendMidi, SendCV
-        {
         }
-        break;
-        }
+    }
+
+    // Render one 4-cell param page in the shared shell look (dispStepParams). Values obey
+    // the FORM_V2_REVIEW.md §4 label rules: numerics up to 3 digits inline, text at most
+    // 2 chars; longer names show transiently while the encoder edits (see editPage).
+    void FormMachineOmni::dispParamGrid(const char *labels[4], const String vals[4], uint8_t selParam)
+    {
+        const char *values[4];
+        for (uint8_t i = 0; i < 4; i++)
+            values[i] = vals[i].c_str();
+        const bool locked[4] = {false, false, false, false};
+        omxDisp.dispStepParams(labels, values, locked, selParam, !getEncoderSelect());
     }
 
     bool FormMachineOmni::drawPage(uint8_t page, uint8_t selParam)
     {
         switch (page)
         {
-        case OMNIPAGE_STEP1: // Vel, Nudge, Length, MFX
-        {
-            omxDisp.clearLegends();
-
-            auto selStep = getSelStep();
-
-            omxDisp.setLegend(0, "VEL", selStep->vel);
-
-            int8_t nudgePerc = (selStep->nudge / 60.0f) * 100;
-            omxDisp.setLegend(1, "NUDG", nudgePerc);
-            omxDisp.setLegend(2, "LEN", getStepLenString(selStep->len));
-            omxDisp.setLegend(3, "MFX", selStep->mfxIndex == 0, selStep->mfxIndex == 1 ? "TRK" : String(selStep->mfxIndex - 1));
-        }
-            return true;
-        case OMNIPAGE_STEPCONDITION: // Prob, Condition, Func, Accum
-        {
-            omxDisp.clearLegends();
-
-            auto selStep = getSelStep();
-
-            omxDisp.setLegend(0, "CHC%", selStep->prob);
-            omxDisp.setLegend(1, "COND", getCondChar(selStep->condition));
-
-            if (selStep->func >= STEPFUNC_COUNT)
-            {
-                omxDisp.setLegend(2, "FUNC", "J" + String(selStep->func - STEPFUNC_COUNT + 1));
-            }
-            else
-            {
-                omxDisp.setLegend(2, "FUNC", kStepFuncs[selStep->func]);
-            }
-
-            omxDisp.setLegend(3, "ACUM", selStep->accumTPat == 0, selStep->accumTPat);
-        }
-            return true;
         case OMNIPAGE_STEPNOTES:
         {
             const char *labels[6];
@@ -2359,7 +2721,6 @@ namespace FormOmni
 
                 if (note >= 0 && note <= 127)
                 {
-                    // note = note + (5 * 12); // get rid of negative octaves since we can only disp 3 chars per note
                     tempStrings[i] = omxFormGlobal.useNoteNumbers ? String(note) : omxFormGlobal.musicScale->getFullNoteName(note);
                     labels[i] = tempStrings[i].c_str();
                 }
@@ -2372,111 +2733,86 @@ namespace FormOmni
             omxDisp.dispCenteredSlots(FONT_LABELS, labels, 6, selParam, getEncoderSelect(), true, true, headers, 1);
         }
             return false;
-        case OMNIPAGE_STEPPOTS:
-        {
-            const char *labels[5];
-            const char *headers[2];
-            headers[0] = kPotMode[seq_.potMode];
-            tempStrings[5] = "Bank " + String(seq_.potBank + 1);
-            headers[1] = tempStrings[5].c_str();
-
-            auto step = getSelStep();
-
-            for (uint8_t i = 0; i < 5; i++)
-            {
-                int pVal = step->potVals[i];
-
-                if (pVal >= 0 && pVal <= 127)
-                {
-                    tempStrings[i] = String(pVal);
-                    labels[i] = tempStrings[i].c_str();
-                }
-                else
-                {
-                    labels[i] = "-";
-                }
-            }
-
-            omxDisp.dispCenteredSlots(labels, 5, selParam, getEncoderSelect(), true, true, headers, 2);
-
-            // omxDisp.clearLegends();
-
-            // auto selStep = getSelStep();
-            // // auto bank = pots[potSettings.potbank];
-
-            // omxDisp.setLegend(0, "CC1", selStep->potVals[0] < 0, selStep->potVals[0]);
-            // omxDisp.setLegend(1, "CC2", selStep->potVals[1] < 0, selStep->potVals[1]);
-            // omxDisp.setLegend(2, "CC3", selStep->potVals[2] < 0, selStep->potVals[2]);
-            // omxDisp.setLegend(3, "CC4", selStep->potVals[3] < 0, selStep->potVals[3]);
-        }
-            return false;
-        // Length, MidiFX
+        // The seven param pages render in the shared 4-cell grid — same look as the
+        // shell's Step/Notes/MI param pages (FORM_V2_REVIEW.md §4 decision 2).
         case OMNIPAGE_TRACK:
         {
             auto track = getTrack();
-
-            omxDisp.setLegend(0, "LEN", track->len + 1);
-            omxDisp.setLegend(1, "MFX", track->midiFx == 0, track->midiFx);
+            const char *labels[4] = {"LEN", "MFX", "", ""};
+            String vals[4];
+            vals[0] = String(track->len + 1);
+            vals[1] = track->midiFx == 0 ? "--" : String(track->midiFx);
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
-        // Triplet Mode, Direction, Mode,
+            return false;
         case OMNIPAGE_TRACKMODES:
         {
             auto track = getTrack();
-
-            omxDisp.setLegend(0, "TRIP", bool2lightswitchMsg[track->tripletMode]);
-            omxDisp.setLegend(1, "DIR", track->playDirection == TRACKDIRECTION_FORWARD ? ">>" : "<<");
-            omxDisp.setLegend(2, "MODE", kTrackModeMsg[track->playMode]);
+            const char *labels[4] = {"TRIP", "DIR", "MODE", ""};
+            String vals[4];
+            vals[0] = track->tripletMode ? "On" : "--";
+            vals[1] = track->playDirection == TRACKDIRECTION_FORWARD ? ">>" : "<<";
+            vals[2] = kTrackModeShort[track->playMode];
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
-        // Mute, Solo, Gate
-        case OMNIPAGE_SEQMIX:
-        {
-            omxDisp.setLegend(0, "MUTE", seq_.mute == 1);
-            omxDisp.setLegend(1, "SOLO", seq_.solo == 1);
-            uint8_t gateMult = getGateMult(seq_.gate) * 100;
-            omxDisp.setLegend(2, "GATE", gateMult);
-        }
-            return true;
-        // Transpose, Transpose Mode, Apply Transpose Pat,
+            return false;
         case OMNIPAGE_SEQTPOSE:
         {
-            omxDisp.setLegend(0, "TPOS", seq_.transpose);
-            omxDisp.setLegend(1, "TYPE", kTranspModeMsg[seq_.transposeMode]);
-            omxDisp.setLegend(2, "TPAT", seq_.applyTransPat == 1);
+            const char *labels[4] = {"TPAT", "TPOS", "TYPE", ""};
+            String vals[4];
+            vals[0] = seq_.applyTransPat == 1 ? "On" : "--";
+            vals[1] = String(seq_.transpose);
+            vals[2] = kTranspModeShort[seq_.transposeMode];
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
-        // Midi Chan, MonoPhonic, SendMidi, SendCV
+            return false;
         case OMNIPAGE_SEQMIDI:
         {
-            omxDisp.setLegend(0, "CHAN", seq_.channel + 1);
-            omxDisp.setLegend(1, "MONO", seq_.monoPhonic == 1 ? "MONO" : "POLY");
-            omxDisp.setLegend(2, "MIDI", seq_.sendMidi ? "SEND" : paramOffMsg);
-            omxDisp.setLegend(3, "CV", seq_.sendCV ? "SEND" : paramOffMsg);
+            const char *labels[4] = {"CHAN", "MONO", "MIDI", "CV"};
+            String vals[4];
+            vals[0] = String(seq_.channel + 1);
+            vals[1] = seq_.monoPhonic == 1 ? "On" : "--";
+            vals[2] = seq_.sendMidi ? "On" : "--";
+            vals[3] = seq_.sendCV ? "On" : "--";
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
-        // BPM, Rate, Swing, Swing Division
+            return false;
         case OMNIPAGE_TIMINGS:
         {
             auto track = getTrack();
-
-            omxDisp.setLegend(0, "BPM", (uint16_t)clockConfig.clockbpm);
-            omxDisp.setLegend(1, "RATE", "1/" + String(kSeqRates[seq_.rate]));
-            omxDisp.setLegend(2, "SWNG", track->swing);
-            omxDisp.setLegend(3, "S-DV", track->swingDivision == 0 ? "16th" : "8th");
+            const char *labels[4] = {"BPM", "RATE", "SWNG", "S-DV"};
+            String vals[4];
+            vals[0] = String((uint16_t)clockConfig.clockbpm);
+            vals[1] = String(kSeqRates[seq_.rate]); // full "1:n" pops while turning
+            vals[2] = String(track->swing);
+            vals[3] = track->swingDivision == 0 ? "16" : "8"; // "16th"/"8th" pops while turning
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
+            return false;
         case OMNIPAGE_SCALE:
         {
-            omxDisp.setLegend(0, "ROOT", omxFormGlobal.musicScale->getNoteName(scaleConfig.scaleRoot));
-            omxDisp.setLegend(1, "SCALE", scaleConfig.scalePattern < 0, scaleConfig.scalePattern);
-            omxDisp.setLegend(2, "LOCK", scaleConfig.lockScale);
-            omxDisp.setLegend(3, "GROUP", scaleConfig.group16);
+            const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
+            String vals[4];
+            vals[0] = omxFormGlobal.musicScale->getNoteName(scaleConfig.scaleRoot);
+            vals[1] = scaleConfig.scalePattern < 0 ? "--" : String(scaleConfig.scalePattern);
+            vals[2] = scaleConfig.lockScale ? "On" : "--";
+            vals[3] = scaleConfig.group16 ? "On" : "--";
+            dispParamGrid(labels, vals, selParam);
         }
-            return true;
+            return false;
+        case OMNIPAGE_POTS:
+        {
+            // ACTIONS (menu-map PG05): Quant / Clear / Pot Config — click a cell to fire
+            // (the shell runs the action via takeActionRequest).
+            const char *labels[4] = {"QNT", "CLR", "POTS", ""};
+            // square, x, open circle, filled circle - ´µ¶·
+            String vals[4] = {"@", "µ", "@", ""};
+            dispParamGrid(labels, vals, selParam);
+        }
+            return false;
         case OMNIPAGE_TPAT:
         {
-            transpPat_.onDisplayUpdate(omniUiMode_ == OMNIUIMODE_TRANSPOSE ? &tPatParams_ : &trackParams_, &seq_.transposePattern, getEncoderSelect());
+            transpPat_.onDisplayUpdate(&tPatParams_, &seq_.transposePattern, getEncoderSelect());
         }
             return false;
         }
@@ -2494,28 +2830,9 @@ namespace FormOmni
         case OMNIUIMODE_MIX:
         case OMNIUIMODE_LENGTH:
         {
-            int8_t selPage = trackParams_.getSelPage();
-            int8_t selParam = trackParams_.getSelParam();
-
-            // bool drawGeneric = true;
-
-            // switch (selPage)
-            // {
-            // case OMNIPAGE_STEP1:
-            // case OMNIPAGE_STEPCONDITION:
-            // case OMNIPAGE_STEPNOTES:
-            // case OMNIPAGE_STEPPOTS:
-            // case OMNIPAGE_TPAT: // SendMidi, SendCV
-            //     drawGeneric = drawPage(selPage, selParam);
-            //     break;
-            // }
-
-            bool drawGeneric = drawPage(selPage, selParam);
-
-            if(drawGeneric)
-            {
-                omxDisp.dispGenericMode2(trackParams_.getNumPages(), trackParams_.getSelPage(), trackParams_.getSelParam(), getEncoderSelect());
-            }
+            // Every page renders itself (the specialized editors, or the shared
+            // dispParamGrid look) — the legacy dispGenericMode2 legend fallback is retired.
+            drawPage(trackParams_.getSelPage(), trackParams_.getSelParam());
         }
         break;
         case OMNIUIMODE_TRANSPOSE:
@@ -2536,13 +2853,14 @@ namespace FormOmni
     // AUX + Top 2 = Reset
     // AUX + Top 3 = Flip play direction if forward or reverse
     // AUX + Top 4 = Increment play direction mode
-    void FormMachineOmni::onAUXFunc(uint8_t funcKey) {}
-
     int FormMachineOmni::saveToDisk(int startingAddress, Storage *storage)
 	{
         int saveSize = sizeof(OmniSeq);
 
-        Serial.println("Omni Save Size = " + String(saveSize));
+        // Serial.println("Omni Save Size = " + String(saveSize));
+
+        storage->write(startingAddress, kOmniSaveVersion);
+        startingAddress += 1;
 
         auto saveBytesPtr = (byte *)(&seq_);
         for (int j = 0; j < saveSize; j++)
@@ -2559,17 +2877,28 @@ namespace FormOmni
 	{
 		int saveSize = sizeof(OmniSeq);
 
-        auto current = (byte *)&seq_;
-        for (int j = 0; j < saveSize; j++)
+        uint8_t ver = storage->read(startingAddress);
+        startingAddress += 1;
+
+        // Only blit if the on-disk layout matches; otherwise leave seq_ at defaults
+        // but still advance the address so later machines/patterns stay aligned.
+        if (ver == kOmniSaveVersion)
         {
-            *current = storage->read(startingAddress + j);
-            current++;
+            auto current = (byte *)&seq_;
+            for (int j = 0; j < saveSize; j++)
+            {
+                *current = storage->read(startingAddress + j);
+                current++;
+            }
+            // Sanitize ranges the blit can't guarantee (older saves within the same
+            // version have shipped out-of-range values, e.g. potBank 7 -> "Bank 8").
+            sanitizeSeq();
         }
+        startingAddress += saveSize;
 
         resetPlayback(true);
         onEnabled();
 
-        startingAddress += saveSize;
         return startingAddress;
 	}
 }

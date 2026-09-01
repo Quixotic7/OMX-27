@@ -155,10 +155,29 @@ namespace FormOmni
         }
     };
 
+    // Which per-step parameters can be P-Locked (each has a bit in Step::locks).
+    enum StepLockBit
+    {
+        SLOCK_VEL = 0,
+        SLOCK_NUDGE,
+        SLOCK_LEN,
+        SLOCK_MFX,
+        SLOCK_PROB,
+        SLOCK_COND,
+        SLOCK_FUNC,
+        SLOCK_ACCUM,
+        SLOCK_REPEAT,
+        SLOCK_COUNT
+    };
+
     struct Step
     {
-        uint8_t mute : 1;      // bool for mute
-        int8_t notes[6];       // 0 - 127, -1 for off
+        // Packed into one 2-byte unit (14 bits) so the lock flags cost almost nothing.
+        uint16_t mute : 1;   // bool for mute
+        uint16_t repeat : 3; // ratchet count index: 0 = 1x (off), 1 = 2x, 2 = 3x (triplet), 3 = 4x
+        uint16_t trig : 1;   // "ghost" trigger: step is on with no notes (e.g. a locked value/CC)
+        uint16_t locks : 9;  // P-Lock flags: bit set = that param is explicitly locked (StepLockBit)
+        int8_t notes[6];     // 0 - 127, -1 for off
         int8_t potVals[5];     // 0 -> 127, -1 for off
         uint8_t vel : 7;       // 0 - 127
         int8_t nudge : 7;      // Nudge note back or forward. Range is +- 60, displayed as -100% to +100%, , displ
@@ -182,11 +201,14 @@ namespace FormOmni
         {
             // Set defaults
             mute = 0;
+            repeat = 0;
+            trig = 0;
+            locks = 0;
             for (uint8_t i = 0; i < 6; i++)
                 notes[i] = -1;
             for (uint8_t i = 0; i < 5; i++)
                 potVals[i] = -1;
-            vel = 127;
+            vel = 100;
             nudge = 0;
             len = 3;
             func = 0;
@@ -209,12 +231,18 @@ namespace FormOmni
             return false;
         }
 
+        // "On" for the Step-view grid: has notes, or is an intentional ghost trigger.
+        bool isOn() { return trig || hasNotes(); }
+
         void CopyFrom(Step *other)
         {
             mute = other->mute;
+            repeat = other->repeat;
+            trig = other->trig;
+            locks = other->locks;
             for (uint8_t i = 0; i < 6; i++)
                 notes[i] = other->notes[i];
-            for (uint8_t i = 0; i < 4; i++)
+            for (uint8_t i = 0; i < 5; i++)
                 potVals[i] = other->potVals[i];
             vel = other->vel;
             nudge = other->nudge;
@@ -227,6 +255,10 @@ namespace FormOmni
 
             // tPatPos = other->tPatPos;
         }
+
+        bool isLocked(uint8_t bit) { return (locks & (1 << bit)) != 0; }
+        void setLock(uint8_t bit) { locks |= (1 << bit); }
+        void clearLock(uint8_t bit) { locks &= ~(1 << bit); }
     };
 
     struct TrackDynamic
@@ -247,14 +279,20 @@ namespace FormOmni
         Step steps[64];
 
         uint8_t len : 6; // Max 63, Length of track, 0 - 63, maps to 1 - 64
-        // This is rot in current Seq, just going to make this a utility function that moves everything
-        uint8_t startstep : 6;     // Max 63,  Step that track starts on, -1 for random?
+        uint8_t startstep : 6;     // RESERVED — never read; kept for save-format layout (v8)
         int8_t swing : 8;         // Amount of swing, + or minus 100. Shifts off notes forward back, similar to nudge, but applies to whole track. 
         uint8_t swingDivision : 1; // 16th or 8th note swing
         uint8_t tripletMode : 1;   // automatically nudges every 2nd and 3rd step to become a triplet
         uint8_t playDirection : 1; // Forward or back
         uint8_t playMode : 3;      // Shuffles and randomizes
         uint8_t midiFx : 3;        // MidiFX index, 0 for off, 1-5 for MidiFX Groups 1-5
+
+        uint8_t enabledPages : 4; // bitmask of pages in the playback loop (muted = bit clear)
+        uint8_t pageLen[4];       // steps per page (1-16), for polymeter
+
+        // Per-track defaults for the P-Lockable step params (pid 0-7: Vel/Nudge/Len/MFX/Prob/
+        // Cond/Func/Accum). Unlocked steps track these; editing a default pushes it to them.
+        int8_t paramDefaults[8];
 
         Track()
         {
@@ -266,6 +304,69 @@ namespace FormOmni
             playDirection = TRACKDIRECTION_FORWARD;
             playMode = TRACKMODE_NONE;
             midiFx = 0;
+            enabledPages = 0b0001; // only page 1 in the loop by default
+            for (uint8_t i = 0; i < 4; i++)
+                pageLen[i] = 16;
+            initParamDefaults();
+            syncLen();
+        }
+
+        // ---- Polymeter: playback runs in "position space" (0 .. totalLen-1) over the ENABLED
+        // pages, in ascending order; each position maps to an absolute step index. `len` is
+        // kept = totalLen-1 for the rest of the engine.
+        uint8_t pageStepLen(uint8_t p) { return pageLen[p] == 0 ? 1 : pageLen[p]; }
+        uint16_t totalLen()
+        {
+            uint16_t t = 0;
+            for (uint8_t p = 0; p < 4; p++)
+                if (enabledPages & (1 << p))
+                    t += pageStepLen(p);
+            return t == 0 ? 1 : t;
+        }
+        void syncLen()
+        {
+            if ((enabledPages & 0x0F) == 0)
+                enabledPages = 0b0001; // never let the loop be empty
+            uint16_t t = totalLen();
+            len = (t > 64 ? 64 : t) - 1;
+        }
+        uint8_t positionToStep(uint16_t pos)
+        {
+            for (uint8_t p = 0; p < 4; p++)
+            {
+                if (!(enabledPages & (1 << p)))
+                    continue;
+                uint8_t pl = pageStepLen(p);
+                if (pos < pl)
+                    return p * 16 + pos;
+                pos -= pl;
+            }
+            return 0;
+        }
+        uint16_t stepToPosition(uint8_t absIdx)
+        {
+            uint8_t page = absIdx / 16, sp = absIdx % 16;
+            if (!(enabledPages & (1 << page)))
+                return 0; // disabled page -> loop start
+            uint16_t pos = 0;
+            for (uint8_t p = 0; p < page; p++)
+                if (enabledPages & (1 << p))
+                    pos += pageStepLen(p);
+            uint8_t maxsp = pageStepLen(page) - 1;
+            pos += (sp > maxsp ? maxsp : sp);
+            return pos;
+        }
+
+        void initParamDefaults()
+        {
+            paramDefaults[0] = 100; // vel
+            paramDefaults[1] = 0;   // nudge
+            paramDefaults[2] = 3;   // len (0.75)
+            paramDefaults[3] = 1;   // mfx (track)
+            paramDefaults[4] = 100; // prob
+            paramDefaults[5] = 0;   // cond
+            paramDefaults[6] = 0;   // func
+            paramDefaults[7] = 0;   // accum
         }
 
         uint8_t getLength()
@@ -332,7 +433,7 @@ namespace FormOmni
         uint8_t applyTransPat : 1; // bool
         uint8_t gate : 7;          // 0-100 mapping to 0-200% for quick legato
         uint8_t potBank : 3;
-        uint8_t potMode : 1;
+        uint8_t potMode : 1;       // RESERVED — never read; kept for save-format layout (v8)
 
         TransposePattern transposePattern;
 

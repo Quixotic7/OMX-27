@@ -7,112 +7,43 @@
 #include "../modes/submodes/submode_potconfig.h"
 #include "../modes/submodes/submode_preset.h"
 #include "../midifx/midifx_interface.h"
-#include "machines/form_machine_interface.h"
+#include "machines/form_machine_omni.h"
+#include "form_patterns.h"
 
-// AUX View - Rendered by form
-// Familiar shortcuts as MI Modes
+// FORM v2: an 8-track polyphonic step sequencer (single engine — the OMNI machine),
+// six views on the AUX layer, patterns, live recording. Design: design/form/FORM_DESIGN.md
+// (the v1 machine-type spec and the v2 redesign proposal live in git history).
 
-// AUX + Top 1 = Play/Stop
-// For Omni:
-// AUX + Top 2 = Reset
-// AUX + Top 3 = Flip play direction if forward or reverse
-// AUX + Top 4 = Increment rand/shuffle mode
+// v2 shell: the six top-level views, switched on the AUX layer (AUX + keys 13-18).
+// The four editor views map to the OMNI machine's UI modes; Patterns + MI are rendered
+// by the container itself.
+enum FormView
+{
+	FORMVIEW_MIX,       // AUX+13
+	FORMVIEW_STEP,      // AUX+14
+	FORMVIEW_TRANSPOSE, // AUX+15
+	FORMVIEW_NOTES,     // AUX+16
+	FORMVIEW_PATTERNS,  // AUX+17 (container-rendered)
+	FORMVIEW_MI,        // AUX+18 (container-rendered live-play keyboard)
+	FORMVIEW_TOOLS,     // AUX+19 (container-rendered pattern tools: rotate/transpose/
+	                    //         vel-randomize/humanize/euclid/grids generators)
+	FORMVIEW_COUNT
+};
 
-// Main view, F1, F2, 8 Sequencer machines - Top keys, rendered by Form
-// Lower portion rendered by the sequencer
+// Step-view edit modes: top row keys 3-10 select one. Each edits one Step field.
+enum StepMode
+{
+	STEPMODE_NOTE,   // notes[6]      (chord entry)
+	STEPMODE_VEL,    // vel
+	STEPMODE_LENGTH, // len
+	STEPMODE_REPEAT, // repeat (ratchet)
+	STEPMODE_CHANCE, // prob
+	STEPMODE_MATH,   // condition (conditional trig)
+	STEPMODE_FUNC,   // func
+	STEPMODE_MFX,    // mfxIndex
+	STEPMODE_COUNT
+};
 
-// Top 8 - Select a machine
-// Hold top 8, press bottom 16 to select a sequencer type
-// Changing sequencer type will get rid of current sequencer.
-// Maybe keep this in ram and offer undo with F1?
-
-// Machines:
-// OMNI - Powerful step sequencer
-// Euclidean
-// Grids
-// Tambola - Bouncing balls in rotating polygon
-
-// OMNI
-// Pot 1 - Pickup off, Selects Page: 1 - 4
-// Pot 2 - Pickup on, Selects Zoom: 1 Bar, 2 Bar, 4 Bar, Steps faster than zoom are hidden.
-// Pot 3 - Pickup on, Cross Page: Applies changes to step on all bars if zoom level 1 bar,
-// Pot 4 - Pickup on, Sets track rate, maybe play mode instead since there are now F3 rate shortcuts
-
-// Pot 5 - Pickup On, default is mix. Change behaviour of keys, also on UI page
-
-
-// Pot 5 - UI Mode:
-// 	SEQ - Edit steps, change active machine
-//	MIDI KEYBOARD - Play the keyboard, record notes into active machine
-//	MIDI KEYBOARD TRANSPOSE - Play the keyboard, transpose the current machine
-//	TRANSPOSE PATTERN - Edit the transpose pattern
-//	NOTE EDITOR - Edit the notes
-//	MACHINE CONFIG - Edit the machine configuration (Cut, copy, paste machines) (Load different machine types)
-
-// Pot 4 - SEQ
-//	MIX - Quickclick steps to toggle mute, hold step to edit velocity for held steps on top row, Double Click keys to edit notes, F1, F2 shortcuts for muting and soloing F1 + F2 to change length
-//  EDIT MODES: In these modes F1 and F2 do cut, copy, paste, track length, quickclick mute toggle is off?
-//	EDIT FUNC - Hold step to edit function or jump to specific step. 
-//  EDIT NOTE LENGTH - Hold steps to edit their note lengths(Top row keys)
-//	EDIT NUDGE - Hold steps to edit their nudge(Top row keys)
-//	EDIT MFX - Hold steps and use top keys to set midifx
-//	EDIT ACCUM - Hold steps and use top keys to set step accum values
-//	EDIT CHANCE - Hold steps and use top keys to set step chance values
-//	EDIT CONDITIONS - Hold steps and use top keys to set step condition values
-//	EDIT CHORD - Hold steps and use the top row keys to set a chord, 8 Chord keys configurable like in chord mode. 
-//  EDIT DRUM - Hold steps and use the top row keys to set drum keys, 8 drum keys configurable like drum mode
-
-// Pot 4 - MIDI KEYBOARD
-//	RECORD OFF
-//	RECORD ON - Record notes to pattern
-
-// MIDI KEYBOARD
-//	Menu option to clear the pattern
-
-
-// Mix - Press keys to mute/unmute, hold to enter note editor
-//      Mix note editor here shows full note params
-//      Pots will set params of current page using pot pickup
-//      Sequencers can also be muted with a click, or soloed by holding down the sequencer key
-
-// Transpose - Changes keys to keyboard view, select a key to set transpose value
-
-// Step - Enters note editor, pressing keys sets notes for step, auto advances to next step when releasing notes
-
-// Note Edit - Enters note editor, pressing keys toggles notes on and off, advance to next step by turning encoder
-//      OMNI can be set to monophonic, in this case, Note Edit sets note to latest key, only one note
-
-// Params - Hold key to quickly set the parameters for step of current page using the pots or encoder.
-//      If using pots, pot pickup is used
-//      4 Pot CC's can be set on last page
-//      If holding a step then pressing another step it will set that steps length
-
-// Track Length - Set the start and end steps for the track length, behaviour is changed by selecting highlighted start or end step than selecting non highlighted step or using the encoder
-
-// Function - Hold key then press top keys to set the step function
-
-// Transpose Pattern - Edit the transpose pattern using keys like in arp editor
-
-// Configure - Use this mode to change sequencers
-//      Hold sequencer and select type below
-//      Global config params also available in menu here
-//
-
-// Macro modes - Available and accessible just like in MI mode by double pressing AUX.
-
-// Menu Pages
-// Transpose Pattern - Editable in menu unless pot 5 mode is set to transpose pattern.
-
-// F1 = Copy / Undo cut or undo changing a machine
-// F2 = Paste
-// F1 + F2 = Cut
-
-// Other features
-// - Make sequencer keys light up as notes are triggered by them
-
-// This mode is designed to be used with samplers or drum machines
-// Each key can be configured to whatever Note, Vel, Midi Chan you want.
-// This class is very similar to the midi keyboard, maybe we merge or inherit.
 class OmxModeForm : public OmxModeInterface
 {
 public:
@@ -134,6 +65,7 @@ public:
 	void onEncoderButtonUp() override;
 
 	void onEncoderButtonDownLong() override;
+	void onEncoderButtonUpLong() override;
 
 	bool shouldBlockEncEdit() override;
 
@@ -150,8 +82,233 @@ public:
 	int saveToDisk(int startingAddress, Storage *storage);
 	int loadFromDisk(int startingAddress, Storage *storage);
 
+	// ---- Patterns (v2 data layer) ----
+	FormOmni::FormMachineOmni *getSelectedMachine();
+	// Snapshot the current pattern, then make `index` active and load it into the machines.
+	void switchPattern(uint8_t index);
+	void clearPattern(uint8_t index);
+	bool patternHasContent(uint8_t index); // any track has any step with notes (snapshots if active)
+	// Pattern-bank persistence. The bank (~165 KB) exceeds FRAM (32 KB), so on the
+	// RP2040 (V3) it lives in the LittleFS flash filesystem; Teensy builds persist only
+	// the active pattern (via the Storage blit) — a known per-platform limitation.
+	void saveBankToFS();     // no-op off-RP2040
+	bool loadBankFromFS();   // false when absent/mismatched/off-RP2040
+public:
+	// Recover the bank from flash after an FRAM header failure (the .ino reinit path):
+	// loads the bank file and brings its active pattern live in the machines.
+	void restoreBankFromFS();
 private:
-	static const uint8_t kNumMachines = 8;
+
+private:
+	// ---- v2 shell: view router ----
+	uint8_t formView_ = FORMVIEW_MIX;
+	// While AUX is held, tapping a view key selects a pending view (preview + message);
+	// the switch is committed on AUX release so the AUX overlay stays up while you browse.
+	uint8_t pendingView_ = FORMVIEW_MIX;
+	// silent = live switch (e.g. the CLEAR submenu returning): no popup.
+	void setFormView(uint8_t view, bool silent = false);
+	bool viewEditActive();   // AUX held = view browsing live (the view tag boxes)
+	void updateAuxViewLEDs(); // paint the view selector (keys 13-18) on the AUX overlay
+	// Container-rendered views:
+	// Patterns view: switch style (top row 3-6) governs WHEN a tapped slot takes over.
+	// 0 Finish Loop (at the selected track's loop end) · 1 Next Bar · 2 Instant · 3 Chained.
+	uint8_t switchStyle_ = 2;      // default Instant
+	int8_t queuedPattern_ = -1;    // pattern queued to switch at the boundary (-1 = none)
+	uint16_t lastBarTick_ = 0;     // for detecting the bar boundary (currentClockTick wrap)
+	uint8_t chain_[16] = {0};      // Chained mode: the pattern sequence
+	uint8_t chainLen_ = 0;
+	uint8_t chainPos_ = 0;
+	FormPattern *patternBuffer_ = nullptr; // F1 copy / F2 paste buffer (lazily heap-allocated so
+	                                       // the ~pattern-sized block stays out of .bss on Teensy)
+	bool patF1Used_ = false;       // F1 used as a modifier (jump) this hold -> no quick-copy
+	bool patF2Used_ = false;
+	void updatePatternsLEDs();
+	void onKeyUpdatePatterns(OMXKeypadEvent e);
+	void onDisplayPatterns();
+	// MI view — a live-play keyboard over the running sequencer (§4.6). The encoder navigates a
+	// small menu: 0 = keyboard · 1-4 = Scale (root/scale/lock/group) · 5-8 = Track (chan/vel/
+	// bank/oct). Click toggles select (turn = move) vs edit (turn = change value).
+	uint8_t miCursor_ = 0;
+	// QUANTIZE submenu (cursor 9): click enters, turn morphs the amount + previews it live on the
+	// track (from a snapshot of the original nudges), click applies, AUX exits (restores original).
+	bool miQuantSub_ = false;
+	uint8_t quantWork_ = 0;         // the amount being scrubbed in the submenu
+	int8_t quantOrigNudges_[64] = {}; // snapshot to morph from / restore on cancel
+	void quantEnterSubmenu();
+	void quantMorphPreview();       // apply quantWork_ to the track from the snapshot (preview)
+	void quantExitSubmenu(bool apply);
+	bool miClearSub_ = false;       // CLEAR (cursor 10) confirm submenu (reuses the Yes/No combo)
+	uint8_t clearSel_ = 0;          // 0 = NO, 1 = YES
+	int8_t clearReturnView_ = -1;   // view to restore when the CLEAR submenu was opened from elsewhere
+	void closeClearSub();           // close the submenu, returning to the view it was opened from
+	void onKeyUpdateMI(OMXKeypadEvent e);
+	void updateMILEDs();
+	void onDisplayMI();
+	bool onEncoderMI(int dir);      // encoder turn in the MI view. consumed?
+	bool onEncoderButtonMI();       // encoder click in the MI view. consumed?
+	// ---- Notes view (container-rendered chord editor with in-editor step nav) ----
+	uint8_t notesSelStep_ = 0;   // step being edited (0-15, active-page-relative)
+	// Param-palette holds (no F-key): hold 11 = velocity, 12 = length, 11+12 = math, 13 = chance;
+	// top row 1-10 sets the value. A quick tap of 11/12 navigates prev/next instead.
+	bool notesPaletteEngaged_ = false; // a palette hold (11/12/13, no F-key) is active
+	uint8_t notesHoldMask_ = 0;        // explicit held-bits for 11/12/13 (keyState is stale on release)
+	bool notesModalHeld_ = false;      // any modal key (1/2/11/12/13) is held (drives the popup delay)
+	uint32_t notesHoldStartMs_ = 0;    // when the modal hold began (for the popup delay)
+	bool notesHoldUIShown_ = false;    // the hold popup has engaged (past the delay or edited)
+	bool notesSuppressPrev_ = false;   // key 11 was used as a palette hold (suppress its nav)
+	bool notesSuppressNext_ = false;   // key 12 was used as a palette hold (suppress its nav)
+	bool notesF1Used_ = false;         // F1 was used as a modifier this hold (suppresses quick-copy)
+	bool notesF2Used_ = false;         // F2 was used as a modifier this hold (suppresses quick-paste)
+	int8_t notesPaletteMode();         // active palette STEPMODE from held 11/12/13, -1 = none
+	// Encoder-navigated pages (flat cursor): 0 = keyboard, 1-6 = the 6 note slots + 7 = names/
+	// numbers switch (Seq STEPNOTES page), 8-11 = scale (root/scale/lock/group), 12-15 = step
+	// params A (vel/nudge/len/mfx), 16-19 = step params B (prob/cond/func/accum). Click toggles
+	// select (turn = move cursor) vs edit (turn = change value).
+	uint8_t notesCursor_ = 0;
+	bool onEncoderNotes(int dir);       // encoder turn in the Notes view. consumed?
+	bool onEncoderButtonNotes();        // encoder click in the Notes view. consumed?
+	void notesEditScaleParam(uint8_t param, int dir); // 0 root · 1 scale · 2 lock · 3 group
+	void onKeyUpdateNotes(OMXKeypadEvent e);
+	void updateNotesLEDs();
+	void onDisplayNotes();
+	void notesSetChordFromHeld(); // build the selected step's chord from the held piano keys
+	// Live recording: record a played note into the selected track's nearest playing step, keeping
+	// its micro-timing (nudge) and length. recQuantize_ (0-100%) pulls timing toward the grid.
+	uint64_t recClearedMask_ = 0; // steps cleared this record pass (replace mode); reset on loop wrap
+	uint8_t recQuantize_ = 0;     // 0 = keep played timing, 100 = hard snap to the grid
+	void recordPlayedNote(int8_t note);
+	void recordNoteReleased(int8_t note); // commit the held note (step/nudge/length) on release
+	void flushRecHeld();                  // commit any still-held recording notes (on stop)
+	// Notes being held while recording. The note is committed to its step ON RELEASE (with the
+	// step/nudge — and the track — resolved at press time), so the sequencer can't replay it and
+	// cut the live note, and switching tracks mid-hold can't re-target the write.
+	struct RecHeld { int8_t note; uint8_t step; int8_t nudge; uint8_t track; uint32_t onMicros; };
+	RecHeld recHeld_[8] = {};
+	uint8_t recHeldCount_ = 0;
+	void commitRecHeld(const RecHeld &h); // write one held note (note/nudge/length) into its step
+	// Preview-note bookkeeping, per key: which note (and machine) a key's preview note-on started,
+	// so the matching note-off always goes out — even if AUX/a modifier swallows the key's release
+	// event for the view, or the octave/track/view changed while the key was held.
+	int8_t previewNote_[27];
+	uint8_t previewMach_[27];
+	void previewKeyOn(uint8_t key, int8_t note); // note-on on the selected track, remembered per key
+	int8_t previewKeyOff(uint8_t key);           // send the pending note-off (if any); returns the note or -1
+	// CC meter is transient: show it only briefly after a knob moves.
+	uint32_t lastPotMs_ = 0;
+	bool ccMeterWasActive_ = false;
+	bool ccMeterActive() { return lastPotMs_ != 0 && (millis() - lastPotMs_) < 1000; }
+	// ---- Step view (container-rendered v2 editor) ----
+	uint8_t stepEditMode_ = STEPMODE_NOTE; // which of the 8 modes is active (top row 3-10)
+	uint16_t heldStepMask_ = 0;            // bitmask of step keys (0-15) held right now
+	int8_t heldStepKey_ = -1;              // most-recently-pressed held step (focus for display), -1 = none
+	bool stepEdited_ = false;              // a palette value was set during this hold (suppresses clear)
+	uint32_t stepHoldStartMs_ = 0;         // when the current step-hold began (for the display delay)
+	bool stepHoldUIShown_ = false;         // the hold-step UI has engaged (past the delay or edited)
+	uint16_t heldNoteKeys_ = 0;            // Note mode: note-palette keys (degree 0-9) held right now
+	int8_t lastNotes_[6] = {60, -1, -1, -1, -1, -1}; // last chord entered; defaults to middle C
+	// Step menu cursor: page 0 = overview (palettes on hold); pages 1-2 = P-Lockable param
+	// pages (STEP: Vel/Nudge/Len/MFX, TRIG: Prob/Cond/Func/Accum), selMenu = param 0-3.
+	uint8_t stepMenuPage_ = 0;
+	uint8_t stepMenuSel_ = 0;
+	uint8_t heldPageMask_ = 0;      // F1 + page keys currently held (for loop-range gesture)
+	// F1/F2 used as a modifier this hold (suppresses the param-page quick-tap palette
+	// on their release — keyState is still true during a key's own release event).
+	bool stepF1Used_ = false;
+	bool stepF2Used_ = false;
+	bool pageGestureDone_ = false;  // a range gesture consumed this F1+page press group
+	void onKeyUpdateStep(OMXKeypadEvent e);
+	bool onEncoderStep(Encoder::Update enc);   // returns true if the Step view consumed the encoder
+	// F1 + page keys (3-6): shared select / solo / loop-range gesture (Seq + Notes views)
+	void handlePageGesture(FormOmni::FormMachineOmni *omni, uint8_t p, OMXKeypadEvent e);
+	bool onEncoderTranspose(int dir);          // Transpose params page; false = machine's pattern editor
+	bool onEncoderButtonStep();                // returns true if consumed
+	void onDisplayStepMenu();                  // render a param page (held step values / defaults)
+	// Render the page-1 track overview (+ F1/F2 overlay). keyboardMode (MI view) hides the page
+	// icons + step row and suppresses the F1/F2 overlays.
+	void onDisplaySeqTrackPage(bool keyboardMode = false);
+	void stepApplyToHeld(uint8_t paletteIndex); // set the palette value on every held step
+	void updateStepLEDs();
+	void onDisplayStep();
+	void onKeyUpdateMix(OMXKeypadEvent e);     // Mix-view track keys (mute/solo/select)
+	bool onKeyUpdateMixRoute(OMXKeypadEvent e); // Mix key routing; false = machine F3 fall-through
+	void onKeyUpdateMixHold(OMXKeypadEvent e); // low-row per-track controls while holding a track
+	void onKeyUpdateMixStep(OMXKeypadEvent e);     // low-row taps audition the selected track's steps
+	void onKeyUpdateMixStepMute(OMXKeypadEvent e); // F1 + low-row toggles the selected track's step mutes
+	void updateMixHoldLEDs();                  // paint those controls on the low row
+	int8_t heldTrackKey_ = -1; // track key held right now in Mix (for K5 hue), -1 = none
+	uint8_t mixCopyMode_ = 0;  // armed track copy while holding a track: 0 off, 1 pattern, 2 all
+	// Quant/Clear submenu round-trip (they render in MI): view + menu position to restore.
+	void submenuSetReturn();
+	void submenuReturn();
+	uint8_t subRetMixCursor_ = 0, subRetNotesCursor_ = 0;
+	// Mix encoder pages (flat cursor): 0 = track overview, 1-8 = LEVELS (per-track
+	// default-velocity mixer), 9-12 = TRACK (Mute/Solo/Gate/Rate). Click = select/edit.
+	uint8_t mixCursor_ = 0;
+	// Last CC value sent, per track x pot bank x slot (by a knob turn or the Mix CC
+	// page's encoder). Per-track-per-bank so every track's banks remember their own
+	// values — switching track or bank shows that combination's last-sent state.
+	// (potSettings.analogValues can't hold encoder edits: the pot scan rewrites it.)
+	uint8_t ccLastSent_[FORM_NUM_TRACKS][NUM_CC_BANKS][5] = {};
+	// The selected track's current bank row of that table.
+	uint8_t *ccBankRow() { return ccLastSent_[selectedMachine_][getSelectedMachine()->getPotBank()]; }
+	// Low-row steps held in Mix (audition): while held, the CC page shows/edits that
+	// step's CC P-Locks (knob turns lock too, like the Step view's hold-step gesture).
+	uint16_t mixHeldStepMask_ = 0;
+	int8_t mixHeldStepKey_ = -1; // most recent held step (focus for the lock display)
+	bool onEncoderMix(int dir); // encoder turn in the Mix view. consumed?
+	void onDisplayMixView();    // Mix display routing: F1/F2/F3 screens, else the encoder pages
+	void onDisplayCCPage(uint8_t sel, uint16_t heldMask, int8_t heldKey); // shared CC page (Seq/MI)
+	void onDisplayMix();        // render the Mix view's encoder pages
+	// Shared CC-page edit (Mix + MI): cell 0-4 = a pot-bank CC slot (live value + send),
+	// cell 5 = the track's pot bank. The P-Lock-on-held-step gesture stays Mix-only.
+	void editCCPage(uint8_t cell, int dir);
+	// Reusable pot-config action (Mix/Seq/Notes/MI POTS item): open the shared pot-config
+	// submode on the selected track's current bank.
+	void openPotConfig();
+	// Fill out[16] with the display state of the active page's 16 steps: 0 empty, 1 has-notes,
+	// 2 on, 3 on+muted, 4 has-notes+muted. Shared by the step-row renderers.
+	void fillStepStates(FormOmni::FormMachineOmni *omni, uint8_t out[16]);
+	// The gamma-corrected RGB for a track's colour (trackHue_[idx]).
+	uint32_t trackHueColor(uint8_t idx);
+	// The shared F3 rate|length screen ("1:<rate>" over a length bar of activeCount steps).
+	void dispF3RateLength(FormOmni::FormMachineOmni *omni, uint8_t activeCount);
+	// ---- Tools view (AUX+19): each menu page is a tool; keys 3-10 are that tool's
+	// action buttons; the low row auditions steps (like Mix). All tools act on the
+	// selected track. The encoder walks (toolIndex_, toolCell_): the cursor only stops on
+	// a tool's real cells (kToolCells[]) and crossing a tool boundary pops its name.
+	uint8_t toolIndex_ = 0;
+	uint8_t toolCell_ = 0;
+	// Transpose view's second encoder page: the track's live-transpose params
+	// (TPOS/TYPE/TPAT), entered by turning past the pattern editor's end.
+	bool transParamsPage_ = false;
+	uint8_t transSel_ = 0;
+	// Tool params (persist while in the mode):
+	bool toolScopeAll_ = false;              // ROTATE: whole loop vs active page
+	uint8_t toolVelMin_ = 64, toolVelMax_ = 127;
+	uint8_t toolEucPulses_ = 4, toolEucRot_ = 0;
+	uint8_t toolGridsInst_ = 0, toolGridsX_ = 128, toolGridsY_ = 128, toolGridsDens_ = 128;
+	uint8_t toolHumAmt_ = 15;                // HUMANIZE: % of max nudge
+	uint8_t toolChanceMin_ = 50, toolChanceMax_ = 100; // CHANCE RND: probability range
+	uint8_t toolQuantAmt_ = 100;             // QUANTIZE: % pull toward the grid
+	void toolAction(uint8_t tool, uint8_t action); // fire a tool's action button (keys + encoder click)
+	bool onEncoderButtonTools();                   // click on a button cell fires it. consumed?
+	void onKeyUpdateTools(OMXKeypadEvent e);
+	bool onEncoderTools(int dir);
+	void updateToolsLEDs();
+	void onDisplayTools();
+
+	// One machine per track. Follows FORM_NUM_TRACKS so the whole shell (machines_, trackHue_,
+	// every kNumMachines loop, patterns_) scales with the per-platform track count.
+	static const uint8_t kNumMachines = FORM_NUM_TRACKS;
+
+	// Mix-view encoder cursor map, parameterized by the track count so it scales with
+	// kNumMachines: 0 overview · 1..kNumMachines LEVELS · then 5 CC slots + bank + "CC" title ·
+	// then the 4-cell TRACK grid · then the machine param menu. (For 8 tracks these are the
+	// original 9-13/14/15/16-19/20.)
+	// Mix cursor map (menu-map §4): 0 overview · 1-8 LEVELS · TRACK grid · machine menu.
+	// (The CC page moved to the Seq view — Seq owns step P-Locks.)
+	static const uint8_t kMixTrack   = kNumMachines + 1; // first of the 4 TRACK-grid cursors
+	static const uint8_t kMixMenu    = kNumMachines + 5; // machine param menu cursor (last)
 
 	SubModePreset presetManager;
 
@@ -169,31 +326,35 @@ private:
 	uint8_t selectedMachine_;
 
 	Micros ledUpdateTime_;
+	int16_t lastPlayheadStep_ = -1; // selected track's last-rendered playing step (for refresh-on-advance)
 
 	// uint8_t copiedMachineIndex_;
 
-	void changeFormMode(uint8_t newFormMode);
 
-	FormMachineInterface *machines_[kNumMachines];
+	FormOmni::FormMachineOmni *machines_[kNumMachines];
 
-	FormMachineInterface *copyBuffer_; // Machine for cut/copy/paste and undo
-	FormMachineInterface *undoBuffer_; // Machine for cut/copy/paste and undo
+	// Per-track colour (hue): hold a track + turn K5 in Mix. Container-level for now
+	// (not yet persisted with the pattern).
+	uint8_t trackHue_[kNumMachines];
+
+
+	// v2 pattern data layer: the bank of whole-sequencer snapshots. The active pattern is
+	// live in the machines; the others sit here. See form_patterns.h + FORM_IMPLEMENTATION.md.
+	FormPattern patterns_[FORM_NUM_PATTERNS];
+	uint8_t activePattern_ = 0;
+
+	// Copy the 8 machines' live seq data into patterns_[activePattern_].
+	void snapshotActivePattern();
+	// Load patterns_[index] into the 8 machines.
+	void loadPatternIntoMachines(uint8_t index);
 
 	bool isMachineValid(uint8_t machineIndex);
 
-	const char *getMachineName(uint8_t machineIndex);
-	int getMachineColor(uint8_t machineIndex);
 
 	void selectMachine(uint8_t machineIndex);
 
-	FormMachineInterface* getSelectedMachine();
 
-	void changeMachineAtIndex(uint8_t machineIndex, uint8_t machineType);
 
-	void cutMachineAt(uint8_t machineIndex);
-	void copyMachineAt(uint8_t machineIndex);
-	void pasteMachineTo(uint8_t machineIndex);
-	void setMachineTo(uint8_t machineIndex, FormMachineInterface *ptr);
 
 	// char foo[sizeof(auxMacroManager_)]
 
@@ -206,14 +367,6 @@ private:
 	void updateShortcutMode();
 
 	bool getEncoderSelect();
-
-	// SubModes
-	// SubmodeInterface *activeSubmode = nullptr;
-	// SubModePotConfig subModePotConfig_;
-
-	// void enableSubmode(SubmodeInterface *subMode);
-	// void disableSubmode();
-	// bool isSubmodeEnabled();
 
 	bool onKeyUpdateSelMidiFX(OMXKeypadEvent e);
 	bool onKeyHeldSelMidiFX(OMXKeypadEvent e);

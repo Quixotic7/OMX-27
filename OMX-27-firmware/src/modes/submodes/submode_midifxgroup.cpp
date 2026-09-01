@@ -316,6 +316,22 @@ void SubModeMidiFxGroup::selectNextMFXSlot(bool silent)
 	}
 }
 
+// AUX+21: bypass-toggle the selected FX slot — notes pass through it unchanged while
+// off, and the FX (with all its settings) stays in the chain.
+void SubModeMidiFxGroup::toggleSelectedFXBypass()
+{
+	auto mfx = getMidiFX(selectedMidiFX_);
+	if (mfx == nullptr)
+	{
+		omxDisp.displayMessageTimed("No FX", 5);
+		return;
+	}
+	mfx->setChainBypass(!mfx->getChainBypass());
+	tempString = String(selectedMidiFX_ + 1) + " " + mfx->getDispName() +
+	             (mfx->getChainBypass() ? " Off" : " On");
+	omxDisp.displayMessageTimed(tempString, 5);
+}
+
 uint8_t SubModeMidiFxGroup::getArpOctaveRange()
 {
 	auto arp = getArp(false);
@@ -565,7 +581,10 @@ bool SubModeMidiFxGroup::updateLEDs()
 	{
 		// auto fxColor = midiFXParamView_ ? (i == selectedMidiFX_ ? WHITE : ORANGE) : BLUE;
 
-		auto fxColor = getMidiFX(i) == nullptr ? colorConfig.midiFXEmptyColor : getMidiFX(i)->getColor();
+		auto slotFX = getMidiFX(i);
+		// Bypassed (turned-off) FX show red; empty slots keep the dim empty colour.
+		uint32_t fxColor = slotFX == nullptr ? colorConfig.midiFXEmptyColor
+		                   : (slotFX->getChainBypass() ? (uint32_t)RED : slotFX->getColor());
 
 		if (i == selectedMidiFX_)
 		{
@@ -798,6 +817,23 @@ bool SubModeMidiFxGroup::onKeyUpdate(OMXKeypadEvent e)
 		if (passthroughQuickEdit)
 		{
 			return false;
+		}
+
+		// Hold an FX slot + F1 = turn it on, + F2 = turn it off (chain bypass — the
+		// slot goes red; the FX keeps its settings and passes notes through while off).
+		if (heldMidiFX_ >= 0 && (thisKey == 1 || thisKey == 2))
+		{
+			auto heldFX = getMidiFX(heldMidiFX_);
+			if (heldFX != nullptr)
+			{
+				heldFX->setChainBypass(thisKey == 2);
+				tempString = String(heldMidiFX_ + 1) + " " + heldFX->getDispName() +
+				             (thisKey == 2 ? " Off" : " On");
+				omxDisp.displayMessageTimed(tempString, 5);
+			}
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+			return true;
 		}
 
 		if (mfxKeysActive == false)
@@ -1148,7 +1184,7 @@ void SubModeMidiFxGroup::midiFxSelNoteInput(midifx::MidiFXSelector *mfxSelector,
 		}
 		else
 		{
-			finalMFX->noteInput(note);
+			finalMFX->processNoteInput(note);
 		}
 		return;
 	}
@@ -1175,12 +1211,12 @@ void SubModeMidiFxGroup::midiFxSelNoteInput(midifx::MidiFXSelector *mfxSelector,
 				if (finalOutputToGroup)
 				{
 					mfx->setNoteOutput(&SubModeMidiFxGroup::noteFuncForwarder, this);
-					mfx->noteInput(note);
+					mfx->processNoteInput(note);
 				}
 				else
 				{
 					mfx->setNoteOutput(&MidiFXInterface::onNoteInputForwarder, finalMFX);
-					mfx->noteInput(note);
+					mfx->processNoteInput(note);
 				}
 			}
 		}
@@ -1194,7 +1230,7 @@ void SubModeMidiFxGroup::midiFxSelNoteInput(midifx::MidiFXSelector *mfxSelector,
 			}
 			else
 			{
-				finalMFX->noteInput(note);
+				finalMFX->processNoteInput(note);
 				return;
 			}
 		}
@@ -1218,7 +1254,7 @@ void SubModeMidiFxGroup::midiFxSelNoteInput(midifx::MidiFXSelector *mfxSelector,
 		}
 		else
 		{
-			finalMFX->noteInput(note);
+			finalMFX->processNoteInput(note);
 			return;
 		}
 	}
@@ -1236,7 +1272,7 @@ void SubModeMidiFxGroup::midiFxSelNoteInput(midifx::MidiFXSelector *mfxSelector,
 		}
 		else
 		{
-			finalMFX->noteInput(note);
+			finalMFX->processNoteInput(note);
 			return;
 		}
 	}
@@ -1262,7 +1298,7 @@ void SubModeMidiFxGroup::midiFxSelNoteInput(midifx::MidiFXSelector *mfxSelector,
 		}
 		else
 		{
-			finalMFX->noteInput(note);
+			finalMFX->processNoteInput(note);
 			return;
 		}
 	}
@@ -1284,7 +1320,7 @@ void SubModeMidiFxGroup::midiFxSelNoteInput(midifx::MidiFXSelector *mfxSelector,
 			selMidiFX->setNoteOutput(&MidiFXInterface::onNoteInputForwarder, finalMFX);
 		}
 
-		selMidiFX->noteInput(note);
+		selMidiFX->processNoteInput(note);
 	}
 }
 
@@ -1570,7 +1606,9 @@ void SubModeMidiFxGroup::onDisplayUpdateMidiFX()
 	{
 		if (selFX == nullptr)
 		{
-			omxDisp.displayMessage("No FX");
+			// A label, not a popup: displayMessage() here re-fired every frame and ate
+			// any other popup (e.g. the AUX+20 "MFX PASS" message).
+			omxDisp.dispGenericModeLabel("No FX", params_.getNumPages(), params_.getSelPage());
 		}
 		else
 		{

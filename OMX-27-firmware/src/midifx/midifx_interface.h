@@ -106,8 +106,22 @@ namespace midifx
 		// Static glue to link a pointer to a member function
 		static void onNoteInputForwarder(void *context, MidiNoteGroup note)
 		{
-			static_cast<MidiFXInterface *>(context)->noteInput(note);
+			static_cast<MidiFXInterface *>(context)->processNoteInput(note);
 		}
+
+		// Chain entry: a bypassed FX passes notes straight through unchanged
+		// (AUX+21 toggles the selected slot's bypass without removing the FX).
+		void processNoteInput(MidiNoteGroup note)
+		{
+			if (chainBypass_)
+			{
+				sendNoteOut(note);
+				return;
+			}
+			noteInput(note);
+		}
+		void setChainBypass(bool bypass) { chainBypass_ = bypass; }
+		bool getChainBypass() { return chainBypass_; }
 
 		virtual void noteInput(MidiNoteGroup note) = 0;
 		// virtual MidiFXNoteFunction getInputFunc() = 0;
@@ -124,6 +138,7 @@ namespace midifx
 
 	protected:
 		bool enabled_ = false;
+		bool chainBypass_ = false; // true = notes pass through this FX unchanged (AUX+21)
 		bool selected_ = false;
 		bool auxDown_ = false;
 

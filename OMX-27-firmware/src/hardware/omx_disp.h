@@ -41,7 +41,75 @@ public:
 	// Displays a label and page numbers
 	void dispGenericModeLabel(const char *label, uint8_t numPages, int8_t selectedPage);
 	void dispGenericModeLabelDoubleLine(const char *label1, const char *label2, uint8_t numPages, int8_t selectedPage);
+	// Held-modifier split view: top label + a row of topCount boxes (top keys) over a row
+	// of bottomCount boxes (bottom keys) + bottom label. Boxes are filled to show state.
+	// Pass nullptr for a fill array to draw empty outlines; pass count 0 to omit that row
+	// (single-row layout).
+	void dispKeyFunctionSplit(const char *topLabel, const bool *topFill, uint8_t topCount,
+							  const char *bottomLabel, const bool *bottomFill, uint8_t bottomCount);
+	// Held-track status (Mix): "TRACK n" with M / S cells (filled when active) and a
+	// play-direction icon (playModeIndex 0-4 = fwd/rev/fwd-pong/rev-pong/random).
+	// Step menu param page: 4 cells (label + value). A locked cell's label is inverted. The
+	// selected cell is boxed when navigating; when `editing` (holding a step) it is fully
+	// inverted to show the encoder is locked onto it.
+	void dispStepParams(const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel, bool editing);
+	// FORM Mix bar pages (LEVELS / CC): count bars; sel boxed, inverted while editing.
+	// FORM Mix bar pages. locked marks P-Locked slots; bigNum >= 0 draws a large number
+	// block on the right (the pot bank) selectable as cell index `count`.
+	void dispMixLevels(const char *title, const char *valText, const int8_t *vals, uint8_t count, uint8_t sel, bool editing, const bool *locked = nullptr, int8_t bigNum = -1);
+	// FORM Tools v2 layouts: action tools (params + buttons + steps; stepState=nullptr =
+	// no-steps variant), the VEL/CHANCE bars page, and the generator page w/ live preview.
+	void dispToolActionPage(const char *pLabels[], const char *pVals[], uint8_t pCount, const char *btnLabels[], uint8_t btnCount, int8_t sel, bool editing, const uint8_t *stepState, uint8_t pageLen, int8_t playhead);
+	void dispToolBarsPage(uint8_t vmin, uint8_t vmax, uint8_t vRange, const int16_t bars[16], const uint8_t styles[16], int16_t barMax, int8_t sel, bool editing, int8_t playhead);
+	void dispToolGenPage(const char *pLabels[], const char *pVals[], uint8_t pCount, int8_t sel, bool editing, bool *preview, uint8_t previewLen, const uint8_t *stepState, uint8_t pageLen, int8_t playhead);
+	// Step F2 view: the current play-direction icon + its name on top, a bottom label below.
+	// Step view Note hold: a compact piano keyboard (chord = notesAsKeys[6]) on top, with the
+	// 16 step-marker cells beneath (filled = has content; `focus` step gets a tick). No text.
+	void dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus);
+	// Seq page-1 track overview: 8 track-state squares (selected underlined, muted = outline)
+	// top-left, left-justified track name, rate + 4 page icons + BPM on the right, and 16 step
+	// boxes on the bottom (stepState: 0 empty / 1 has-notes / 2 ghost). playhead -1 = none.
+	// modOverlay: 0 none · 1 F1 (box the page section) · 2 F2 (box the track name). overlayLabel
+	// is the inverted bottom-box text shown while a modifier is held (nullptr when modOverlay = 0).
+	// transport: 0 stopped · 1 playing · 2 recording (the active icon is filled). viewLabel is an
+	// optional mode tag in the top area (e.g. "MIX"; nullptr = none); viewLabelSel boxes/inverts it
+	// (the encoder's page-1 view selector is in edit mode) instead of the default underline.
+	// showPagesSteps false = hide the 4 page icons + the 16-step row (e.g. the MI keyboard view).
+	// showCCMeter draws the transient top-row knob meter (only while a knob is being adjusted).
+	void dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
+						  const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
+						  uint8_t activePage, const uint8_t *stepState, int8_t playhead,
+						  uint8_t modOverlay, const char *overlayLabel, uint8_t pageLen, uint8_t transport,
+						  const char *viewLabel, bool viewLabelSel, bool showPagesSteps = true,
+						  bool showCCMeter = false, uint8_t numTracks = 8);
+	// Step view overview: mode name on top, a row of `count` step cells on the bottom (filled
+	// = has content). The playhead step (0-based, -1 = none) gets a tick underneath.
+	void dispStepOverview(const char *modeName, const uint8_t *stepState, uint8_t pageLen, int8_t playhead, bool invertTitle = false);
+	// Notes-view F1 (jump): "JUMP" on the left, the 4 page icons on the right (same position as
+	// the track page), and the 16-step row below (focus = the step being edited).
+	void dispNotesJump(const uint8_t *stepState, uint8_t pageLen, int8_t focus, uint8_t enabledPages, uint8_t activePage);
+	// Persistent 5-segment CC meter on the top pixel row: each knob's current value (0-127) as a
+	// horizontal bar (§2). Reads potSettings.analogValues. Call after clearing the buffer.
+	void drawCCMeter();
+	// The Seq STEPNOTES page: 6 note slots (FONT_LABELS) under a header. selected 0-5 boxes a
+	// slot, 6 boxes the header (the names/numbers switch); encoderSelect draws the box.
+	void dispNoteSlots(const char *slotNames[6], const char *header, uint8_t selected, bool encoderSelect);
+	// Mix F3 (LEN | RATE): rate label on top, track length as a 16-cell bar on the bottom.
+	// activeCount cells (0-16) are full boxes (steps within the length); the rest are dashes.
+	// Every 4th active cell gets a left notch to make groups of 4 easier to count.
+	void dispTrackLength(const char *rateStr, uint8_t activeCount);
 	void dispGenericModeLabelSmallText(const char *label, uint8_t numPages, int8_t selectedPage);
+
+	// FORM MI page-0 overlay: up to 4 rectangles along the bottom, one per enabled page, each width
+	// proportional to that page's length (pageLens[4], 1-16). A filled cell marks the playhead —
+	// playAbsStep is the absolute playing step (0-63), or -1 when stopped. Does NOT clear the buffer
+	// (draws over the already-rendered keyboard view).
+	void drawPageBars(const uint8_t *pageLens, uint8_t enabledMask, int8_t playAbsStep);
+
+	// FORM Patterns view: a big "Pn" (TENFAT) on the left, the switch-style name top-right, an
+	// optional tag under it (">Pq" queued / "CHn" chain), and a bottom progress bar (0-1) showing
+	// how far through the loop/bar the playhead is (i.e. when a queued switch will commit).
+	void dispPatternPage(uint8_t pat, const char *styleName, const char *tag, float progress);
 
 	// Displays a header and options below
 	// Good for something like a yes/no box
