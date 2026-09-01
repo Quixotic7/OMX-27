@@ -133,7 +133,7 @@
 | PG02 | STEP A | 4-grid: Vel / Nudge / Len / MFX (step or default; palettes + LEDs) | ST02 ST03 ST04 ST05 |
 | PG03 | STEP B | 4-grid: Prob / Cond / Func / Accum | ST06 ST07 ST08 ST09 |
 | PG04 | STEPNOTES (S) | 6 note slots + names/numbers switch (selected step) | ST01, GL14 |
-| PG05 | ACTIONS | Action cell(s): open Pot Config | GL11 |
+| PG05 | ACTIONS | Action cell(s): QNT, CLR, open Pot Config | GL09, GL10, GL11 |
 | PG06 | TRACK | 4-grid: Len / MFX | TR01 TR02 |
 | PG07 | TRACKMODES | 4-grid: Trip / Dir / Mode | TR03 TR04 TR05 |
 | PG08 | SEQTPOSE | 4-grid: TPos / Type / TPat-apply | TR06 TR07 TR08 |
@@ -145,10 +145,11 @@
 | PG14 | CC (S) | 5 CC bars + big bank digit (+ step P-Locks in Mix; click title = CC editor) | TR21 TR20 ST12 GL11 |
 | PG15 | TRACK GRID | 4-grid: Mute / Solo / Gate / Rate | TR17 TR18 TR16 TR13 |
 | PG16 | MI KEYBOARD (S) | Live-play keyboard (edit-turn = track select) | GL06, track sel |
-| PG17 | MI MIDI | 4-grid: Chan / Vel / Oct / Macro | TR09 TR19 GL06 GL07 |
-| PG18 | MI ACTIONS | Quant / Clear / Pots / MPot | GL09 GL10 GL11 GL08 |
+| PG17 | MI MIDI | 4-grid: Chan / Vel / Oct | TR09 TR19 GL06 |
+| PG17B | MACROS | 4-grid: Macro, MPot | GL07 GL08|
+| PG18 | MI ACTIONS | Quant / Clear / Pots | GL09 GL10 GL11 |
 | PG19 | TPAT EDITOR (S) | Transpose-pattern grid: LEN/SEL/OFS + 16 slots | TR25 |
-| PG20 | TPOSE PARAMS | 4-grid past the TPAT editor: TPos / Type / TPat-apply | TR06 TR07 TR08 |
+| PG20 | TPOSE PARAMS | 4-grid past the TPAT editor: TPat-apply / TPos / Type /  | TR08 TR06 TR07 |
 | PG21 | PATTERNS (S) | 16 slots + switch-style row; F1/F2 copy-cut-paste | GL15 GL16 |
 | PG22 | NOTES OVERVIEW (S) | Step-note editor: overview + jump (F1) + rate/len (F3) | ST01, nav |
 | PG23 | TOOL PAGES (S) | One page per tool (11), shared SCOPE | TL01–TL12 |
@@ -192,7 +193,12 @@ Order = encoder order within the view. Format:
   2. PG13 LEVELS
 - GROUP GR02 TRACK — message "TRACK"
   3. PG15 TRACK GRID
-  4. PG06 TRACK → PG07 TRACKMODES → PG08 SEQTPOSE → PG09 SEQMIDI → PG10 TIMINGS → PG11 SCALE → PG05 ACTIONS (the machine menu, cursor 20)
+  4. PG06 TRACK → 
+  5. PG07 TRACKMODES → 
+  7. PG09 SEQMIDI → 
+  8. PG10 TIMINGS → 
+  9. PG11 SCALE → 
+  10. PG05 ACTIONS (the machine menu, cursor 20)
 
 **SEQ / STEP** (AUX+14) — *programming steps*
 - GROUP GR03 STEP — message "STEP"
@@ -201,40 +207,43 @@ Order = encoder order within the view. Format:
   3. PG03 STEP B
   4. PG14 CC
   5. PG04 STEPNOTES
-- GROUP GR04 SETUP — message "SETUP"
-  6. PG05 ACTIONS
-  7. PG11 SCALE
+- GROUP GR04 SETUP — message "TRACK SETUP"
+  1. PG11 SCALE
+  2. PG05 ACTIONS
 
 **TRANSPOSE** (AUX+15)
 - GROUP GR05 TPOSE — message "TRANSPOSE"
-  1. PG19 TPAT EDITOR
+  1. PG19 TPAT EDITOR - BUG: Clicking any parameter with encoder is opening up CC editor, only works while holding AUX. Needs to be decoupled from the PG14 CC page 
 - GROUP GR06 TPOSE PARAMS — message "TPOSE PARAMS" *(as built: this popup already exists)*
   2. PG20 TPOSE PARAMS
 
 **NOTES** (AUX+16)
-- GROUP GR07 NOTES — message "NOTES"
+- GROUP GR07 NOTES — no message
   1. PG22 NOTES OVERVIEW
   2. PG04 STEPNOTES
-- GROUP GR08 SCALE — message "SCALE"
-  3. PG11 SCALE
-- GROUP GR09 STEP PARAMS — message "STEP PARAMS"
-  4. PG02 STEP A
-  5. PG03 STEP B
+- GROUP GR08 SCALE — no message
+  1. PG11 SCALE
+- GROUP GR09 STEP PARAMS — message "STEP LOCKS"
+  1. PG02 STEP A
+  2. PG03 STEP B
+- GROUP ACTIONS — message "ACTIONS"
+  2. PG05 ACTIONS
 
 **PATTERNS** (AUX+17)
+MISSING FEATURE: No way to use F1/F2 to copy and cut paste patterns. F3 + Pattern should clear.
 - GROUP GR14 PATTERNS — no message (the view-switch popup covers it)
   1. PG21 PATTERNS
 
 **MI** (AUX+18) — *live play*
-- GROUP GR10 KEYS — message "KEYS"
+- GROUP GR10 KEYS — no message
   1. PG16 MI KEYBOARD
-- GROUP GR11 MIDI — message "MIDI"
-  2. PG11 SCALE
-  3. PG17 MI MIDI
-- GROUP GR12 CC — message "CC"
-  4. PG14 CC (no P-Locks here)
-- GROUP GR13 ACTIONS — message "ACTIONS"
-  5. PG18 MI ACTIONS
+- GROUP GR11 MIDI — no message
+  1. PG11 SCALE
+  2. PG17 MI MIDI
+- GROUP GR13 ACTIONS — no message
+  1. PG18 MI ACTIONS
+- GROUP GR12 CC — no message
+  1. PG14 CC (no P-Locks here)
 
 **TOOLS** (AUX+19)
 - GROUP GR15 TOOLS — message = the tool's name on crossing into it (as built)
