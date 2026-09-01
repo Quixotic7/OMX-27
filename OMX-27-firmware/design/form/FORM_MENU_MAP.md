@@ -133,7 +133,7 @@
 | PG02 | STEP A | 4-grid: Vel / Nudge / Len / MFX (step or default; palettes + LEDs) | ST02 ST03 ST04 ST05 |
 | PG03 | STEP B | 4-grid: Prob / Cond / Func / Accum | ST06 ST07 ST08 ST09 |
 | PG04 | STEPNOTES (S) | 6 note slots + names/numbers switch (selected step) | ST01, GL14 |
-| PG05 | POTS → | Single action cell: open Pot Config | GL11 |
+| PG05 | ACTIONS | Action cell(s): open Pot Config | GL11 |
 | PG06 | TRACK | 4-grid: Len / MFX | TR01 TR02 |
 | PG07 | TRACKMODES | 4-grid: Trip / Dir / Mode | TR03 TR04 TR05 |
 | PG08 | SEQTPOSE | 4-grid: TPos / Type / TPat-apply | TR06 TR07 TR08 |
@@ -155,51 +155,94 @@
 
 ---
 
-## 3. Views → pages
+## 3. Groups
 
-Order = encoder order within the view.
+A **group** is a run of consecutive pages inside a view. Crossing into a group pops its
+**message** (once, on entry — not on every page inside it). Group short names can repeat
+across views; the ID is unique. Assign pages to groups in §4.
 
-**MIX** (AUX+13) — *track-level & global*
-1. PG12 MIX OVERVIEW
-2. PG13 LEVELS
-3. PG14 CC
-4. PG15 TRACK GRID
-5. PG06 TRACK → PG07 TRACKMODES → PG08 SEQTPOSE → PG09 SEQMIDI → PG10 TIMINGS → PG11 SCALE → PG05 POTS (the machine menu, cursor 20)
-
-**SEQ / STEP** (AUX+14) — *programming steps*
-1. PG01 TRIG
-2. PG02 STEP A
-3. PG03 STEP B
-4. PG04 STEPNOTES
-5. PG05 POTS
-
-**TRANSPOSE** (AUX+15)
-1. PG19 TPAT EDITOR
-2. PG20 TPOSE PARAMS
-
-**NOTES** (AUX+16)
-1. PG22 NOTES OVERVIEW
-2. PG04 STEPNOTES (cursor 1–7)
-3. PG11 SCALE (cursor 8–11)
-4. PG02 STEP A (cursor 12–15)
-5. PG03 STEP B (cursor 16–19)
-
-**PATTERNS** (AUX+17)
-1. PG21 PATTERNS
-
-**MI** (AUX+18) — *live play*
-1. PG16 MI KEYBOARD
-2. PG11 SCALE (cursor 1–4)
-3. PG17 MI MIDI (cursor 5–8)
-4. PG14 CC (cursor 9–15, no P-Locks)
-5. PG18 MI ACTIONS (cursor 16–19)
-
-**TOOLS** (AUX+19)
-1. PG23 — ROTATE · MIRROR · SHUFFLE · HUMANIZE · QUANTIZE · TRANSPOSE · SCALE SNAP · VEL RANDOM · CHANCE RND · EUCLID · GRIDS
+| ID | Short | Message | Pages (default membership) |
+|----|-------|---------|----------------------------|
+| GR01 | MIX | "MIX" | PG12 PG13 |
+| GR02 | TRACK | "TRACK" | PG15 PG06 PG07 PG08 PG09 PG10 PG11 PG05 |
+| GR03 | STEP | "STEP" | PG01 PG02 PG03 PG14 PG04 |
+| GR04 | SETUP | "SETUP" | PG05 PG11 |
+| GR05 | TPOSE | "TRANSPOSE" | PG19 |
+| GR06 | TPOSE PARAMS | "TPOSE PARAMS" | PG20 |
+| GR07 | NOTES | "NOTES" | PG22 PG04 |
+| GR08 | SCALE | "SCALE" | PG11 |
+| GR09 | STEP PARAMS | "STEP PARAMS" | PG02 PG03 |
+| GR10 | KEYS | "KEYS" | PG16 |
+| GR11 | MIDI | "MIDI" | PG11 PG17 |
+| GR12 | CC | "CC" | PG14 |
+| GR13 | ACTIONS | "ACTIONS" | PG18 |
+| GR14 | PATTERNS | — (view popup covers it) | PG21 |
+| GR15 | TOOLS | per-tool name (as built today) | PG23 |
 
 ---
 
-## 4. Observations for the pass (delete freely)
+## 4. Views → groups → pages
+
+Order = encoder order within the view. Format:
+`GROUP <id> <SHORT> — message "<MSG>"`, then its pages.
+
+**MIX** (AUX+13) — *track-level & global*
+- GROUP GR01 MIX — message "MIX"
+  1. PG12 MIX OVERVIEW
+  2. PG13 LEVELS
+- GROUP GR02 TRACK — message "TRACK"
+  3. PG15 TRACK GRID
+  4. PG06 TRACK → PG07 TRACKMODES → PG08 SEQTPOSE → PG09 SEQMIDI → PG10 TIMINGS → PG11 SCALE → PG05 ACTIONS (the machine menu, cursor 20)
+
+**SEQ / STEP** (AUX+14) — *programming steps*
+- GROUP GR03 STEP — message "STEP"
+  1. PG01 TRIG
+  2. PG02 STEP A
+  3. PG03 STEP B
+  4. PG14 CC
+  5. PG04 STEPNOTES
+- GROUP GR04 SETUP — message "SETUP"
+  6. PG05 ACTIONS
+  7. PG11 SCALE
+
+**TRANSPOSE** (AUX+15)
+- GROUP GR05 TPOSE — message "TRANSPOSE"
+  1. PG19 TPAT EDITOR
+- GROUP GR06 TPOSE PARAMS — message "TPOSE PARAMS" *(as built: this popup already exists)*
+  2. PG20 TPOSE PARAMS
+
+**NOTES** (AUX+16)
+- GROUP GR07 NOTES — message "NOTES"
+  1. PG22 NOTES OVERVIEW
+  2. PG04 STEPNOTES
+- GROUP GR08 SCALE — message "SCALE"
+  3. PG11 SCALE
+- GROUP GR09 STEP PARAMS — message "STEP PARAMS"
+  4. PG02 STEP A
+  5. PG03 STEP B
+
+**PATTERNS** (AUX+17)
+- GROUP GR14 PATTERNS — no message (the view-switch popup covers it)
+  1. PG21 PATTERNS
+
+**MI** (AUX+18) — *live play*
+- GROUP GR10 KEYS — message "KEYS"
+  1. PG16 MI KEYBOARD
+- GROUP GR11 MIDI — message "MIDI"
+  2. PG11 SCALE
+  3. PG17 MI MIDI
+- GROUP GR12 CC — message "CC"
+  4. PG14 CC (no P-Locks here)
+- GROUP GR13 ACTIONS — message "ACTIONS"
+  5. PG18 MI ACTIONS
+
+**TOOLS** (AUX+19)
+- GROUP GR15 TOOLS — message = the tool's name on crossing into it (as built)
+  1. PG23 — ROTATE · MIRROR · SHUFFLE · HUMANIZE · QUANTIZE · TRANSPOSE · SCALE SNAP · VEL RANDOM · CHANCE RND · EUCLID · GRIDS
+
+---
+
+## 5. Observations for the pass (delete freely)
 
 - **PG06 TRACK** has 2 empty grid cells; **PG07 TRACKMODES** has 1 — merge candidates
   (e.g. one TRACK page: Len/MFX/Dir/Mode, with Trip moving to TIMINGS's spare slot? —
