@@ -5,6 +5,7 @@
 
 // Defined in OMX-27-firmware.ino — injects a synthetic key/encoder/pot event (SysEx remote control).
 extern void omxInjectInput(const uint8_t *d, unsigned n);
+extern void omxRemoteSysex(const uint8_t *d, unsigned n);
 
 // #include "../midi/midi.h"
 // #include "../config.h"
@@ -15,7 +16,7 @@ const uint8_t CONFIG_DEVICE_EDIT = 0x0D;
 
 void SysEx::processIncomingSysex(const byte *sysexData, unsigned size)
 {
-	Serial.println("Sysex received");
+	// Serial.println("Sysex received");
 	if (size < 3)
 	{
 		// 		Serial.println("That's an empty sysex");
@@ -48,6 +49,14 @@ void SysEx::processIncomingSysex(const byte *sysexData, unsigned size)
 	case NL_CMD_INPUT:
 		// 51 - remote-control input injection: F0 7D 00 00 51 <sub> <args...> F7
 		omxInjectInput(sysexData, size);
+		break;
+	case NL_CMD_LED:
+	case NL_CMD_LED_BATCH:
+	case NL_CMD_LED_SHOW:
+	case NL_CMD_DRAW:
+	case NL_CMD_DRAW_UPD:
+		// 59-5D - REMOTE mode: host sets LEDs / draws the screen
+		omxRemoteSysex(sysexData, size);
 		break;
 	case NL_CMD_MIRROR_EN:
 		// 58 - norns screen-mirror enable/disable: F0 7D 00 00 58 <0|1> F7

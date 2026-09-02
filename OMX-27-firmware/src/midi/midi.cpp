@@ -378,7 +378,19 @@ namespace MM
 
 	bool usbMidiRead()
 	{
+#if BOARDTYPE == OMX2040
+		// The Arduino MIDI library parses ONE byte per read(), and returns false
+		// for every byte that doesn't complete a message — so a caller doing
+		// `while (usbMidiRead())` would drain large SysEx (REMOTE-mode frames)
+		// at ~one byte per main-loop pass. Parse everything buffered instead.
+		while (usb_midi.available() > 0)
+		{
+			usbMIDI.read();
+		}
+		return false; // fully drained
+#else
 		return usbMIDI.read();
+#endif
 	}
 
 	bool midiRead()
