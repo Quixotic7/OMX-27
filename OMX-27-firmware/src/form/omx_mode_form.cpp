@@ -2466,6 +2466,20 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	}
 }
 
+// Step-row LED colour for the Step view's pattern display: a step with notes reads
+// bright blue-white (an "active" trigger), a ghost trigger (on, but no notes — a locked
+// value/CC) reads bright orange, a muted step dark red, an empty step off.
+static const uint32_t kStepActiveColor = 0xC0C0FF; // bright blue, almost white
+static const uint32_t kStepGhostColor  = 0xFF6000; // bright orange
+static uint32_t stepRowColor(FormOmni::FormMachineOmni *omni, uint8_t i)
+{
+	if (!omni->stepIsOn(i))
+		return LEDOFF;
+	if (omni->getStepMute(i))
+		return DKRED;
+	return omni->stepHasNotes(i) ? kStepActiveColor : kStepGhostColor;
+}
+
 void OmxModeForm::updateStepLEDs()
 {
 	auto omni = getSelectedMachine();
@@ -2561,14 +2575,13 @@ void OmxModeForm::updateStepLEDs()
 	// step's value lights, or the track default's when nothing is held (mirrors page 0).
 	if (stepMenuPage_ == 1 || stepMenuPage_ == 2)
 	{
-		// Step row: held steps blink white; the rest show content.
-		uint32_t hue = trackHueColor(selectedMachine_);
+		// Step row: held steps blink white; the rest show content (active blue-white / ghost orange).
 		for (uint8_t i = 0; i < 16; i++)
 		{
 			if (heldStepMask_ & (1 << i))
 				strip.setPixelColor(11 + i, blink ? WHITE : LOWWHITE);
 			else
-				strip.setPixelColor(11 + i, omni->stepIsOn(i) ? hue : (uint32_t)LEDOFF);
+				strip.setPixelColor(11 + i, stepRowColor(omni, i));
 		}
 		for (uint8_t k = 3; k <= 10; k++)
 			strip.setPixelColor(k, LEDOFF);
@@ -2693,16 +2706,13 @@ void OmxModeForm::updateStepLEDs()
 	for (uint8_t m = 0; m < STEPMODE_COUNT; m++)
 		strip.setPixelColor(3 + m, (m == stepEditMode_) ? kStepModeColors[m] : LOWWHITE);
 
-	// Step row 11-26 = the current page's 16 steps.
-	uint32_t hue = trackHueColor(selectedMachine_);
+	// Step row 11-26 = the current page's 16 steps (active = blue-white, ghost = orange).
 	int16_t pageStart = (int16_t)omni->activePage() * 16;
 	int16_t playhead = (int16_t)omni->playingStepIndex() - pageStart;
 
 	for (uint8_t i = 0; i < 16; i++)
 	{
-		uint32_t col = LEDOFF;
-		if (omni->stepIsOn(i))
-			col = omni->getStepMute(i) ? DKRED : hue;
+		uint32_t col = stepRowColor(omni, i);
 		if (omxFormGlobal.isPlaying && i == playhead)
 			col = GREEN; // playhead: steady bright green over the step
 		if (heldStepMask_ & (1 << i))
