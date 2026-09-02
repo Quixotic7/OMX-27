@@ -2318,28 +2318,23 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		onKeyUpdateMixHold(e);
 		return;
 	}
-	// F2 + step = a pick-up / drop tool (see seqF2Holding_): empty-handed presses CUT/grab
-	// the step, holding presses PASTE/drop it. Dropping onto a NON-empty step ends the run
-	// (next press grabs); dropping onto an EMPTY step keeps holding (fill several empties).
+	// F2 + step = a pick-up / drop tool that alternates on EVERY press (see seqF2Holding_):
+	// empty-handed presses CUT/grab the step, holding presses PASTE/drop it — cut, paste,
+	// cut, paste... So pressing one step repeatedly cuts it, pastes it back, cuts it, etc.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ < 0 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 	{
 		uint8_t k = thisKey - 11;
 		if (!seqF2Holding_)
 		{
-			// Empty-handed: grab this step (empty or not) into the buffer.
-			omni->stepCut(k);
+			omni->stepCut(k); // grab this step (empty or not) into the buffer
 			omxDisp.displayMessage("CUT");
 			seqF2Holding_ = true;
 		}
 		else
 		{
-			// Holding: drop into this step. Overwriting a non-empty step ends the run so the
-			// next press grabs; filling an empty step keeps the hold for more empties.
-			bool wasFilled = omni->stepIsOn(k);
-			omni->stepPaste(k);
+			omni->stepPaste(k); // drop the buffer into this step
 			omxDisp.displayMessage("PASTE");
-			if (wasFilled)
-				seqF2Holding_ = false;
+			seqF2Holding_ = false;
 		}
 		return;
 	}

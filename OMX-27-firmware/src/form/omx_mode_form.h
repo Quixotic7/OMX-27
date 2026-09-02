@@ -434,14 +434,13 @@ private:
 	uint8_t tapCount_ = 0;
 	float tapAvgMs_ = 0;
 	void tapTempo();
-	// Seq F2 = a pick-up / drop tool that alternates on every press:
+	// Seq F2 = a pick-up / drop tool that alternates on EVERY press:
 	//  - Empty-handed (seqF2Holding_ = false): F2 + step CUTS/grabs that step into the
 	//    buffer (even an empty one) -> now holding.
-	//  - Holding (true): F2 + step PASTES/drops the buffer into it. A drop onto a NON-empty
-	//    step ends the run (back to empty-handed, so the next press grabs); a drop onto an
-	//    EMPTY step keeps holding, so you can fill several empty steps from one grab/copy.
-	// F1 copy puts you in the holding state. Releasing F2 (or a view/track change) drops
-	// the hold, so the next F2 press grabs again.
+	//  - Holding (true): F2 + step PASTES/drops the buffer into it -> empty-handed again.
+	// So pressing one step repeatedly cuts, pastes, cuts, pastes... F1 copy puts you in the
+	// holding state. Releasing F2 (or a view/track change) drops the hold, so the next F2
+	// press grabs again.
 	bool seqF2Holding_ = false;
 	// Audibility tracking (mute/solo): notes are flushed when a track goes inaudible.
 	bool trackAudible_[FORM_NUM_TRACKS];
