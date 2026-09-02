@@ -230,6 +230,9 @@ private:
 	void onDisplaySeqTrackPage(bool keyboardMode = false);
 	void stepApplyToHeld(uint8_t paletteIndex); // set the palette value on every held step
 	void updateStepLEDs();
+	// Paint the low row (11-26) with the pattern step colours + playhead. Shared by the
+	// Step overview and the F1/F2 layers so the step row reads identically under those holds.
+	void paintStepRow(FormOmni::FormMachineOmni *omni);
 	void onDisplayStep();
 	void onKeyUpdateMix(OMXKeypadEvent e);     // Mix-view track keys (mute/solo/select)
 	bool onKeyUpdateMixRoute(OMXKeypadEvent e); // Mix key routing; false = machine F3 fall-through

@@ -2480,6 +2480,19 @@ static uint32_t stepRowColor(FormOmni::FormMachineOmni *omni, uint8_t i)
 	return omni->stepHasNotes(i) ? kStepActiveColor : kStepGhostColor;
 }
 
+void OmxModeForm::paintStepRow(FormOmni::FormMachineOmni *omni)
+{
+	int16_t pageStart = (int16_t)omni->activePage() * 16;
+	int16_t playhead = (int16_t)omni->playingStepIndex() - pageStart;
+	for (uint8_t i = 0; i < 16; i++)
+	{
+		uint32_t col = stepRowColor(omni, i);
+		if (omxFormGlobal.isPlaying && i == playhead)
+			col = GREEN; // playhead: steady bright green over the step
+		strip.setPixelColor(11 + i, col);
+	}
+}
+
 void OmxModeForm::updateStepLEDs()
 {
 	auto omni = getSelectedMachine();
@@ -2497,12 +2510,11 @@ void OmxModeForm::updateStepLEDs()
 		strip.setPixelColor(2, f2 ? hueFull : hueDim);
 	}
 
-	// F1: top row 3-6 = pages; step row = content (copy targets).
+	// F1: top row 3-6 = pages; step row keeps the normal pattern colours (copy targets).
 	// Colours: selected = GREEN (RED if muted) · enabled = BLUE · muted = very dim ·
 	// currently-playing page = flashing YELLOW.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && heldStepMask_ == 0)
 	{
-		uint32_t hue = trackHueColor(selectedMachine_);
 		for (uint8_t k = 3; k <= 10; k++)
 			strip.setPixelColor(k, LEDOFF);
 		uint8_t en = omni->getEnabledPages();
@@ -2522,8 +2534,7 @@ void OmxModeForm::updateStepLEDs()
 				c = (uint32_t)YELLOW; // flashing playhead page
 			strip.setPixelColor(3 + p, c);
 		}
-		for (uint8_t i = 0; i < 16; i++)
-			strip.setPixelColor(11 + i, omni->stepIsOn(i) ? hue : (uint32_t)LEDOFF);
+		paintStepRow(omni); // same step colours as the overview
 		return;
 	}
 	// F2: top row 3-10 = the 8 tracks (track colour; selected white, muted red). Holding one
@@ -2544,9 +2555,7 @@ void OmxModeForm::updateStepLEDs()
 		}
 		else
 		{
-			uint32_t hue = trackHueColor(selectedMachine_);
-			for (uint8_t i = 0; i < 16; i++)
-				strip.setPixelColor(11 + i, omni->stepIsOn(i) ? hue : (uint32_t)LEDOFF);
+			paintStepRow(omni); // same step colours as the overview
 		}
 		return;
 	}
