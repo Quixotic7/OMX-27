@@ -1619,7 +1619,8 @@ void OmxModeForm::onDisplayNotes()
 		const char *labels[4] = {"QNT", "CLR", "POTS", "NTRY"};
 		const char *values[4] = {"@", "µ", "@", omxFormGlobal.noteEntryToggle ? "TG" : "PR"};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 20, false);
+		bool editing = (notesCursor_ == 23 && !getEncoderSelect()); // only NTRY edits
+		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 20, editing);
 		return;
 	}
 
@@ -3151,14 +3152,16 @@ void OmxModeForm::onDisplayStep()
 		return;
 	}
 
-	// ACTIONS page (6): Quant / Clear / Pots / Note entry — click to fire (@ = submenu,
-	// µ = destructive); NTRY toggles Pressed/Toggle.
+	// ACTIONS page (6): Quant / Clear / Pots / Note entry — QNT/CLR/POTS click to fire
+	// (@ = submenu, µ = destructive); NTRY is a value param (Pressed/Toggle) — its value box
+	// inverts while editing it, like the SCALE page, so edit mode reads clearly.
 	if (stepMenuPage_ == 6)
 	{
 		const char *labels[4] = {"QNT", "CLR", "POTS", "NTRY"};
 		const char *values[4] = {"@", "µ", "@", omxFormGlobal.noteEntryToggle ? "TG" : "PR"};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, false);
+		bool editing = (stepMenuSel_ == 3 && !getEncoderSelect()); // only NTRY edits
+		omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, editing);
 		return;
 	}
 
