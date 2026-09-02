@@ -434,10 +434,16 @@ private:
 	uint8_t tapCount_ = 0;
 	float tapAvgMs_ = 0;
 	void tapTempo();
-	// Seq F2 layer paste/cut alternation: pressing a step pastes; pressing the SAME step
-	// again cuts it (back into the buffer); again pastes — so you can paste into, or cut
-	// from, steps that already have values. -1 = next press pastes.
-	int8_t seqF2CutStep_ = -1;
+	// Seq F2 layer paste/cut. The buffer has a "loaded" state, separate from whether it
+	// holds note content (grabbing an empty step still loads it):
+	//  - Buffer NOT loaded (fresh, or after F2 released): the first F2 + step CUTS/grabs
+	//    that step into the buffer — even an empty one — which loads it.
+	//  - Buffer loaded: F2 + step PASTES; pressing the SAME filled step again cuts it back
+	//    into the buffer (alternation); empty steps always paste.
+	// The loaded state resets when F2 is released (or the view / track changes), so the
+	// next F2 hold grabs again.
+	bool seqBufferLoaded_ = false;
+	int8_t seqF2CutStep_ = -1; // armed step for the same-step-re-press cut (-1 = none)
 	// Audibility tracking (mute/solo): notes are flushed when a track goes inaudible.
 	bool trackAudible_[FORM_NUM_TRACKS];
 	// The selected track's keyboard scale (null = chromatic — see FormMachineOmni).

@@ -172,7 +172,10 @@ void OmxModeForm::selectMachine(uint8_t machineIndex)
 		return;
 
 	if (machineIndex != selectedMachine_)
-		seqF2CutStep_ = -1; // the cut-arm is per step of the selected track
+	{
+		seqF2CutStep_ = -1;       // the cut-arm is per step of the selected track
+		seqBufferLoaded_ = false; // and the loaded buffer is per-track
+	}
 	selectedMachine_ = machineIndex;
 	machines_[machineIndex]->onSelected();
 }
@@ -264,6 +267,7 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	heldPageMask_ = 0;
 	pageGestureDone_ = false;
 	seqF2CutStep_ = -1; // a stale cut-arm must not cut a step in a new context
+	seqBufferLoaded_ = false; // the paste buffer is per-track/view; start unloaded here
 
 	// Editor views map to an OMNI UI mode, applied to every track so the view stays
 	// consistent when you switch tracks. Patterns / MI are rendered by the container.
@@ -2316,25 +2320,35 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		onKeyUpdateMixHold(e);
 		return;
 	}
-	// F2 + step = PASTE / CUT alternation: a press pastes (onto filled steps too); pressing
-	// the SAME step again cuts it back into the buffer; again pastes — so both pasting into
-	// and cutting from steps with values work, without ever cutting on the first press.
+	// F2 + step = buffer-driven paste / cut (see seqBufferLoaded_).
+	//  - Buffer NOT loaded (fresh, or F2 was released): CUT/grab this step into the buffer —
+	//    even an empty one — which loads it. (This is the only time an empty step is cut.)
+	//  - Buffer loaded: PASTE onto the step; pressing the SAME filled step again cuts it back
+	//    into the buffer; empty steps always paste.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ < 0 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 	{
 		uint8_t k = thisKey - 11;
-		// Cut only the SAME step's second touch, and only when it actually has content —
-		// so a re-press can never cut an empty step (e.g. after pasting an empty buffer).
-		if (seqF2CutStep_ == (int8_t)k && omni->stepIsOn(k))
+		if (!seqBufferLoaded_)
 		{
+			// Nothing loaded: grab this step (empty or not) into the buffer.
 			omni->stepCut(k);
 			omxDisp.displayMessage("CUT");
-			seqF2CutStep_ = -1; // next press pastes again
+			seqBufferLoaded_ = true;
+			seqF2CutStep_ = -1;
+		}
+		else if (omni->stepIsOn(k) && seqF2CutStep_ == (int8_t)k)
+		{
+			// Same filled step pressed again: cut it back into the buffer.
+			omni->stepCut(k);
+			omxDisp.displayMessage("CUT");
+			seqF2CutStep_ = -1;
 		}
 		else
 		{
+			// Loaded buffer: paste (empty steps always land here, never cut).
 			omni->stepPaste(k);
 			omxDisp.displayMessage("PASTE");
-			seqF2CutStep_ = (int8_t)k;
+			seqF2CutStep_ = (int8_t)k; // arm so a re-press cuts it back
 		}
 		return;
 	}
@@ -2343,7 +2357,8 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	{
 		omni->stepCopy(thisKey - 11);
 		omxDisp.displayMessage("COPY");
-		seqF2CutStep_ = -1; // fresh copy: the next F2 press pastes
+		seqBufferLoaded_ = true; // a copy loads the buffer: the next F2 press pastes
+		seqF2CutStep_ = -1;
 		return;
 	}
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
@@ -3570,10 +3585,12 @@ void OmxModeForm::updateShortcutMode()
 	if (prevMode != omxFormGlobal.shortcutMode)
 	{
 		omxFormGlobal.shortcutPaste = false; // Transpose/machine F1-F2 copy-cut/paste toggle resets
-		// The Seq F2 paste/cut arm only alternates within one continuous F2 hold — releasing
-		// F2 (or switching to another shortcut) starts fresh with a paste, so a stale arm can't
-		// turn a later paste into a cut.
+		// The Seq F2 same-step arm only alternates within one continuous F2 hold.
 		seqF2CutStep_ = -1;
+		// Releasing F2 unloads the paste buffer, so the next F2 hold grabs (cuts) again
+		// rather than pasting. (A fresh F1 copy re-loads it — F1 release doesn't unload.)
+		if (prevMode == FORMSHORTCUT_F2)
+			seqBufferLoaded_ = false;
 
 
 		// Mix: holding F2 activates FILL on all tracks (steps with a Fill condition play).
@@ -3625,6 +3642,8 @@ void OmxModeForm::onModeActivated()
 	clearReturnView_ = -1;
 	recHeldCount_ = 0;
 	recClearedMask_ = 0;
+	seqBufferLoaded_ = false; // start each FORM session with an unloaded paste buffer
+	seqF2CutStep_ = -1;
 
 	// Serial.println("AuxMacroActivated");
 	auxMacroManager_.onModeActivated();
