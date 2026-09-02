@@ -289,7 +289,12 @@ private:
 	uint8_t transSel_ = 0;
 	// Tool params (persist while in the mode):
 	bool toolScopeAll_ = false;              // ROTATE: whole loop vs active page
-	uint8_t toolPageFrom_ = 0, toolPageTo_ = 1; // PAGE COPY: source/destination page (0-3)
+	// PAGE tool clipboard: a whole 16-step page (steps + length). Persists across pages and
+	// tracks so you can copy a page and paste it wherever (workflow: F1-select a page, COPY,
+	// F1-select another page, PASTE). Lazily "loaded" by the first cut/copy.
+	FormOmni::Step pageBuffer_[16];
+	uint8_t pageBufferLen_ = 16;
+	bool pageBufferLoaded_ = false;
 	uint8_t toolVelMin_ = 64, toolVelMax_ = 127;
 	uint8_t toolEucPulses_ = 4, toolEucRot_ = 0;
 	uint8_t toolGridsInst_ = 0, toolGridsX_ = 128, toolGridsY_ = 128, toolGridsDens_ = 128;

@@ -1636,6 +1636,7 @@ enum ToolIndex
 {
 	TOOL_ROTATE,   // shift steps left/right
 	TOOL_MIRROR,   // reverse step order
+	TOOL_PAGE,     // cut / copy / paste the active 16-step page (steps + page length)
 	TOOL_SHUFFLE,  // random permutation of steps
 	TOOL_HUM,      // humanize: random nudge within a % range
 	TOOL_QUANT,    // pull nudges toward the grid by AMT%
@@ -1645,21 +1646,20 @@ enum ToolIndex
 	TOOL_CHANCE,   // randomize step probability between MIN..MAX
 	TOOL_EUC,      // euclidean rhythm generator
 	TOOL_GRIDS,    // grids (topographic drum) generator
-	TOOL_PAGE,     // copy one 16-step page onto another (steps + page length)
 	TOOL_COUNT
 };
 
 static const char *kToolNames[TOOL_COUNT] = {
-	"ROTATE", "MIRROR", "SHUFFLE", "HUMANIZE", "QUANTIZE", "TRANSPOSE",
-	"SCALE SNAP", "VEL RANDOM", "CHANCE RND", "EUCLID", "GRIDS", "PAGE COPY"};
+	"ROTATE", "MIRROR", "PAGE", "SHUFFLE", "HUMANIZE", "QUANTIZE", "TRANSPOSE",
+	"SCALE SNAP", "VEL RANDOM", "CHANCE RND", "EUCLID", "GRIDS"};
 
 // Encoder cells per tool: params first, then action buttons. The cursor walks these.
-static const uint8_t kToolParams[TOOL_COUNT] = {1, 1, 1, 2, 2, 1, 3, 18, 18, 3, 5, 2};
-static const uint8_t kToolBtns[TOOL_COUNT]   = {2, 1, 1, 1, 1, 4, 1, 0, 0, 0, 0, 1};
+static const uint8_t kToolParams[TOOL_COUNT] = {1, 1, 0, 1, 2, 2, 1, 3, 18, 18, 3, 5};
+static const uint8_t kToolBtns[TOOL_COUNT]   = {2, 1, 3, 1, 1, 1, 4, 1, 0, 0, 0, 0};
 
 // Distinct hue per tool for the action keys.
 static const uint32_t kToolColors[TOOL_COUNT] = {
-	CYAN, LTCYAN, DKCYAN, MAGENTA, ROSE, ORANGE, DKORANGE, YELLOW, DKYELLOW, GREEN, BLUE, LTPURPLE};
+	CYAN, LTCYAN, LTPURPLE, DKCYAN, MAGENTA, ROSE, ORANGE, DKORANGE, YELLOW, DKYELLOW, GREEN, BLUE};
 
 static const char *kGridsInstNames[4] = {"BD", "SD", "HH", "AC"};
 
@@ -1701,10 +1701,31 @@ void OmxModeForm::toolAction(uint8_t tool, uint8_t action)
 	case TOOL_CHANCE:  omni->toolChanceRnd(toolChanceMin_, toolChanceMax_); break;
 	case TOOL_EUC:     omni->toolEuclid(toolEucPulses_, toolEucRot_, toolScopeAll_); break;
 	case TOOL_GRIDS:   omni->toolGrids(toolGridsInst_, toolGridsX_, toolGridsY_, toolGridsDens_, toolScopeAll_); break;
-	case TOOL_PAGE:
-		omni->copyPage(toolPageFrom_, toolPageTo_);
-		omxDisp.displayMessage("P" + String(toolPageFrom_ + 1) + " > P" + String(toolPageTo_ + 1));
+	case TOOL_PAGE: // CUT (0) / COPY (1) / PASTE (2) the active page (F1 selects the page)
+	{
+		uint8_t page = omni->activePage();
+		if (action == 2) // PASTE
+		{
+			if (pageBufferLoaded_)
+			{
+				omni->pastePageIn(page, pageBuffer_, pageBufferLen_);
+				omxDisp.displayMessage("PASTE P" + String(page + 1));
+			}
+		}
+		else // CUT (0) or COPY (1)
+		{
+			omni->copyPageOut(page, pageBuffer_, pageBufferLen_);
+			pageBufferLoaded_ = true;
+			if (action == 0) // CUT: clear the page after grabbing it
+			{
+				omni->clearPageSteps(page);
+				omxDisp.displayMessage("CUT P" + String(page + 1));
+			}
+			else
+				omxDisp.displayMessage("COPY P" + String(page + 1));
+		}
 		break;
+	}
 	}
 	omxDisp.setDirty();
 	omxLeds.setDirty();
@@ -1724,6 +1745,23 @@ void OmxModeForm::onKeyUpdateTools(OMXKeypadEvent e)
 		onKeyUpdateStep(e);
 		return;
 	}
+	// Hold key 3 + a low-row key = jump straight to a tool (keys 11-26 -> tool 0..N-1).
+	// Key 3 isn't an action key for any tool, so it's free to use as the jump modifier.
+	if (midiSettings.keyState[3] && e.down() && !e.held() && k >= 11 && k < 27)
+	{
+		uint8_t t = k - 11;
+		if (t < TOOL_COUNT)
+		{
+			toolIndex_ = t;
+			toolCell_ = 0;
+			stepEditMode_ = toolStepMode(toolIndex_);
+			omxDisp.displayMessage(kToolNames[toolIndex_]);
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		return;
+	}
+
 	// Release of an F2-held track key clears the hold even if F2 lifted first (as in Seq).
 	if (!e.down() && k >= 3 && k <= 10 && heldTrackKey_ == (int8_t)(k - 3))
 	{
@@ -1761,6 +1799,9 @@ void OmxModeForm::onKeyUpdateTools(OMXKeypadEvent e)
 		break;
 	case TOOL_TRANS:
 		if (k >= 5 && k <= 8) toolAction(TOOL_TRANS, k - 5); // Oct- Oct+ Semi- Semi+
+		break;
+	case TOOL_PAGE:
+		if (k >= 6 && k <= 8) toolAction(TOOL_PAGE, k - 6); // CUT / COPY / PASTE
 		break;
 	default:
 		if (k == 7) toolAction(toolIndex_, 0); // single apply/action key
@@ -1878,10 +1919,7 @@ bool OmxModeForm::onEncoderTools(int dir)
 		if (cell == 3) toolGridsDens_ = (uint8_t)constrain((int)toolGridsDens_ + dir * 4, 0, 255);
 		if (cell == 4) toolScopeAll_ = dir > 0;
 		break;
-	case TOOL_PAGE:
-		if (cell == 0) toolPageFrom_ = (uint8_t)constrain((int)toolPageFrom_ + dir, 0, 3);
-		if (cell == 1) toolPageTo_ = (uint8_t)constrain((int)toolPageTo_ + dir, 0, 3);
-		break;
+	// TOOL_PAGE has no params — only CUT/COPY/PASTE buttons; nothing to edit here.
 	}
 	omxDisp.setDirty();
 	return true;
@@ -1903,6 +1941,19 @@ bool OmxModeForm::onEncoderButtonTools()
 
 void OmxModeForm::updateToolsLEDs()
 {
+	// Hold key 3: show the tool-jump map — every tool on the low row, current one bright;
+	// key 3 (the modifier) lit white. Tap a low-row key to jump straight to that tool.
+	if (midiSettings.keyState[3])
+	{
+		strip.setPixelColor(3, WHITE);
+		for (uint8_t t = 0; t < TOOL_COUNT; t++)
+		{
+			uint32_t tc = kToolColors[t];
+			strip.setPixelColor(11 + t, (t == toolIndex_) ? tc : ((tc >> 3) & 0x1f1f1f));
+		}
+		return;
+	}
+
 	// Hold-step palette: the Seq view's LED pass owns the board.
 	if (heldStepMask_ != 0)
 	{
@@ -1916,6 +1967,7 @@ void OmxModeForm::updateToolsLEDs()
 	{
 	case TOOL_ROTATE: strip.setPixelColor(6, c); strip.setPixelColor(7, c); break;
 	case TOOL_TRANS:  for (uint8_t k = 5; k <= 8; k++) strip.setPixelColor(k, c); break;
+	case TOOL_PAGE:   strip.setPixelColor(6, c); strip.setPixelColor(7, c); strip.setPixelColor(8, c); break;
 	default:          strip.setPixelColor(7, c); break;
 	}
 	if (toolHasScope(toolIndex_))
@@ -2066,11 +2118,10 @@ void OmxModeForm::onDisplayTools()
 	}
 	case TOOL_PAGE:
 	{
-		String pf = "P" + String(toolPageFrom_ + 1), pt = "P" + String(toolPageTo_ + 1);
-		const char *pl[2] = {"FROM", "TO"};
-		const char *pv[2] = {pf.c_str(), pt.c_str()};
-		const char *btns[1] = {"COPY"};
-		omxDisp.dispToolActionPage(pl, pv, 2, btns, 1, sel, editing, stepState, pageLen, playhead);
+		// No params — three buttons act on the ACTIVE page (F1 selects it). The step row
+		// shows that page's content so you can see what you're cutting / copying.
+		const char *btns[3] = {"CUT", "COPY", "PASTE"};
+		omxDisp.dispToolActionPage(nullptr, nullptr, 0, btns, 3, sel, editing, stepState, pageLen, playhead);
 		return;
 	}
 	}

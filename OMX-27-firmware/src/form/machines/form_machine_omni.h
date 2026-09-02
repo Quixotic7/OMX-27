@@ -384,8 +384,31 @@ namespace FormOmni
             return scaleConfig.scalePattern < 0;
         }
 
-        // Tools: copy one 16-step page's steps + length onto another page (same track).
-        void copyPage(uint8_t srcPage, uint8_t dstPage);
+        // Tools PAGE clipboard: read / write / clear one 16-step page (steps + page length).
+        // The buffer itself lives in the shell so it can move a page between pages or tracks.
+        void copyPageOut(uint8_t page, Step dst[16], uint8_t &lenOut)
+        {
+            Track *t = getTrack();
+            uint8_t p = page > 3 ? 3 : page;
+            for (uint8_t i = 0; i < 16; i++) dst[i].CopyFrom(&t->steps[p * 16 + i]);
+            lenOut = t->pageLen[p];
+        }
+        void pastePageIn(uint8_t page, Step src[16], uint8_t len)
+        {
+            if (page >= 4) return;
+            Track *t = getTrack();
+            for (uint8_t i = 0; i < 16; i++) t->steps[page * 16 + i].CopyFrom(&src[i]);
+            t->pageLen[page] = len < 1 ? 1 : (len > 16 ? 16 : len);
+            t->enabledPages |= (1 << page);
+            t->syncLen();
+            onTrackLengthChanged();
+        }
+        void clearPageSteps(uint8_t page)
+        {
+            if (page >= 4) return;
+            Track *t = getTrack();
+            for (uint8_t i = 0; i < 16; i++) t->steps[page * 16 + i].setToInit();
+        }
 
         // Live recording: the loop position that fired most recently (for nearest-step resolve).
         uint16_t lastPlayedPos() { return lastTriggeredStepIndex_; }

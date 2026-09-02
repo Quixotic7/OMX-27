@@ -714,19 +714,6 @@ namespace FormOmni
             }
     }
 
-    // Tools: copy one 16-step page (steps + page length) onto another page of this track.
-    void FormMachineOmni::copyPage(uint8_t srcPage, uint8_t dstPage)
-    {
-        if (srcPage >= 4 || dstPage >= 4 || srcPage == dstPage)
-            return;
-        auto track = getTrack();
-        for (uint8_t i = 0; i < 16; i++)
-            track->steps[dstPage * 16 + i].CopyFrom(&track->steps[srcPage * 16 + i]);
-        track->pageLen[dstPage] = track->pageLen[srcPage];
-        track->syncLen();
-        onTrackLengthChanged();
-    }
-
     uint8_t FormMachineOmni::recordResolveStep(uint8_t quantizePct, int8_t &nudgeOut)
     {
         nudgeOut = 0;
