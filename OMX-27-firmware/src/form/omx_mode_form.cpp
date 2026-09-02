@@ -2322,7 +2322,9 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ < 0 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 	{
 		uint8_t k = thisKey - 11;
-		if (seqF2CutStep_ == (int8_t)k)
+		// Cut only the SAME step's second touch, and only when it actually has content —
+		// so a re-press can never cut an empty step (e.g. after pasting an empty buffer).
+		if (seqF2CutStep_ == (int8_t)k && omni->stepIsOn(k))
 		{
 			omni->stepCut(k);
 			omxDisp.displayMessage("CUT");
@@ -3568,6 +3570,10 @@ void OmxModeForm::updateShortcutMode()
 	if (prevMode != omxFormGlobal.shortcutMode)
 	{
 		omxFormGlobal.shortcutPaste = false; // Transpose/machine F1-F2 copy-cut/paste toggle resets
+		// The Seq F2 paste/cut arm only alternates within one continuous F2 hold — releasing
+		// F2 (or switching to another shortcut) starts fresh with a paste, so a stale arm can't
+		// turn a later paste into a cut.
+		seqF2CutStep_ = -1;
 
 
 		// Mix: holding F2 activates FILL on all tracks (steps with a Fill condition play).
