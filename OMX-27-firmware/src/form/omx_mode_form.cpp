@@ -53,6 +53,9 @@ OmxModeForm::OmxModeForm()
 		previewMach_[k] = 0;
 	}
 
+	for (uint8_t i = 0; i < kNumMachines; i++)
+		trackAudible_[i] = true;
+
 	selectMachine(0);
 
 	ledUpdateTime_ = 0;
@@ -122,10 +125,23 @@ void OmxModeForm::cleanup()
 // Every manual note-on goes through here so its note-off can always be delivered from the
 // key's release — even if a modifier (AUX/F-keys), an octave change, a track switch, or a
 // view switch happens while the key is held.
+// The selected track's keyboard scale: global, its own local scale, or null = chromatic.
+MusicScales *OmxModeForm::kbScale()
+{
+	return getSelectedMachine()->keyboardScale();
+}
+
 void OmxModeForm::previewKeyOn(uint8_t key, int8_t note)
 {
 	if (key >= 27 || note < 0 || note > 127)
 		return;
+	// Monophonic track: live playing is mono too — a new note cuts the previous one.
+	if (getSelectedMachine()->isMono())
+	{
+		for (uint8_t k2 = 1; k2 < 27; k2++)
+			if (previewNote_[k2] >= 0 && previewMach_[k2] == selectedMachine_)
+				previewKeyOff(k2);
+	}
 	previewKeyOff(key); // never leak an earlier note still ringing on this key
 	getSelectedMachine()->previewNote(note, true);
 	previewNote_[key] = note;
@@ -540,7 +556,7 @@ void OmxModeForm::onKeyUpdateMI(OMXKeypadEvent e)
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)
 		return; // AUX layer owns the keys while held
 
-	int8_t note = omxUtil.getNoteNumber(k, omxFormGlobal.musicScale);
+	int8_t note = omxUtil.getNoteNumber(k, kbScale()); // per-track scale mode aware
 	if (note < 0 || note > 127)
 		return; // out of range / out-of-scale (locked)
 
@@ -563,8 +579,35 @@ void OmxModeForm::onKeyUpdateMI(OMXKeypadEvent e)
 
 void OmxModeForm::updateMILEDs()
 {
-	// Scale-aware keyboard (root periwinkle / in-scale dim blue / off-scale dark), pressed = white.
-	omxLeds.drawKeyboardScaleLEDs(omxFormGlobal.musicScale, 0xA2A2FF, 0x000090, LEDOFF);
+	// Scale-aware keyboard (root periwinkle / in-scale dim blue / off-scale dark), pressed =
+	// white. Per-track scale mode: chromatic tracks stay dark until pressed; local-scale
+	// tracks render from their own scale (getKeyColor consults the GLOBAL config, so the
+	// local instance is rendered manually here).
+	auto m = getSelectedMachine();
+	MusicScales *ks = kbScale();
+	if (ks == nullptr) // chromatic track
+	{
+		for (uint8_t q = 1; q < 27; q++)
+			strip.setPixelColor(q, LEDOFF);
+	}
+	else if (m->getScaleMode() == FormOmni::FormMachineOmni::TRACKSCALE_LOCAL)
+	{
+		for (uint8_t q = 1; q < 27; q++)
+		{
+			int kc = scaleConfig.group16 ? ks->getGroup16Color(q)
+										 : ks->getScaleColor(((notes[q] % 12) + 12) % 12);
+			uint32_t c = LEDOFF;
+			if (kc == INSCALECOLOR)
+				c = 0x000090;
+			else if (kc == ROOTNOTECOLOR)
+				c = 0xA2A2FF;
+			strip.setPixelColor(q, c);
+		}
+	}
+	else
+	{
+		omxLeds.drawKeyboardScaleLEDs(ks, 0xA2A2FF, 0x000090, LEDOFF);
+	}
 	for (uint8_t k = 1; k < 27; k++)
 		if (midiSettings.keyState[k])
 			strip.setPixelColor(k, WHITE);
@@ -692,8 +735,7 @@ void OmxModeForm::onDisplayMI()
 	{
 		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
 		String vals[4];
-		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
-		vals[1] = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
+		scaleRootPatternVals(vals[0], vals[1]); // track-aware (local / chromatic / global)
 		vals[2] = scaleConfig.lockScale ? "Ĉ" : "Ć";
 		vals[3] = scaleConfig.group16 ? "Ĉ" : "Ć";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
@@ -820,6 +862,13 @@ void OmxModeForm::notesSetChordFromHeld()
 			notes[j] = notes[j - 1];
 		notes[pos] = (int8_t)n;
 		cnt++;
+	}
+	// Monophonic track: one note per step — keep the highest (matches playback, which
+	// plays the last set note).
+	if (omni->isMono() && cnt > 1)
+	{
+		notes[0] = notes[cnt - 1];
+		cnt = 1;
 	}
 	for (uint8_t i = cnt; i < 6; i++)
 		notes[i] = -1;
@@ -967,6 +1016,27 @@ void OmxModeForm::closeClearSub()
 	omxLeds.setDirty();
 }
 
+// Track-aware ROOT/SCALE display values for the shared scale pages.
+void OmxModeForm::scaleRootPatternVals(String &rootV, String &patV)
+{
+	auto m = getSelectedMachine();
+	if (m->getScaleMode() == FormOmni::FormMachineOmni::TRACKSCALE_CHROMATIC)
+	{
+		rootV = "--";
+		patV = "--";
+	}
+	else if (m->getScaleMode() == FormOmni::FormMachineOmni::TRACKSCALE_LOCAL)
+	{
+		rootV = MusicScales::getNoteName(m->getLocalRoot());
+		patV = m->getLocalPattern() < 0 ? String("--") : String((int)m->getLocalPattern());
+	}
+	else
+	{
+		rootV = MusicScales::getNoteName(scaleConfig.scaleRoot);
+		patV = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
+	}
+}
+
 // Which param palette a Notes-view hold selects: 11 = velocity, 12 = length, 11+12 = math,
 // 13 = chance. -1 = none held.
 int8_t OmxModeForm::notesPaletteMode()
@@ -983,32 +1053,17 @@ int8_t OmxModeForm::notesPaletteMode()
 	return -1;
 }
 
-// Scale page params: 0 root · 1 scale · 2 lock · 3 group (global scaleConfig).
+// Scale page params: 0 root · 1 scale · 2 lock · 3 group. Root/scale are track-aware:
+// on a LOCAL-scale track they edit that track's own root/pattern (via the machine);
+// otherwise the global scaleConfig. Lock/group stay global.
 void OmxModeForm::notesEditScaleParam(uint8_t param, int dir)
 {
 	if (dir == 0)
 		return;
 	switch (param)
 	{
-	case 0: // root
-	{
-		int prev = scaleConfig.scaleRoot;
-		scaleConfig.scaleRoot = constrain(scaleConfig.scaleRoot + dir, 0, 11);
-		if (prev != scaleConfig.scaleRoot)
-			omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
-		break;
-	}
-	case 1: // scale pattern (-1 = off / chromatic)
-	{
-		int prev = scaleConfig.scalePattern;
-		scaleConfig.scalePattern = constrain(scaleConfig.scalePattern + dir, -1, (int)MusicScales::getNumScales() - 1);
-		if (prev != scaleConfig.scalePattern)
-		{
-			omxDisp.displayMessage(MusicScales::getScaleName(scaleConfig.scalePattern));
-			omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
-		}
-		break;
-	}
+	case 0: getSelectedMachine()->editScaleRoot(dir); break;
+	case 1: getSelectedMachine()->editScalePattern(dir); break;
 	case 2: scaleConfig.lockScale = (dir > 0); break; // lock
 	case 3: scaleConfig.group16 = (dir > 0); break;   // group
 	}
@@ -1025,7 +1080,7 @@ bool OmxModeForm::onEncoderNotes(int dir)
 	if (getEncoderSelect())
 	{
 		uint8_t prev = notesCursor_;
-		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 22); // 20-22 = ACTIONS
+		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 23); // 20-23 = ACTIONS
 		// Group messages (menu map): STEP LOCKS = the step-param grids, ACTIONS at the end.
 		// (The notes/scale groups pop nothing.)
 		if (notesCursor_ >= 20 && prev < 20)
@@ -1053,6 +1108,13 @@ bool OmxModeForm::onEncoderNotes(int dir)
 		notesEditScaleParam(notesCursor_ - 8, dir);
 	else if (notesCursor_ <= 19) // step params (pid 0-7)
 		omni->editStepParam(notesSelStep_, notesCursor_ - 12, dir);
+	else if (notesCursor_ == 23) // NTRY: note-entry behavior (Pressed / Toggle)
+	{
+		bool prev = omxFormGlobal.noteEntryToggle;
+		omxFormGlobal.noteEntryToggle = dir > 0;
+		if (prev != omxFormGlobal.noteEntryToggle)
+			omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
+	}
 	// cursors 20-22 = ACTIONS (Quant / Clear / Pots — no turn edit; fire on click)
 	omxDisp.setDirty();
 	omxLeds.setDirty();
@@ -1080,6 +1142,13 @@ bool OmxModeForm::onEncoderButtonNotes()
 	if (notesCursor_ == 22)
 	{
 		openPotConfig();
+		return true;
+	}
+	if (notesCursor_ == 23)
+	{
+		omxFormGlobal.noteEntryToggle = !omxFormGlobal.noteEntryToggle;
+		omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
+		omxDisp.setDirty();
 		return true;
 	}
 	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect;
@@ -1298,11 +1367,30 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 	if (base < 0)
 		return;
 	int16_t note = base + midiSettings.octave * 12;
+	if (down && !held && omxFormGlobal.recArm && !omxFormGlobal.isPlaying)
+	{
+		// Start-on-note (same as the MI view): armed but stopped -> the first note played
+		// starts the transport + recording.
+		resetPlayback();
+		togglePlayback();
+		recClearedMask_ = 0;
+	}
 	bool recording = omxFormGlobal.recArm && omxFormGlobal.isPlaying;
 	if (down && !held)
 	{
 		if (recording)
 			recordPlayedNote((int8_t)note); // quantize into the nearest playing step
+		else if (omxFormGlobal.noteEntryToggle)
+		{
+			// Toggle entry: each press adds the note to the step, or removes it if present.
+			if (note >= 0 && note <= 127)
+			{
+				if (omni->stepHasNote(notesSelStep_, (int8_t)note))
+					omni->stepRemoveNote(notesSelStep_, (int8_t)note);
+				else
+					omni->stepAddNote(notesSelStep_, (int8_t)note);
+			}
+		}
 		else
 			notesSetChordFromHeld(); // edit the selected step (stopped / not armed)
 		// Audible feedback while auditioning (stopped) or recording (armed + playing).
@@ -1392,7 +1480,7 @@ void OmxModeForm::updateNotesLEDs()
 
 	// Piano: scale-aware colours like MI mode (root periwinkle / in-scale dim blue / off-scale
 	// dark), with a chromatic fallback when no scale is set. The current step's chord = LTYELLOW.
-	bool haveScale = (scaleConfig.scalePattern >= 0);
+	bool haveScale = !omni->scaleIsChromatic(); // per-track scale mode aware
 	int8_t chord[6];
 	omni->getStepNotes(notesSelStep_, chord);
 	for (uint8_t key = 3; key < 27; key++)
@@ -1404,7 +1492,7 @@ void OmxModeForm::updateNotesLEDs()
 		uint8_t pc = (uint8_t)(((note % 12) + 12) % 12);
 		uint32_t c;
 		if (haveScale)
-			c = (uint32_t)omxFormGlobal.musicScale->getScaleColor(pc);
+			c = (uint32_t)omni->paletteScale()->getScaleColor(pc);
 		else
 			c = (pc == 0) ? (uint32_t)0xA2A2FF : (key <= 10 ? (uint32_t)DKBLUE : (uint32_t)0x000090);
 		for (uint8_t n = 0; n < 6; n++)
@@ -1492,10 +1580,9 @@ void OmxModeForm::onDisplayNotes()
 	{
 		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
 		String vals[4];
-		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
 		// §4 label rules: SCALE shows a number (the name pops as a message on change);
 		// LOCK/GROUP show On/-- — full words overflow the cell.
-		vals[1] = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
+		scaleRootPatternVals(vals[0], vals[1]); // track-aware (local / chromatic / global)
 		vals[2] = scaleConfig.lockScale ? "Ĉ" : "Ć";
 		vals[3] = scaleConfig.group16 ? "Ĉ" : "Ć";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
@@ -1524,11 +1611,12 @@ void OmxModeForm::onDisplayNotes()
 		return;
 	}
 
-	// ACTIONS (cursor 20-22): Quant / Clear / Pots — click to fire (@ = submenu, µ = destructive).
+	// ACTIONS (cursor 20-23): Quant / Clear / Pots / Note entry — click to fire
+	// (@ = submenu, µ = destructive); NTRY toggles Pressed/Toggle.
 	if (notesCursor_ >= 20)
 	{
-		const char *labels[4] = {"QNT", "CLR", "POTS", ""};
-		const char *values[4] = {"@", "µ", "@", ""};
+		const char *labels[4] = {"QNT", "CLR", "POTS", "NTRY"};
+		const char *values[4] = {"@", "µ", "@", omxFormGlobal.noteEntryToggle ? "TG" : "PR"};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 20, false);
 		return;
@@ -1555,20 +1643,21 @@ enum ToolIndex
 	TOOL_CHANCE,   // randomize step probability between MIN..MAX
 	TOOL_EUC,      // euclidean rhythm generator
 	TOOL_GRIDS,    // grids (topographic drum) generator
+	TOOL_PAGE,     // copy one 16-step page onto another (steps + page length)
 	TOOL_COUNT
 };
 
 static const char *kToolNames[TOOL_COUNT] = {
 	"ROTATE", "MIRROR", "SHUFFLE", "HUMANIZE", "QUANTIZE", "TRANSPOSE",
-	"SCALE SNAP", "VEL RANDOM", "CHANCE RND", "EUCLID", "GRIDS"};
+	"SCALE SNAP", "VEL RANDOM", "CHANCE RND", "EUCLID", "GRIDS", "PAGE COPY"};
 
 // Encoder cells per tool: params first, then action buttons. The cursor walks these.
-static const uint8_t kToolParams[TOOL_COUNT] = {1, 1, 1, 2, 2, 1, 3, 18, 18, 3, 5};
-static const uint8_t kToolBtns[TOOL_COUNT]   = {2, 1, 1, 1, 1, 4, 1, 0, 0, 0, 0};
+static const uint8_t kToolParams[TOOL_COUNT] = {1, 1, 1, 2, 2, 1, 3, 18, 18, 3, 5, 2};
+static const uint8_t kToolBtns[TOOL_COUNT]   = {2, 1, 1, 1, 1, 4, 1, 0, 0, 0, 0, 1};
 
 // Distinct hue per tool for the action keys.
 static const uint32_t kToolColors[TOOL_COUNT] = {
-	CYAN, LTCYAN, DKCYAN, MAGENTA, ROSE, ORANGE, DKORANGE, YELLOW, DKYELLOW, GREEN, BLUE};
+	CYAN, LTCYAN, DKCYAN, MAGENTA, ROSE, ORANGE, DKORANGE, YELLOW, DKYELLOW, GREEN, BLUE, LTPURPLE};
 
 static const char *kGridsInstNames[4] = {"BD", "SD", "HH", "AC"};
 
@@ -1584,7 +1673,7 @@ static uint8_t toolStepMode(uint8_t tool)
 // Which tools carry the shared SCOPE param (keys 9 = page / 10 = track everywhere).
 static bool toolHasScope(uint8_t tool)
 {
-	return tool != TOOL_VEL && tool != TOOL_CHANCE;
+	return tool != TOOL_VEL && tool != TOOL_CHANCE && tool != TOOL_PAGE;
 }
 
 // Perform a tool's action button (shared by the top-row keys and the encoder click).
@@ -1610,6 +1699,10 @@ void OmxModeForm::toolAction(uint8_t tool, uint8_t action)
 	case TOOL_CHANCE:  omni->toolChanceRnd(toolChanceMin_, toolChanceMax_); break;
 	case TOOL_EUC:     omni->toolEuclid(toolEucPulses_, toolEucRot_, toolScopeAll_); break;
 	case TOOL_GRIDS:   omni->toolGrids(toolGridsInst_, toolGridsX_, toolGridsY_, toolGridsDens_, toolScopeAll_); break;
+	case TOOL_PAGE:
+		omni->copyPage(toolPageFrom_, toolPageTo_);
+		omxDisp.displayMessage("P" + String(toolPageFrom_ + 1) + " > P" + String(toolPageTo_ + 1));
+		break;
 	}
 	omxDisp.setDirty();
 	omxLeds.setDirty();
@@ -1782,6 +1875,10 @@ bool OmxModeForm::onEncoderTools(int dir)
 		if (cell == 2) toolGridsY_ = (uint8_t)constrain((int)toolGridsY_ + dir * 4, 0, 255);
 		if (cell == 3) toolGridsDens_ = (uint8_t)constrain((int)toolGridsDens_ + dir * 4, 0, 255);
 		if (cell == 4) toolScopeAll_ = dir > 0;
+		break;
+	case TOOL_PAGE:
+		if (cell == 0) toolPageFrom_ = (uint8_t)constrain((int)toolPageFrom_ + dir, 0, 3);
+		if (cell == 1) toolPageTo_ = (uint8_t)constrain((int)toolPageTo_ + dir, 0, 3);
 		break;
 	}
 	omxDisp.setDirty();
@@ -1965,6 +2062,15 @@ void OmxModeForm::onDisplayTools()
 		omxDisp.dispToolGenPage(pl, pv, 5, sel, editing, preview, plen, stepState, pageLen, playhead);
 		return;
 	}
+	case TOOL_PAGE:
+	{
+		String pf = "P" + String(toolPageFrom_ + 1), pt = "P" + String(toolPageTo_ + 1);
+		const char *pl[2] = {"FROM", "TO"};
+		const char *pv[2] = {pf.c_str(), pt.c_str()};
+		const char *btns[1] = {"COPY"};
+		omxDisp.dispToolActionPage(pl, pv, 2, btns, 1, sel, editing, stepState, pageLen, playhead);
+		return;
+	}
 	}
 }
 
@@ -2013,6 +2119,17 @@ static uint8_t pidToPaletteMode(uint8_t pid)
 	case 7: return PALMODE_ACCUM;
 	default: return 255;
 	}
+}
+
+// Boost a palette colour toward white for the SELECTED value key, so the current
+// value reads clearly against the dim rest of the palette.
+static uint32_t ledBrighten(uint32_t c)
+{
+	uint8_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+	r = r + ((255 - r) >> 1);
+	g = g + ((255 - g) >> 1);
+	b = b + ((255 - b) >> 1);
+	return ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
 }
 
 // Palette key colour per palette mode (pseudo-modes get their own hues).
@@ -2080,15 +2197,22 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		if (stepEditMode_ == STEPMODE_NOTE)
 		{
 			uint8_t degree = thisKey - 1;
-			int8_t note = omxFormGlobal.musicScale->getNoteByDegree(degree, midiSettings.octave);
+			int8_t note = omni->paletteScale()->getNoteByDegree(degree, midiSettings.octave);
 			if (e.down() && !e.held())
 			{
 				if (note < 0 || note > 127)
 					return; // octave extremes can push a degree out of MIDI range
-				bool fresh = (heldNoteKeys_ == 0);
+				// Pressed mode: a fresh press replaces the step's notes. Toggle mode: each
+				// press adds the note, or removes it if the step already has it (drums).
+				bool fresh = (heldNoteKeys_ == 0) && !omxFormGlobal.noteEntryToggle;
 				for (uint8_t s = 0; s < 16; s++)
 					if (heldStepMask_ & (1 << s))
 					{
+						if (omxFormGlobal.noteEntryToggle && omni->stepHasNote(s, note))
+						{
+							omni->stepRemoveNote(s, note);
+							continue;
+						}
 						if (fresh) omni->stepClearNotes(s);
 						omni->stepAddNote(s, note);
 					}
@@ -2140,6 +2264,7 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	// selected param's palette keys 1/2. keyState is still true during the release, so
 	// this must run before the shortcut-mode gate below.
 	if ((stepMenuPage_ == 1 || stepMenuPage_ == 2) && heldStepMask_ == 0 &&
+		omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX &&
 		(thisKey == 1 || thisKey == 2) && !e.down() && e.quickClicked() &&
 		!(thisKey == 1 ? stepF1Used_ : stepF2Used_))
 	{
@@ -2193,35 +2318,20 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		onKeyUpdateMixHold(e);
 		return;
 	}
+	// F2 + step = PASTE, always — pasting onto a filled step overwrites it. (It used to
+	// cut a filled step instead, which broke the natural F1-copy -> F2-paste flow. Cut is
+	// the plain quick-tap of a filled step, which clears it into the buffer.)
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ < 0 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 	{
-		uint8_t k = thisKey - 11;
-		if (omni->stepIsOn(k))
-		{
-			omni->stepCut(k);
-			omxDisp.displayMessage("CUT");
-		}
-		else
-		{
-			omni->stepPaste(k);
-			omxDisp.displayMessage("PASTE");
-		}
+		omni->stepPaste(thisKey - 11);
+		omxDisp.displayMessage("PASTE");
 		return;
 	}
-	// F1 + step key = copy (a step with content) / paste (an empty step). F3 = structure layer.
+	// F1 + step key = COPY, always. F3 = structure layer.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 	{
-		uint8_t k = thisKey - 11;
-		if (omni->stepIsOn(k))
-		{
-			omni->stepCopy(k);
-			omxDisp.displayMessage("COPY");
-		}
-		else
-		{
-			omni->stepPaste(k);
-			omxDisp.displayMessage("PASTE");
-		}
+		omni->stepCopy(thisKey - 11);
+		omxDisp.displayMessage("COPY");
 		return;
 	}
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
@@ -2489,9 +2599,9 @@ void OmxModeForm::updateStepLEDs()
 		{
 			uint32_t c;
 			if (isBar)
-				c = ((int16_t)i == sel) ? col : ((int16_t)i < sel ? dim : (uint32_t)VLOWWHITE);
+				c = ((int16_t)i == sel) ? ledBrighten(col) : ((int16_t)i < sel ? col : (uint32_t)VLOWWHITE);
 			else
-				c = ((int16_t)i == sel) ? col : dim;
+				c = ((int16_t)i == sel) ? ledBrighten(col) : dim;
 			strip.setPixelColor(1 + i, c);
 		}
 		return;
@@ -2512,10 +2622,10 @@ void OmxModeForm::updateStepLEDs()
 			// 10 note keys, each with a hue: chromatic = white notes periwinkle / black notes
 			// amber; scale = root periwinkle / in-scale blue. Selected notes (in the chord or
 			// held) show that same hue at full brightness; the rest are the dim version.
-			bool chromatic = (scaleConfig.scalePattern < 0);
+			bool chromatic = omni->scaleIsChromatic();
 			for (uint8_t i = 0; i < 10; i++)
 			{
-				int8_t note = omxFormGlobal.musicScale->getNoteByDegree(i, midiSettings.octave);
+				int8_t note = omni->paletteScale()->getNoteByDegree(i, midiSettings.octave);
 				uint32_t full;
 				if (chromatic)
 				{
@@ -2528,7 +2638,7 @@ void OmxModeForm::updateStepLEDs()
 					full = (i == 0) ? 0xa8a8ff : 0x3838ff; // root periwinkle vs in-scale blue
 				}
 				bool selected = (heldNoteKeys_ & (1 << i)) || (focus >= 0 && omni->stepHasNote(focus, note));
-				strip.setPixelColor(1 + i, selected ? full : ((full >> 2) & 0x3f3f3f));
+				strip.setPixelColor(1 + i, selected ? ledBrighten(full) : ((full >> 2) & 0x3f3f3f));
 			}
 		}
 		else if (stepEditMode_ == STEPMODE_MATH)
@@ -2560,9 +2670,9 @@ void OmxModeForm::updateStepLEDs()
 			{
 				uint32_t c;
 				if (isBar)
-					c = ((int16_t)i == sel) ? col : ((int16_t)i < sel ? dim : (uint32_t)VLOWWHITE);
+					c = ((int16_t)i == sel) ? ledBrighten(col) : ((int16_t)i < sel ? col : (uint32_t)VLOWWHITE);
 				else
-					c = ((int16_t)i == sel) ? col : dim;
+					c = ((int16_t)i == sel) ? ledBrighten(col) : dim;
 				strip.setPixelColor(1 + i, c);
 			}
 		}
@@ -2704,11 +2814,21 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		return true;
 	}
 
-	// ACTIONS page (6): QNT / CLR / POTS action cells (click fires them).
+	// ACTIONS page (6): QNT / CLR / POTS action cells (click fires them) + NTRY switch.
 	if (stepMenuPage_ == 6)
 	{
 		if (!getEncoderSelect())
-			return true; // actions have no turn edit
+		{
+			if (stepMenuSel_ == 3) // NTRY: note-entry behavior (Pressed / Toggle)
+			{
+				bool prev = omxFormGlobal.noteEntryToggle;
+				omxFormGlobal.noteEntryToggle = dir > 0;
+				if (prev != omxFormGlobal.noteEntryToggle)
+					omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
+				omxDisp.setDirty();
+			}
+			return true; // the action cells have no turn edit
+		}
 		int s = (int)stepMenuSel_ + dir;
 		if (s < 0)
 		{
@@ -2716,7 +2836,7 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 			stepMenuSel_ = 3;
 		}
 		else
-			stepMenuSel_ = (uint8_t)constrain(s, 0, 2);
+			stepMenuSel_ = (uint8_t)constrain(s, 0, 3);
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 		return true;
@@ -2836,7 +2956,7 @@ bool OmxModeForm::onEncoderButtonStep()
 {
 	if (formView_ != FORMVIEW_STEP)
 		return false;
-	if (stepMenuPage_ == 6) // ACTIONS: Quant / Clear / Pots
+	if (stepMenuPage_ == 6) // ACTIONS: Quant / Clear / Pots / Note entry
 	{
 		if (stepMenuSel_ == 0)
 		{
@@ -2850,6 +2970,12 @@ bool OmxModeForm::onEncoderButtonStep()
 			clearSel_ = 0;
 			omxDisp.setDirty();
 			omxLeds.setDirty();
+		}
+		else if (stepMenuSel_ == 3)
+		{
+			omxFormGlobal.noteEntryToggle = !omxFormGlobal.noteEntryToggle;
+			omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
+			omxDisp.setDirty();
 		}
 		else
 			openPotConfig();
@@ -2967,8 +3093,7 @@ void OmxModeForm::onDisplayStep()
 	{
 		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
 		String vals[4];
-		vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
-		vals[1] = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
+		scaleRootPatternVals(vals[0], vals[1]); // track-aware (local / chromatic / global)
 		vals[2] = scaleConfig.lockScale ? "Ĉ" : "Ć";
 		vals[3] = scaleConfig.group16 ? "Ĉ" : "Ć";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
@@ -2977,11 +3102,12 @@ void OmxModeForm::onDisplayStep()
 		return;
 	}
 
-	// ACTIONS page (6): Quant / Clear / Pots — click to fire (@ = submenu, µ = destructive).
+	// ACTIONS page (6): Quant / Clear / Pots / Note entry — click to fire (@ = submenu,
+	// µ = destructive); NTRY toggles Pressed/Toggle.
 	if (stepMenuPage_ == 6)
 	{
-		const char *labels[4] = {"QNT", "CLR", "POTS", ""};
-		const char *values[4] = {"@", "µ", "@", ""};
+		const char *labels[4] = {"QNT", "CLR", "POTS", "NTRY"};
+		const char *values[4] = {"@", "µ", "@", omxFormGlobal.noteEntryToggle ? "TG" : "PR"};
 		bool locked[4] = {false, false, false, false};
 		omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, false);
 		return;
@@ -3071,7 +3197,7 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 	else if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
 	{
 		modOverlay = 2;
-		overlayLabel = (heldTrackKey_ >= 0) ? "MUTE / PLAY MODE" : "CUT / PASTE";
+		overlayLabel = (heldTrackKey_ >= 0) ? "MUTE / PLAY MODE" : "PASTE";
 	}
 	else if (formView_ == FORMVIEW_MIX && heldTrackKey_ >= 0)
 	{
@@ -3208,6 +3334,9 @@ void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 			{
 				machines_[track]->setSeq(machines_[heldTrackKey_]->getSeq());
 				trackHue_[track] = trackHue_[heldTrackKey_];
+				machines_[track]->setScaleConfig(machines_[heldTrackKey_]->getScaleMode(),
+												 machines_[heldTrackKey_]->getLocalRoot(),
+												 machines_[heldTrackKey_]->getLocalPattern());
 			}
 			else
 				machines_[track]->setTrackData(machines_[heldTrackKey_]->getSeq().tracks[0]);
@@ -3379,15 +3508,20 @@ void OmxModeForm::updateShortcutMode()
 
 	uint8_t prevMode = omxFormGlobal.shortcutMode;
 
-	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX && midiSettings.keyState[1] && midiSettings.keyState[2])
+	// Keys 1/2 pressed as AUX transport (swallow mask set) are the AUX layer's until they
+	// release — they must not flip a phantom F1/F2/F3 on when AUX lifts before they do.
+	bool k1Held = midiSettings.keyState[1] && !(auxSwallowMask_ & (1u << 1));
+	bool k2Held = midiSettings.keyState[2] && !(auxSwallowMask_ & (1u << 2));
+
+	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX && k1Held && k2Held)
 	{
 		omxFormGlobal.shortcutMode = FORMSHORTCUT_F3;
 	}
-	else if (omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX && midiSettings.keyState[1])
+	else if (omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX && k1Held)
 	{
 		omxFormGlobal.shortcutMode = FORMSHORTCUT_F1;
 	}
-	else if (omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX && midiSettings.keyState[2])
+	else if (omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX && k2Held)
 	{
 		omxFormGlobal.shortcutMode = FORMSHORTCUT_F2;
 	}
@@ -3585,6 +3719,20 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 {
 	// Serial.println("LoopUpdate");
 
+	// Solo/mute audibility: keep anySolo current and flush notes on any track that just
+	// became inaudible, so muting or soloing can never leave notes ringing (stuck).
+	bool anySolo = false;
+	for (uint8_t i = 0; i < kNumMachines; i++)
+		if (machines_[i]->getSolo()) { anySolo = true; break; }
+	omxFormGlobal.anySolo = anySolo;
+	for (uint8_t i = 0; i < kNumMachines; i++)
+	{
+		bool aud = machines_[i]->isAudible();
+		if (!aud && trackAudible_[i])
+			machines_[i]->flushNotes();
+		trackAudible_[i] = aud;
+	}
+
 	// Keep repainting while the transient CC meter is up (and once as it expires) so it clears.
 	bool ccActive = ccMeterActive();
 	if (ccActive || ccMeterWasActive_)
@@ -3684,6 +3832,21 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 {
 	if (auxMacroManager_.onEncoderChanged(enc))
 		return;
+
+	// AUX + encoder = tempo, from any view (AUX + encoder click = tap tempo).
+	if (midiSettings.midiAUX)
+	{
+		int amt = enc.accel(5);
+		clockConfig.newtempo = constrain(clockConfig.clockbpm + amt, 40, 300);
+		if (clockConfig.newtempo != clockConfig.clockbpm)
+		{
+			clockConfig.clockbpm = clockConfig.newtempo;
+			omxUtil.resetClocks();
+		}
+		omxDisp.displayMessage("BPM " + String((int)clockConfig.clockbpm));
+		omxDisp.setDirty();
+		return;
+	}
 
 	switch (formView_)
 	{
@@ -3953,6 +4116,13 @@ void OmxModeForm::onEncoderButtonDown()
 	if (auxMacroManager_.onEncoderButtonDown())
 		return;
 
+	// AUX + encoder click = tap tempo (click in time; AUX + turn = BPM).
+	if (midiSettings.midiAUX)
+	{
+		tapTempo();
+		return;
+	}
+
 	switch (formView_)
 	{
 	case FORMVIEW_NOTES:
@@ -3998,6 +4168,13 @@ void OmxModeForm::onEncoderButtonDown()
 	if (action == 2)
 	{
 		openPotConfig();
+		return;
+	}
+	if (action == 3) // NTRY cell click: toggle the note-entry behavior
+	{
+		omxFormGlobal.noteEntryToggle = !omxFormGlobal.noteEntryToggle;
+		omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
+		omxDisp.setDirty();
 		return;
 	}
 
@@ -4049,6 +4226,38 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 
 	if (auxMacroManager_.onKeyUpdate(e))
 		return; // Key consumed by macro
+
+	// Releases of keys whose DOWN the AUX layer consumed finish in the AUX layer: the
+	// transport singles and rec-arm act HERE (on release, so the STOP chord can never
+	// fire Play/Reset on the way in), and nothing leaks into the active view — even
+	// when AUX itself was let go first.
+	{
+		uint8_t k = e.key();
+		if (!e.down() && k > 0 && (auxSwallowMask_ & (1u << k)))
+		{
+			auxSwallowMask_ &= ~(1u << k);
+			if (k == 1 && !aux1Used_ && e.quickClicked())
+			{
+				togglePlayback();
+				omxDisp.displayMessage(omxFormGlobal.isPlaying ? "PLAY" : "PAUSE");
+			}
+			else if (k == 2 && !aux2Used_ && e.quickClicked())
+			{
+				resetPlayback();
+				omxDisp.displayMessage("RESET");
+			}
+			else if (k == 3 && e.quickClicked())
+			{
+				// Quick-tap AUX + Rec Arm = toggle rec arm (a hold opens the CLEAR submenu).
+				omxFormGlobal.recArm = !omxFormGlobal.recArm;
+				recClearedMask_ = 0; // fresh replace pass
+				omxDisp.displayMessage(omxFormGlobal.recArm ? "REC ARM" : "REC OFF");
+			}
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+			return;
+		}
+	}
 
 	if (omxFormGlobal.auxBlock)
 		return;
@@ -4144,24 +4353,14 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 			}
 			else if (auxMacroManager_.isMFXQuickEditEnabled() == false && (thisKey == 1 || thisKey == 2)) // transport
 			{
-				// AUX + 1 + 2 held together = full STOP (stop the transport + reset to the start),
-				// regardless of the order the two keys go down.
-				if ((thisKey == 1 && midiSettings.keyState[2]) || (thisKey == 2 && midiSettings.keyState[1]))
+				// Singles act on RELEASE (the swallow handler above), so the STOP chord —
+				// AUX + 1 + 2, in either order — can never fire Play or Reset on the way in.
+				uint8_t other = (thisKey == 1) ? 2 : 1;
+				if (thisKey == 1) aux1Used_ = false; else aux2Used_ = false;
+				if (midiSettings.keyState[other] && (auxSwallowMask_ & (1u << other)))
 				{
-					if (omxFormGlobal.isPlaying)
-						togglePlayback();
-					resetPlayback();
-					omxDisp.displayMessage("STOP");
-				}
-				else if (thisKey == 1) // play / pause
-				{
-					togglePlayback();
-					omxDisp.displayMessage(omxFormGlobal.isPlaying ? "PLAY" : "PAUSE");
-				}
-				else // thisKey == 2: reset to start
-				{
-					resetPlayback();
-					omxDisp.displayMessage("RESET");
+					aux1Used_ = aux2Used_ = true; // the chord consumed both keys
+					doStopOrKill();               // STOP; STOP again while stopped = KILL
 				}
 				keyConsumed = true;
 			}
@@ -4193,28 +4392,25 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 				// Shortcut to do a reset after pausing
 				if(omxFormGlobal.isPlaying == false)
 				{
+					aux1Used_ = true; // consumed by the hold — no Play on its release
 					resetPlayback();
 					omxDisp.displayMessage("STOP");
 					keyConsumed = true;
 				}
 			}
 		}
-		// Quick-tap AUX + Rec Arm = toggle rec arm (a hold opens the CLEAR submenu).
-		if (!e.down() && thisKey == 3 && e.quickClicked())
-		{
-			omxFormGlobal.recArm = !omxFormGlobal.recArm;
-			recClearedMask_ = 0; // fresh replace pass
-			omxDisp.displayMessage(omxFormGlobal.recArm ? "REC ARM" : "REC OFF");
-			omxLeds.setDirty();
-			keyConsumed = true;
-		}
 
 		// The AUX layer is modal: swallow every remaining key-down so the layer's FREE
 		// keys can't fall through into the active view (AUX+5 was silently setting the
-		// Patterns switch style, AUX+20-26 were switching pattern slots). Releases still
-		// route so views can finish note-offs and clear held-key masks.
+		// Patterns switch style, AUX+20-26 were switching pattern slots). The swallow
+		// mask makes their RELEASES the AUX layer's too (handled at the top of this
+		// function) so quick-tap view actions can't fire from an AUX chord either.
 		if (e.down())
+		{
+			if (thisKey > 0)
+				auxSwallowMask_ |= (1u << thisKey);
 			keyConsumed = true;
+		}
 	}
 
 
@@ -4664,7 +4860,7 @@ void OmxModeForm::doNoteOn(uint8_t keyIndex)
 	// AUX-macro notes follow the selected track's routing (channel + default velocity), like the
 	// normal FORM keyboard (previewNote) — not the global sysSettings.midiChannel/defaultVelocity.
 	auto omni = getSelectedMachine();
-	MidiNoteGroup noteGroup = omxUtil.midiNoteOn2(omxFormGlobal.musicScale, keyIndex,
+	MidiNoteGroup noteGroup = omxUtil.midiNoteOn2(kbScale(), keyIndex,
 												  omni->trackPtr()->paramDefaults[0], omni->getChannel() + 1);
 
 	if (noteGroup.noteNumber == 255)
@@ -4808,6 +5004,76 @@ void OmxModeForm::togglePlayback()
 	}
 }
 
+// The AUX+1+2 STOP chord: stop + reset while playing; STOP again while already
+// stopped = KILL (force note-offs everywhere — the escape hatch for stuck notes).
+void OmxModeForm::doStopOrKill()
+{
+	if (omxFormGlobal.isPlaying)
+	{
+		togglePlayback();
+		resetPlayback();
+		omxDisp.displayMessage("STOP");
+	}
+	else
+	{
+		resetPlayback();
+		killAllNotes();
+		omxDisp.displayMessage("KILL");
+	}
+}
+
+void OmxModeForm::killAllNotes()
+{
+	for (uint8_t k = 1; k < 27; k++)
+		previewKeyOff(k);
+	flushRecHeld();
+	for (uint8_t i = 0; i < kNumMachines; i++)
+		machines_[i]->flushNotes();
+	pendingNoteOffs.allOff();
+	for (uint8_t i = 0; i < NUM_MIDIFX_GROUPS; i++)
+		subModeMidiFx[i].resync();
+	// Belt and braces for anything a MidiFX already put on the wire: All Notes Off +
+	// All Sound Off on every channel the tracks use.
+	bool done[16] = {};
+	for (uint8_t i = 0; i < kNumMachines; i++)
+	{
+		uint8_t ch = machines_[i]->getChannel(); // 0-15
+		if (done[ch])
+			continue;
+		done[ch] = true;
+		MM::sendControlChange(123, 0, ch + 1);
+		MM::sendControlChange(120, 0, ch + 1);
+	}
+	omxLeds.setDirty();
+}
+
+// Tap tempo: AUX + encoder click, tapped in time. Rolling average over the run;
+// a >2s gap starts a new run.
+void OmxModeForm::tapTempo()
+{
+	uint32_t now = millis();
+	uint32_t gap = now - lastTapMs_;
+	lastTapMs_ = now;
+	if (gap > 2000 || gap < 100) // new run (or switch bounce)
+	{
+		tapCount_ = 1;
+		omxDisp.displayMessage("TAP..");
+		return;
+	}
+	tapAvgMs_ = (tapCount_ <= 1) ? (float)gap : (tapAvgMs_ + ((float)gap - tapAvgMs_) / 4.0f);
+	if (tapCount_ < 255)
+		tapCount_++;
+	float bpm = constrain(60000.0f / tapAvgMs_, 40.0f, 300.0f);
+	clockConfig.newtempo = bpm;
+	if (clockConfig.newtempo != clockConfig.clockbpm)
+	{
+		clockConfig.clockbpm = clockConfig.newtempo;
+		omxUtil.resetClocks();
+	}
+	omxDisp.displayMessage("TAP " + String((int)clockConfig.clockbpm));
+	omxDisp.setDirty();
+}
+
 void OmxModeForm::resetPlayback()
 {
 	if(omxFormGlobal.isPlaying)
@@ -4925,6 +5191,18 @@ void OmxModeForm::saveBankToFS()
 	f.write(&recQuantize_, 1);
 	f.write(trackHue_, sizeof(trackHue_));
 	f.write((uint8_t *)patterns_, sizeof(patterns_));
+	// Optional tail (older files simply end here and load fine): note-entry behavior +
+	// per-track scale mode/root/pattern (pattern stored +1 so 0 = off).
+	uint8_t tail[2 + 3 * kNumMachines];
+	tail[0] = 'T';
+	tail[1] = omxFormGlobal.noteEntryToggle ? 1 : 0;
+	for (uint8_t i = 0; i < kNumMachines; i++)
+	{
+		tail[2 + i * 3] = machines_[i]->getScaleMode();
+		tail[3 + i * 3] = machines_[i]->getLocalRoot();
+		tail[4 + i * 3] = (uint8_t)(machines_[i]->getLocalPattern() + 1);
+	}
+	f.write(tail, sizeof(tail));
 	f.close();
 	Serial.println("FORM bank saved (" + String((unsigned)sizeof(patterns_)) + " bytes)");
 }
@@ -4958,6 +5236,9 @@ bool OmxModeForm::loadBankFromFS()
 			  f.read(&recQ, 1) == 1 &&
 			  f.read(hues, sizeof(hues)) == (int)sizeof(hues) &&
 			  f.read((uint8_t *)patterns_, sizeof(patterns_)) == (int)sizeof(patterns_);
+	// Optional tail (note-entry + per-track scale modes) — absent in older files.
+	uint8_t tail[2 + 3 * kNumMachines];
+	bool tailOk = ok && f.read(tail, sizeof(tail)) == (int)sizeof(tail) && tail[0] == 'T';
 	f.close();
 	if (!ok)
 	{
@@ -4969,6 +5250,13 @@ bool OmxModeForm::loadBankFromFS()
 	switchStyle_ = (swStyle > 3) ? 0 : swStyle;
 	recQuantize_ = recQ;
 	memcpy(trackHue_, hues, sizeof(trackHue_));
+	if (tailOk)
+	{
+		omxFormGlobal.noteEntryToggle = tail[1] == 1;
+		for (uint8_t i = 0; i < kNumMachines; i++)
+			machines_[i]->setScaleConfig(tail[2 + i * 3], tail[3 + i * 3],
+										 (int8_t)tail[4 + i * 3] - 1);
+	}
 	Serial.println("FORM bank loaded");
 	return true;
 }

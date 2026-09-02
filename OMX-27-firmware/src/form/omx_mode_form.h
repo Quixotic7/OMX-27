@@ -168,6 +168,8 @@ private:
 	bool onEncoderNotes(int dir);       // encoder turn in the Notes view. consumed?
 	bool onEncoderButtonNotes();        // encoder click in the Notes view. consumed?
 	void notesEditScaleParam(uint8_t param, int dir); // 0 root · 1 scale · 2 lock · 3 group
+	// Fill the ROOT/SCALE display values, track-aware (local scale / chromatic / global).
+	void scaleRootPatternVals(String &rootV, String &patV);
 	void onKeyUpdateNotes(OMXKeypadEvent e);
 	void updateNotesLEDs();
 	void onDisplayNotes();
@@ -284,6 +286,7 @@ private:
 	uint8_t transSel_ = 0;
 	// Tool params (persist while in the mode):
 	bool toolScopeAll_ = false;              // ROTATE: whole loop vs active page
+	uint8_t toolPageFrom_ = 0, toolPageTo_ = 1; // PAGE COPY: source/destination page (0-3)
 	uint8_t toolVelMin_ = 64, toolVelMax_ = 127;
 	uint8_t toolEucPulses_ = 4, toolEucRot_ = 0;
 	uint8_t toolGridsInst_ = 0, toolGridsX_ = 128, toolGridsY_ = 128, toolGridsDens_ = 128;
@@ -410,6 +413,27 @@ private:
 	void resetPlayback();
 
 	void stopSequencers();
+
+	// ---- AUX-layer transport / key tracking ----
+	// Keys whose DOWN the AUX layer consumed: their releases belong to the AUX layer too
+	// (transport / rec-arm act on release) and must never leak into the active view —
+	// even when AUX itself was released first (the old pass-through fired quick-tap
+	// copy/paste/palette actions and phantom F1/F2 states).
+	uint32_t auxSwallowMask_ = 0;
+	bool aux1Used_ = false; // transport key consumed by a chord/hold this press
+	bool aux2Used_ = false;
+	// STOP (chord) while playing; a second STOP while already stopped = KILL all notes.
+	void doStopOrKill();
+	void killAllNotes();
+	// Tap tempo: AUX + encoder click, tapped in time. AUX + encoder turn = BPM.
+	uint32_t lastTapMs_ = 0;
+	uint8_t tapCount_ = 0;
+	float tapAvgMs_ = 0;
+	void tapTempo();
+	// Audibility tracking (mute/solo): notes are flushed when a track goes inaudible.
+	bool trackAudible_[FORM_NUM_TRACKS];
+	// The selected track's keyboard scale (null = chromatic — see FormMachineOmni).
+	MusicScales *kbScale();
 
 	void selectMidiFx(uint8_t mfxIndex, bool dispMsg);
 

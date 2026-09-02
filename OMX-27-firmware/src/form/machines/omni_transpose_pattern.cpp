@@ -184,6 +184,13 @@ namespace FormOmni
                 }
             }
         }
+
+        // Playhead: the transpose-pattern position currently applied, like the step
+        // editors' green playhead. Overrides the value colours while playing.
+        if (omxFormGlobal.isPlaying)
+        {
+            strip.setPixelColor(11 + (transpPos_ % (tPat->len + 1)), GREEN);
+        }
     }
 
     void OmniTransposePattern::onKeyUpdate(OMXKeypadEvent e, ParamManager *params, TransposePattern *tPat)

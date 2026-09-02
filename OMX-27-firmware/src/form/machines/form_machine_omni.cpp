@@ -93,12 +93,12 @@ namespace FormOmni
 
         trackParams_.addPage(7);  // OMNIPAGE_STEPNOTES
         trackParams_.addPage(2);  // OMNIPAGE_TRACK: Length, MidiFX
-        trackParams_.addPage(3);  // OMNIPAGE_TRACKMODES: Triplet, Direction, Mode
+        trackParams_.addPage(4);  // OMNIPAGE_TRACKMODES: Triplet, Direction, Mode, Scale mode
         trackParams_.addPage(3);  // OMNIPAGE_SEQTPOSE: Transpose, Mode, Apply TPat
         trackParams_.addPage(4);  // OMNIPAGE_SEQMIDI: Chan, Mono, SendMidi, SendCV
         trackParams_.addPage(4);  // OMNIPAGE_TIMINGS: BPM, Rate, Swing, Swing Div
-        trackParams_.addPage(4);  // OMNIPAGE_SCALE: Root, Scale, Lock, Group
-        trackParams_.addPage(3);  // OMNIPAGE_POTS: the ACTIONS page (Quant / Clear / Pots)
+        trackParams_.addPage(4);  // OMNIPAGE_SCALE: Root, Scale, Lock, Group (track-aware)
+        trackParams_.addPage(4);  // OMNIPAGE_POTS: ACTIONS (Quant / Clear / Pots / Note entry)
 
         tPatParams_.addPage(17);
     }
@@ -111,9 +111,87 @@ namespace FormOmni
             for (uint8_t i = 0; i < 6; i++)
                 auditionNotes_[k][i] = -1;
 
+        recalcLocalScale();
+
         resetPlayback();
 
         onRateChanged();
+    }
+
+    // ---- Per-track scale mode ----
+    void FormMachineOmni::recalcLocalScale()
+    {
+        if (scaleMode_ == TRACKSCALE_CHROMATIC)
+            localScale_.calculateScale(0, -1); // chromatic degrees, no scale colours
+        else
+            localScale_.calculateScale(localRoot_, localPattern_);
+    }
+
+    static const char *kScaleModeMsg[3] = {"GLOBAL SCALE", "CHROMATIC", "LOCAL SCALE"};
+
+    void FormMachineOmni::editScaleMode(int amt)
+    {
+        uint8_t prev = scaleMode_;
+        scaleMode_ = (uint8_t)constrain((int)scaleMode_ + amt, 0, TRACKSCALE_COUNT - 1);
+        if (prev != scaleMode_)
+        {
+            recalcLocalScale();
+            omxDisp.displayMessage(kScaleModeMsg[scaleMode_]);
+        }
+    }
+
+    void FormMachineOmni::editScaleRoot(int amt)
+    {
+        if (scaleMode_ == TRACKSCALE_LOCAL)
+        {
+            uint8_t prev = localRoot_;
+            localRoot_ = (uint8_t)constrain((int)localRoot_ + amt, 0, 11);
+            if (prev != localRoot_)
+                recalcLocalScale();
+            return;
+        }
+        int prev = scaleConfig.scaleRoot;
+        scaleConfig.scaleRoot = constrain(scaleConfig.scaleRoot + amt, 0, 11);
+        if (prev != scaleConfig.scaleRoot)
+            omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
+    }
+
+    void FormMachineOmni::editScalePattern(int amt)
+    {
+        if (scaleMode_ == TRACKSCALE_LOCAL)
+        {
+            int8_t prev = localPattern_;
+            localPattern_ = (int8_t)constrain((int)localPattern_ + amt, -1, (int)MusicScales::getNumScales() - 1);
+            if (prev != localPattern_)
+            {
+                omxDisp.displayMessage(MusicScales::getScaleName(localPattern_));
+                recalcLocalScale();
+            }
+            return;
+        }
+        int prev = scaleConfig.scalePattern;
+        scaleConfig.scalePattern = constrain(scaleConfig.scalePattern + amt, -1, (int)MusicScales::getNumScales() - 1);
+        if (prev != scaleConfig.scalePattern)
+        {
+            omxDisp.displayMessage(MusicScales::getScaleName(scaleConfig.scalePattern));
+            omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
+            if (scaleConfig.scalePattern < 0)
+            {
+                // record locked/grouped states, then clear them while the scale is off
+                if (prev >= 0)
+                {
+                    scaleConfig.lockedState = scaleConfig.lockScale;
+                    scaleConfig.groupedState = scaleConfig.group16;
+                }
+                scaleConfig.lockScale = false;
+                scaleConfig.group16 = false;
+            }
+            else if (prev < 0)
+            {
+                scaleConfig.lockScale = scaleConfig.lockedState;
+                scaleConfig.group16 = scaleConfig.groupedState;
+            }
+        }
     }
     FormMachineOmni::~FormMachineOmni()
     {
@@ -225,20 +303,28 @@ namespace FormOmni
         }
         else
         {
-            for(auto n : noteOns_)
-            {
-                auto noteGroup = n.toMidiNoteGroup();
-                noteGroup.noteOff = true;
-                noteGroup.unknownLength = true;
-                seqNoteOff(noteGroup, n.getMidifFXIndex());
-            }
-            noteOns_.clear();
+            flushNotes();
 
             ratchetDivs_ = 0; // don't leave a ratchet pending across stop
             ratchetStepIdx_ = -1;
 
             didNotesPlayThisStep_ = false;
         }
+    }
+
+    // Send note-offs for every note this track has sounding right now. Called on stop,
+    // and whenever the track becomes inaudible (mute, or another track's solo) so ringing
+    // notes can't get stuck waiting for a trigger that will never be audible.
+    void FormMachineOmni::flushNotes()
+    {
+        for (auto n : noteOns_)
+        {
+            auto noteGroup = n.toMidiNoteGroup();
+            noteGroup.noteOff = true;
+            noteGroup.unknownLength = true;
+            seqNoteOff(noteGroup, n.getMidifFXIndex());
+        }
+        noteOns_.clear();
     }
 
     void FormMachineOmni::resetPlayback()
@@ -428,8 +514,9 @@ namespace FormOmni
 
     void FormMachineOmni::toolScaleRemap(bool wholeTrack)
     {
-        if (omxFormGlobal.musicScale == nullptr)
-            return;
+        MusicScales *scl = paletteScale();
+        if (scl == nullptr || scaleIsChromatic())
+            return; // nothing to snap to on a chromatic track
         auto track = getTrack();
         uint8_t idx[64];
         uint8_t len = toolScopeIndices(wholeTrack, idx);
@@ -438,7 +525,7 @@ namespace FormOmni
             {
                 int8_t note = track->steps[idx[i]].notes[n];
                 if (note >= 0)
-                    track->steps[idx[i]].notes[n] = omxFormGlobal.musicScale->remapNoteToScale((uint8_t)note);
+                    track->steps[idx[i]].notes[n] = scl->remapNoteToScale((uint8_t)note);
             }
     }
 
@@ -605,6 +692,15 @@ namespace FormOmni
         auto track = getTrack();
         Step *s = &track->steps[absStep];
         bool wasEmpty = !s->hasNotes();
+        if (seq_.monoPhonic) // mono tracks record one note per step: replace
+        {
+            for (uint8_t i = 0; i < 6; i++)
+                s->notes[i] = -1;
+            s->notes[0] = note;
+            if (wasEmpty)
+                s->vel = (uint8_t)track->paramDefaults[0];
+            return;
+        }
         for (uint8_t i = 0; i < 6; i++)
             if (s->notes[i] == note)
                 return; // already there
@@ -618,6 +714,19 @@ namespace FormOmni
             }
     }
 
+    // Tools: copy one 16-step page (steps + page length) onto another page of this track.
+    void FormMachineOmni::copyPage(uint8_t srcPage, uint8_t dstPage)
+    {
+        if (srcPage >= 4 || dstPage >= 4 || srcPage == dstPage)
+            return;
+        auto track = getTrack();
+        for (uint8_t i = 0; i < 16; i++)
+            track->steps[dstPage * 16 + i].CopyFrom(&track->steps[srcPage * 16 + i]);
+        track->pageLen[dstPage] = track->pageLen[srcPage];
+        track->syncLen();
+        onTrackLengthChanged();
+    }
+
     uint8_t FormMachineOmni::recordResolveStep(uint8_t quantizePct, int8_t &nudgeOut)
     {
         nudgeOut = 0;
@@ -626,15 +735,21 @@ namespace FormOmni
         if (total == 0)
             return 255;
         // How far into the current step we are (0 at the step start, ->1 approaching the next).
+        // NOTE: playingStep_ is advanced immediately after a step fires, so mid-step it names
+        // the NEXT step to fire; the step that just sounded is lastTriggeredStepIndex_.
         float frac = (ticksPerStep_ > 0) ? (1.0f - (float)ticksTilNextTriggerRate_ / (float)ticksPerStep_) : 0.0f;
-        uint16_t pos = playingStep_;
+        frac = constrain(frac, 0.0f, 1.0f);
+        uint16_t pos;
         float nudgeFrac; // signed offset from the chosen step, in [-0.5, +0.5] of a step
         if (frac < 0.5f)
-            nudgeFrac = frac; // played late on the current step -> positive (delay) nudge
+        {
+            pos = (uint16_t)(lastTriggeredStepIndex_ % total); // the step that just fired
+            nudgeFrac = frac; // played late on it -> positive (delay) nudge
+        }
         else
         {
-            pos = (uint16_t)((playingStep_ + 1) % total); // round up to the next step
-            nudgeFrac = -(1.0f - frac);                    // played early -> negative nudge
+            pos = (uint16_t)(playingStep_ % total); // round up to the upcoming step
+            nudgeFrac = -(1.0f - frac);             // played early -> negative nudge
         }
         // Nudge scaled by the quantize strength: 100% => 0 (hard snap), 0% => full played offset.
         if (quantizePct > 100)
@@ -1527,17 +1642,20 @@ namespace FormOmni
             intervalMod = intervalMod + stepTransp;
         }
 
-        if (seq_.transposeMode == TRANPOSEMODE_SEMITONE || scaleConfig.scalePattern < 0)
+        // Per-track scale mode: chromatic tracks transpose in semitones; local tracks use
+        // their own scale for interval math; global tracks use the global scale (as before).
+        MusicScales *scl = paletteScale();
+        if (seq_.transposeMode == TRANPOSEMODE_SEMITONE || scaleIsChromatic())
         {
             noteNumber = noteNumber + intervalMod;
         }
         else if (seq_.transposeMode == TRANPOSEMODE_INTERVAL)
         {
-            noteNumber = omxFormGlobal.musicScale->offsetNoteByIntervalInScale(noteNumber, intervalMod);
+            noteNumber = scl->offsetNoteByIntervalInScale(noteNumber, intervalMod);
         }
         else if (seq_.transposeMode == TRANPOSEMODE_LOCALINTERVAL)
         {
-            noteNumber = omxFormGlobal.musicScale->offsetNoteByInterval(noteNumber, intervalMod);
+            noteNumber = scl->offsetNoteByInterval(noteNumber, intervalMod);
         }
 
         if(noteNumber < 0 || noteNumber > 127)
@@ -1558,7 +1676,7 @@ namespace FormOmni
 
         // Micros now = micros();
 
-        if (seq_.mute == 0)
+        if (isAudible()) // mute — and solo on another track — silences this track
         {
             // Per-step CC locks: send this step's pot values on the machine's pot-bank CCs,
             // once on trigger.
@@ -1656,6 +1774,10 @@ namespace FormOmni
 
                     if (!noteTriggeredOnSameStep && noteOns_.size() < 16)
                     {
+                        // Monophonic: a new note cuts whatever the track still has sounding,
+                        // so overlapping lengths can't stack into polyphony.
+                        if (seq_.monoPhonic)
+                            flushNotes();
                         didNotesPlayThisStep_ = true;
                         noteGroup.noteonMicros = seqConfig.lastClockMicros;
                         seqNoteOn(noteGroup, mfxIndex);
@@ -1909,6 +2031,16 @@ namespace FormOmni
         }
 
         if(omxFormGlobal.isPlaying == false) return;
+
+        // Keep stepMicros_ tracking the CURRENT tempo: BPM edits (and tap tempo) recompute
+        // clockConfig.step_micros without touching each machine, which used to leave note
+        // lengths timed at the old tempo until the next rate change.
+        {
+            Micros sm = clockConfig.step_micros * 16 / kSeqRates[seq_.rate];
+            if (getTrack()->tripletMode == 1)
+                sm = sm * 4 / 3;
+            stepMicros_ = sm;
+        }
 
         // Send note offs
         if (noteOns_.size() > 0)
@@ -2556,6 +2688,10 @@ namespace FormOmni
                 // The cell only fits a 2-char code — the full name shows while turning (§4 rule).
                 omxDisp.displayMessage(kTrackModeMsg[track->playMode]);
             }
+            else if (param == 3)
+            {
+                editScaleMode(amtSlow); // GLOBAL / CHROMATIC / LOCAL (name pops)
+            }
         }
         break;
         // Apply Transpose Pat, Transpose, Transpose Mode (menu-map PG20 order)
@@ -2631,46 +2767,15 @@ namespace FormOmni
         break;
         case OMNIPAGE_SCALE:
         {
+            // ROOT/SCALE are track-aware: on a LOCAL-scale track they edit the track's own
+            // root/pattern; otherwise the global scale (with the lock/group preservation).
             if (param == 0)
             {
-                int prevRoot = scaleConfig.scaleRoot;
-                scaleConfig.scaleRoot = constrain(scaleConfig.scaleRoot + amtSlow, 0, 12 - 1);
-                if (prevRoot != scaleConfig.scaleRoot)
-                {
-                    omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
-                }
+                editScaleRoot(amtSlow);
             }
             if (param == 1)
             {
-                int prevPat = scaleConfig.scalePattern;
-                scaleConfig.scalePattern = constrain(scaleConfig.scalePattern + amtSlow, -1, omxFormGlobal.musicScale->getNumScales() - 1);
-
-                if (prevPat != scaleConfig.scalePattern)
-                {
-                    omxDisp.displayMessage(omxFormGlobal.musicScale->getScaleName(scaleConfig.scalePattern));
-                    omxFormGlobal.musicScale->calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
-
-                    if (scaleConfig.scalePattern < 0)
-                    {
-                        // record locked and grouped states, then set the current lockScale and group16 to off
-                        if (prevPat >= 0)
-                        {
-                            scaleConfig.lockedState = scaleConfig.lockScale;
-                            scaleConfig.groupedState = scaleConfig.group16;
-                        }
-                        scaleConfig.lockScale = false;
-                        scaleConfig.group16 = false;
-                    }
-                    else
-                    {
-                        // restore locked and grouped states if the scale was previously set to off
-                        if (prevPat < 0)
-                        {
-                            scaleConfig.lockScale = scaleConfig.lockedState;
-                            scaleConfig.group16 = scaleConfig.groupedState;
-                        }
-                    }
-                }
+                editScalePattern(amtSlow);
             }
             if (param == 2)
             {
@@ -2685,6 +2790,17 @@ namespace FormOmni
                 {
                     scaleConfig.group16 = constrain(scaleConfig.group16 + amtSlow, 0, 1);
                 }
+            }
+        }
+        break;
+        case OMNIPAGE_POTS:
+        {
+            if (param == 3) // NTRY: note-entry behavior (Pressed / Toggle)
+            {
+                bool prev = omxFormGlobal.noteEntryToggle;
+                omxFormGlobal.noteEntryToggle = amtSlow > 0;
+                if (prev != omxFormGlobal.noteEntryToggle)
+                    omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
             }
         }
         break;
@@ -2748,11 +2864,13 @@ namespace FormOmni
         case OMNIPAGE_TRACKMODES:
         {
             auto track = getTrack();
-            const char *labels[4] = {"TRIP", "DIR", "MODE", ""};
+            static const char *kScaleModeShort[3] = {"GL", "CH", "LO"};
+            const char *labels[4] = {"TRIP", "DIR", "MODE", "SCAL"};
             String vals[4];
             vals[0] = track->tripletMode ? "On" : "--";
             vals[1] = track->playDirection == TRACKDIRECTION_FORWARD ? ">>" : "<<";
             vals[2] = kTrackModeShort[track->playMode];
+            vals[3] = kScaleModeShort[scaleMode_ < 3 ? scaleMode_ : 0];
             dispParamGrid(labels, vals, selParam);
         }
             return false;
@@ -2793,8 +2911,21 @@ namespace FormOmni
         {
             const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
             String vals[4];
-            vals[0] = omxFormGlobal.musicScale->getNoteName(scaleConfig.scaleRoot);
-            vals[1] = scaleConfig.scalePattern < 0 ? "--" : String(scaleConfig.scalePattern);
+            if (scaleMode_ == TRACKSCALE_CHROMATIC)
+            {
+                vals[0] = "--"; // chromatic track: no scale applies
+                vals[1] = "--";
+            }
+            else if (scaleMode_ == TRACKSCALE_LOCAL)
+            {
+                vals[0] = MusicScales::getNoteName(localRoot_);
+                vals[1] = localPattern_ < 0 ? "--" : String((int)localPattern_);
+            }
+            else
+            {
+                vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
+                vals[1] = scaleConfig.scalePattern < 0 ? "--" : String(scaleConfig.scalePattern);
+            }
             vals[2] = scaleConfig.lockScale ? "On" : "--";
             vals[3] = scaleConfig.group16 ? "On" : "--";
             dispParamGrid(labels, vals, selParam);
@@ -2803,10 +2934,10 @@ namespace FormOmni
         case OMNIPAGE_POTS:
         {
             // ACTIONS (menu-map PG05): Quant / Clear / Pot Config — click a cell to fire
-            // (the shell runs the action via takeActionRequest).
-            const char *labels[4] = {"QNT", "CLR", "POTS", ""};
+            // (the shell runs the action via takeActionRequest) — plus the note-entry switch.
+            const char *labels[4] = {"QNT", "CLR", "POTS", "NTRY"};
             // square, x, open circle, filled circle - ´µ¶·
-            String vals[4] = {"@", "µ", "@", ""};
+            String vals[4] = {"@", "µ", "@", omxFormGlobal.noteEntryToggle ? "TG" : "PR"};
             dispParamGrid(labels, vals, selParam);
         }
             return false;

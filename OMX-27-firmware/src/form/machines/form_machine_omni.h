@@ -37,6 +37,12 @@ namespace FormOmni
         void setSolo(bool isSoloed);
 	    bool didTriggerThisStep();
 
+        // Audibility: muted tracks — and, while any track is soloed, non-soloed tracks —
+        // don't send notes (they keep advancing so unmute/unsolo re-enters in time).
+        bool isAudible() { return seq_.mute == 0 && (!omxFormGlobal.anySolo || seq_.solo == 1); }
+        // Send note-offs for every note this track currently has sounding (mute/solo/kill).
+        void flushNotes();
+
 
         // Encoder turn: dispatch to select (navigate) or edit per getEncoderSelect().
         void onEncoderChanged(Encoder::Update enc);
@@ -195,9 +201,22 @@ namespace FormOmni
         {
             if (note < 0 || note > 127) return;
             Step *s = &getTrack()->steps[key16toStep(key16)];
+            if (seq_.monoPhonic) // mono tracks hold one note per step: replace, don't add
+            {
+                for (uint8_t i = 0; i < 6; i++) s->notes[i] = -1;
+                s->notes[0] = note;
+                return;
+            }
             for (uint8_t i = 0; i < 6; i++) if (s->notes[i] == note) return; // dedup
             for (uint8_t i = 0; i < 6; i++) if (s->notes[i] < 0) { s->notes[i] = note; return; }
         }
+        // Toggle-entry: remove one note from a step (keeps the rest).
+        void stepRemoveNote(uint8_t key16, int8_t note)
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            for (uint8_t i = 0; i < 6; i++) if (s->notes[i] == note) s->notes[i] = -1;
+        }
+        bool isMono() { return seq_.monoPhonic == 1; }
         void stepSetNotes(uint8_t key16, const int8_t src[6])
         {
             Step *s = &getTrack()->steps[key16toStep(key16)];
@@ -325,6 +344,55 @@ namespace FormOmni
                 t->steps[s].setToInit();
         }
 
+        // ---- Per-track scale mode ----
+        // 0 GLOBAL: the track follows the global scale settings (default).
+        // 1 CHROMATIC: the track ignores scales entirely (keyboard chromatic, transpose in
+        //   semitones, no scale colours).
+        // 2 LOCAL: the track has its own root + scale (localScale_), independent of global.
+        // Runtime + bank-file persisted (not in OmniSeq, so the save layout is unchanged).
+        enum TrackScaleMode { TRACKSCALE_GLOBAL = 0, TRACKSCALE_CHROMATIC, TRACKSCALE_LOCAL, TRACKSCALE_COUNT };
+        uint8_t getScaleMode() { return scaleMode_; }
+        uint8_t getLocalRoot() { return localRoot_; }
+        int8_t getLocalPattern() { return localPattern_; }
+        void setScaleConfig(uint8_t mode, uint8_t root, int8_t pattern)
+        {
+            scaleMode_ = mode >= TRACKSCALE_COUNT ? TRACKSCALE_GLOBAL : mode;
+            localRoot_ = root > 11 ? 0 : root;
+            localPattern_ = pattern < -1 ? -1 : pattern;
+            recalcLocalScale();
+        }
+        void editScaleMode(int amt);   // cycles GLOBAL/CHROMATIC/LOCAL (pops the name)
+        void editScaleRoot(int amt);   // LOCAL: local root; else the global root
+        void editScalePattern(int amt);// LOCAL: local pattern; else the global pattern
+        // Effective scale for interval math / note palettes (never null; chromatic tracks
+        // get the local instance calculated with pattern -1 = chromatic degrees).
+        MusicScales *paletteScale()
+        {
+            return scaleMode_ == TRACKSCALE_GLOBAL ? omxFormGlobal.musicScale : &localScale_;
+        }
+        // Effective scale for the live keyboard (null = plain chromatic mapping, no lock/group).
+        MusicScales *keyboardScale()
+        {
+            if (scaleMode_ == TRACKSCALE_CHROMATIC) return nullptr;
+            return paletteScale();
+        }
+        // True when this track plays chromatically (mode chromatic, or its scale is off).
+        bool scaleIsChromatic()
+        {
+            if (scaleMode_ == TRACKSCALE_CHROMATIC) return true;
+            if (scaleMode_ == TRACKSCALE_LOCAL) return localPattern_ < 0;
+            return scaleConfig.scalePattern < 0;
+        }
+
+        // Tools: copy one 16-step page's steps + length onto another page (same track).
+        void copyPage(uint8_t srcPage, uint8_t dstPage);
+
+        // Live recording: the loop position that fired most recently (for nearest-step resolve).
+        uint16_t lastPlayedPos() { return lastTriggeredStepIndex_; }
+
+        // Transpose view: the pattern position currently applied (playhead).
+        uint8_t transposePos() { return transpPat_.position(&seq_.transposePattern); }
+
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }
         // Mix track-copy "Copy Pat": replace only the pattern (steps/pages/play mode/step
@@ -336,6 +404,7 @@ namespace FormOmni
             seqDynamic_.Reset();
             ratchetDivs_ = 0;
             ratchetStepIdx_ = -1;
+            onRateChanged(); // the copied pattern's timing must not run on stale tick/micros
         }
         void setSeq(const OmniSeq &s)
         {
@@ -344,6 +413,9 @@ namespace FormOmni
             seqDynamic_.Reset();  // loaded pattern starts from a clean playback state
             ratchetDivs_ = 0;     // and no ratchet carried over from the old pattern
             ratchetStepIdx_ = -1;
+            onRateChanged();      // pattern switches used to leave ticksPerStep_/stepMicros_ at the
+                                  // OLD pattern's rate — wrong step rate AND note lengths until the
+                                  // rate was next edited.
         }
 
     private:
@@ -374,6 +446,14 @@ namespace FormOmni
         int8_t auditionNotes_[16][6];
 
         uint8_t activePage_ = 0;
+
+        // Per-track scale mode (see TrackScaleMode). localScale_ is calculated whenever the
+        // mode/root/pattern change; chromatic mode keeps it calculated with pattern -1.
+        uint8_t scaleMode_ = 0;    // TRACKSCALE_GLOBAL
+        uint8_t localRoot_ = 0;    // 0-11
+        int8_t localPattern_ = 0;  // -1 = off/chromatic
+        MusicScales localScale_;
+        void recalcLocalScale();
 
         OmniTransposePattern transpPat_;
 
