@@ -173,7 +173,8 @@ void OmxModeForm::selectMachine(uint8_t machineIndex)
 
 	if (machineIndex != selectedMachine_)
 	{
-		seqF2Holding_ = false; // the pick-up/drop hold is per-track
+		seqF2Loaded_ = false; // the pick-up/drop buffer + hold are per-track
+		seqF2Holding_ = false;
 	}
 	selectedMachine_ = machineIndex;
 	machines_[machineIndex]->onSelected();
@@ -265,7 +266,8 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	// fire a phantom loop-range on the next F1+page press.
 	heldPageMask_ = 0;
 	pageGestureDone_ = false;
-	seqF2Holding_ = false; // start empty-handed in a new view
+	seqF2Loaded_ = false; // start with an unloaded buffer in a new view
+	seqF2Holding_ = false;
 
 	// Editor views map to an OMNI UI mode, applied to every track so the view stays
 	// consistent when you switch tracks. Patterns / MI are rendered by the container.
@@ -2318,23 +2320,39 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		onKeyUpdateMixHold(e);
 		return;
 	}
-	// F2 + step = a pick-up / drop tool that alternates on EVERY press (see seqF2Holding_):
-	// empty-handed presses CUT/grab the step, holding presses PASTE/drop it — cut, paste,
-	// cut, paste... So pressing one step repeatedly cuts it, pastes it back, cuts it, etc.
+	// F2 + step = pick-up / drop. The first press with nothing loaded grabs the step (even an
+	// empty one). After that: non-empty steps alternate cut/paste; empty steps always paste.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ < 0 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 	{
 		uint8_t k = thisKey - 11;
-		if (!seqF2Holding_)
+		if (!seqF2Loaded_)
 		{
-			omni->stepCut(k); // grab this step (empty or not) into the buffer
+			// Initial grab (buffer empty): cut this step, even if it's empty.
+			omni->stepCut(k);
 			omxDisp.displayMessage("CUT");
+			seqF2Loaded_ = true;
 			seqF2Holding_ = true;
+		}
+		else if (!omni->stepIsOn(k))
+		{
+			// Empty step, buffer already loaded: always a paste (never cut).
+			omni->stepPaste(k);
+			omxDisp.displayMessage("PASTE");
+			seqF2Holding_ = false;
+		}
+		else if (seqF2Holding_)
+		{
+			// Non-empty step, holding: drop into it.
+			omni->stepPaste(k);
+			omxDisp.displayMessage("PASTE");
+			seqF2Holding_ = false;
 		}
 		else
 		{
-			omni->stepPaste(k); // drop the buffer into this step
-			omxDisp.displayMessage("PASTE");
-			seqF2Holding_ = false;
+			// Non-empty step, empty-handed: grab it.
+			omni->stepCut(k);
+			omxDisp.displayMessage("CUT");
+			seqF2Holding_ = true;
 		}
 		return;
 	}
@@ -2343,7 +2361,8 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	{
 		omni->stepCopy(thisKey - 11);
 		omxDisp.displayMessage("COPY");
-		seqF2Holding_ = true; // a copy puts you in the holding state: the next F2 press pastes
+		seqF2Loaded_ = true;  // a copy loads the buffer, so F2 won't do an initial grab
+		seqF2Holding_ = true; // ...and puts you in the holding state: the next F2 press pastes
 		return;
 	}
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
@@ -3570,10 +3589,13 @@ void OmxModeForm::updateShortcutMode()
 	if (prevMode != omxFormGlobal.shortcutMode)
 	{
 		omxFormGlobal.shortcutPaste = false; // Transpose/machine F1-F2 copy-cut/paste toggle resets
-		// Releasing F2 drops the hold, so the next F2 press grabs (cuts) again rather than
-		// pasting. (A fresh F1 copy re-arms the hold — F1 release doesn't drop it.)
+		// Releasing F2 ends the hold: the next F2 press starts a fresh initial grab.
+		// (A fresh F1 copy re-loads the buffer — F1 release doesn't reset it.)
 		if (prevMode == FORMSHORTCUT_F2)
+		{
+			seqF2Loaded_ = false;
 			seqF2Holding_ = false;
+		}
 
 
 		// Mix: holding F2 activates FILL on all tracks (steps with a Fill condition play).
@@ -3625,7 +3647,8 @@ void OmxModeForm::onModeActivated()
 	clearReturnView_ = -1;
 	recHeldCount_ = 0;
 	recClearedMask_ = 0;
-	seqF2Holding_ = false; // start each FORM session empty-handed
+	seqF2Loaded_ = false; // start each FORM session with an unloaded F2 buffer
+	seqF2Holding_ = false;
 
 	// Serial.println("AuxMacroActivated");
 	auxMacroManager_.onModeActivated();

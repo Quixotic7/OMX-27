@@ -434,14 +434,16 @@ private:
 	uint8_t tapCount_ = 0;
 	float tapAvgMs_ = 0;
 	void tapTempo();
-	// Seq F2 = a pick-up / drop tool that alternates on EVERY press:
-	//  - Empty-handed (seqF2Holding_ = false): F2 + step CUTS/grabs that step into the
-	//    buffer (even an empty one) -> now holding.
-	//  - Holding (true): F2 + step PASTES/drops the buffer into it -> empty-handed again.
-	// So pressing one step repeatedly cuts, pastes, cuts, pastes... F1 copy puts you in the
-	// holding state. Releasing F2 (or a view/track change) drops the hold, so the next F2
-	// press grabs again.
-	bool seqF2Holding_ = false;
+	// Seq F2 = a pick-up / drop tool.
+	//  - The FIRST press with nothing loaded (seqF2Loaded_ = false) CUTS/grabs that step —
+	//    even an empty one — into the buffer. This is the ONLY time an empty step is cut.
+	//  - Once loaded, NON-empty steps alternate cut/paste (seqF2Holding_): holding -> paste,
+	//    empty-handed -> cut; so one step pressed repeatedly cuts, pastes, cuts...
+	//  - Once loaded, an EMPTY step is ALWAYS a paste (never cut).
+	// F1 copy loads the buffer (holding). Releasing F2 (or a view/track change) resets both
+	// flags, so the next F2 hold begins with a fresh grab.
+	bool seqF2Loaded_ = false;  // has this F2 hold grabbed/copied anything yet?
+	bool seqF2Holding_ = false; // holding content ready to drop (drives the non-empty alternation)
 	// Audibility tracking (mute/solo): notes are flushed when a track goes inaudible.
 	bool trackAudible_[FORM_NUM_TRACKS];
 	// The selected track's keyboard scale (null = chromatic — see FormMachineOmni).
