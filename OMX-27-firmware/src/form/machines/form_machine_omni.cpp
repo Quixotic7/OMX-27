@@ -2568,8 +2568,9 @@ namespace FormOmni
         // TPAT editor) fall through here too, and a stale selPage left on POTS was
         // hijacking every click there into the CC editor.
         if ((omniUiMode_ == OMNIUIMODE_CONFIG || omniUiMode_ == OMNIUIMODE_MIX) &&
-            trackParams_.getSelPage() == OMNIPAGE_POTS)
+            trackParams_.getSelPage() == OMNIPAGE_POTS && trackParams_.getSelParam() < 3)
             actionRequested_ = (int8_t)trackParams_.getSelParam(); // 0 QNT / 1 CLR / 2 POTS
+            // (param 3, NTRY, is a normal value param — click toggles select/edit as usual)
     }
     bool FormMachineOmni::onKeyUpdate(OMXKeypadEvent e)
     {
@@ -2800,7 +2801,7 @@ namespace FormOmni
                 bool prev = omxFormGlobal.noteEntryToggle;
                 omxFormGlobal.noteEntryToggle = amtSlow > 0;
                 if (prev != omxFormGlobal.noteEntryToggle)
-                    omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
+                    omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "TOGGLE" : "PRESSED");
             }
         }
         break;

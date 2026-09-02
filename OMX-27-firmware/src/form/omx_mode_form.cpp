@@ -171,6 +171,8 @@ void OmxModeForm::selectMachine(uint8_t machineIndex)
 	if (isMachineValid(machineIndex) == false)
 		return;
 
+	if (machineIndex != selectedMachine_)
+		seqF2CutStep_ = -1; // the cut-arm is per step of the selected track
 	selectedMachine_ = machineIndex;
 	machines_[machineIndex]->onSelected();
 }
@@ -261,6 +263,7 @@ void OmxModeForm::setFormView(uint8_t view, bool silent)
 	// fire a phantom loop-range on the next F1+page press.
 	heldPageMask_ = 0;
 	pageGestureDone_ = false;
+	seqF2CutStep_ = -1; // a stale cut-arm must not cut a step in a new context
 
 	// Editor views map to an OMNI UI mode, applied to every track so the view stays
 	// consistent when you switch tracks. Patterns / MI are rendered by the container.
@@ -1113,7 +1116,7 @@ bool OmxModeForm::onEncoderNotes(int dir)
 		bool prev = omxFormGlobal.noteEntryToggle;
 		omxFormGlobal.noteEntryToggle = dir > 0;
 		if (prev != omxFormGlobal.noteEntryToggle)
-			omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
+			omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "TOGGLE" : "PRESSED");
 	}
 	// cursors 20-22 = ACTIONS (Quant / Clear / Pots — no turn edit; fire on click)
 	omxDisp.setDirty();
@@ -1144,13 +1147,7 @@ bool OmxModeForm::onEncoderButtonNotes()
 		openPotConfig();
 		return true;
 	}
-	if (notesCursor_ == 23)
-	{
-		omxFormGlobal.noteEntryToggle = !omxFormGlobal.noteEntryToggle;
-		omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
-		omxDisp.setDirty();
-		return true;
-	}
+	// cursor 23 (NTRY) is a normal value param: click toggles select/edit like any other.
 	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect;
 	omxDisp.setDirty();
 	return true;
@@ -2121,14 +2118,15 @@ static uint8_t pidToPaletteMode(uint8_t pid)
 	}
 }
 
-// Boost a palette colour toward white for the SELECTED value key, so the current
-// value reads clearly against the dim rest of the palette.
+// Boost a palette colour close to white for the SELECTED value key, so the current
+// value reads clearly against the dim rest of the palette (a faint tint of the mode's
+// colour remains so the mode stays identifiable).
 static uint32_t ledBrighten(uint32_t c)
 {
 	uint8_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
-	r = r + ((255 - r) >> 1);
-	g = g + ((255 - g) >> 1);
-	b = b + ((255 - b) >> 1);
+	r = r + (uint8_t)(((uint16_t)(255 - r) * 7) >> 3);
+	g = g + (uint8_t)(((uint16_t)(255 - g) * 7) >> 3);
+	b = b + (uint8_t)(((uint16_t)(255 - b) * 7) >> 3);
 	return ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
 }
 
@@ -2318,13 +2316,24 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		onKeyUpdateMixHold(e);
 		return;
 	}
-	// F2 + step = PASTE, always — pasting onto a filled step overwrites it. (It used to
-	// cut a filled step instead, which broke the natural F1-copy -> F2-paste flow. Cut is
-	// the plain quick-tap of a filled step, which clears it into the buffer.)
+	// F2 + step = PASTE / CUT alternation: a press pastes (onto filled steps too); pressing
+	// the SAME step again cuts it back into the buffer; again pastes — so both pasting into
+	// and cutting from steps with values work, without ever cutting on the first press.
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2 && heldTrackKey_ < 0 && e.down() && !e.held() && thisKey >= 11 && thisKey < 27)
 	{
-		omni->stepPaste(thisKey - 11);
-		omxDisp.displayMessage("PASTE");
+		uint8_t k = thisKey - 11;
+		if (seqF2CutStep_ == (int8_t)k)
+		{
+			omni->stepCut(k);
+			omxDisp.displayMessage("CUT");
+			seqF2CutStep_ = -1; // next press pastes again
+		}
+		else
+		{
+			omni->stepPaste(k);
+			omxDisp.displayMessage("PASTE");
+			seqF2CutStep_ = (int8_t)k;
+		}
 		return;
 	}
 	// F1 + step key = COPY, always. F3 = structure layer.
@@ -2332,6 +2341,7 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	{
 		omni->stepCopy(thisKey - 11);
 		omxDisp.displayMessage("COPY");
+		seqF2CutStep_ = -1; // fresh copy: the next F2 press pastes
 		return;
 	}
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3 && e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
@@ -2824,7 +2834,7 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 				bool prev = omxFormGlobal.noteEntryToggle;
 				omxFormGlobal.noteEntryToggle = dir > 0;
 				if (prev != omxFormGlobal.noteEntryToggle)
-					omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
+					omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "TOGGLE" : "PRESSED");
 				omxDisp.setDirty();
 			}
 			return true; // the action cells have no turn edit
@@ -2956,30 +2966,29 @@ bool OmxModeForm::onEncoderButtonStep()
 {
 	if (formView_ != FORMVIEW_STEP)
 		return false;
-	if (stepMenuPage_ == 6) // ACTIONS: Quant / Clear / Pots / Note entry
+	if (stepMenuPage_ == 6) // ACTIONS: Quant / Clear / Pots (+ NTRY, a normal value param)
 	{
 		if (stepMenuSel_ == 0)
 		{
 			submenuSetReturn(); // the submenu renders in MI; come back here after
 			quantEnterSubmenu();
+			return true;
 		}
-		else if (stepMenuSel_ == 1)
+		if (stepMenuSel_ == 1)
 		{
 			submenuSetReturn();
 			miClearSub_ = true;
 			clearSel_ = 0;
 			omxDisp.setDirty();
 			omxLeds.setDirty();
+			return true;
 		}
-		else if (stepMenuSel_ == 3)
+		if (stepMenuSel_ == 2)
 		{
-			omxFormGlobal.noteEntryToggle = !omxFormGlobal.noteEntryToggle;
-			omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
-			omxDisp.setDirty();
-		}
-		else
 			openPotConfig();
-		return true;
+			return true;
+		}
+		// sel 3 (NTRY) is a normal value param: fall through to the select/edit toggle.
 	}
 	if (stepMenuPage_ == 3) // CC page
 	{
@@ -3197,7 +3206,7 @@ void OmxModeForm::onDisplaySeqTrackPage(bool keyboardMode)
 	else if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F2)
 	{
 		modOverlay = 2;
-		overlayLabel = (heldTrackKey_ >= 0) ? "MUTE / PLAY MODE" : "PASTE";
+		overlayLabel = (heldTrackKey_ >= 0) ? "MUTE / PLAY MODE" : "PASTE / CUT";
 	}
 	else if (formView_ == FORMVIEW_MIX && heldTrackKey_ >= 0)
 	{
@@ -3833,21 +3842,6 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 	if (auxMacroManager_.onEncoderChanged(enc))
 		return;
 
-	// AUX + encoder = tempo, from any view (AUX + encoder click = tap tempo).
-	if (midiSettings.midiAUX)
-	{
-		int amt = enc.accel(5);
-		clockConfig.newtempo = constrain(clockConfig.clockbpm + amt, 40, 300);
-		if (clockConfig.newtempo != clockConfig.clockbpm)
-		{
-			clockConfig.clockbpm = clockConfig.newtempo;
-			omxUtil.resetClocks();
-		}
-		omxDisp.displayMessage("BPM " + String((int)clockConfig.clockbpm));
-		omxDisp.setDirty();
-		return;
-	}
-
 	switch (formView_)
 	{
 	case FORMVIEW_NOTES: // pages (select) / values (edit)
@@ -4116,13 +4110,6 @@ void OmxModeForm::onEncoderButtonDown()
 	if (auxMacroManager_.onEncoderButtonDown())
 		return;
 
-	// AUX + encoder click = tap tempo (click in time; AUX + turn = BPM).
-	if (midiSettings.midiAUX)
-	{
-		tapTempo();
-		return;
-	}
-
 	switch (formView_)
 	{
 	case FORMVIEW_NOTES:
@@ -4170,14 +4157,6 @@ void OmxModeForm::onEncoderButtonDown()
 		openPotConfig();
 		return;
 	}
-	if (action == 3) // NTRY cell click: toggle the note-entry behavior
-	{
-		omxFormGlobal.noteEntryToggle = !omxFormGlobal.noteEntryToggle;
-		omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "NOTES TOGGLE" : "NOTES PRESSED");
-		omxDisp.setDirty();
-		return;
-	}
-
 	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect;
 	omxDisp.setDirty();
 }

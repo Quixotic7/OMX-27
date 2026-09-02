@@ -425,11 +425,16 @@ private:
 	// STOP (chord) while playing; a second STOP while already stopped = KILL all notes.
 	void doStopOrKill();
 	void killAllNotes();
-	// Tap tempo: AUX + encoder click, tapped in time. AUX + encoder turn = BPM.
+	// Tap tempo helper (rolling average). NOT wired to a gesture yet — the AUX+encoder
+	// placement was rejected (AUX+turn must stay "edit the selected cell").
 	uint32_t lastTapMs_ = 0;
 	uint8_t tapCount_ = 0;
 	float tapAvgMs_ = 0;
 	void tapTempo();
+	// Seq F2 layer paste/cut alternation: pressing a step pastes; pressing the SAME step
+	// again cuts it (back into the buffer); again pastes — so you can paste into, or cut
+	// from, steps that already have values. -1 = next press pastes.
+	int8_t seqF2CutStep_ = -1;
 	// Audibility tracking (mute/solo): notes are flushed when a track goes inaudible.
 	bool trackAudible_[FORM_NUM_TRACKS];
 	// The selected track's keyboard scale (null = chromatic — see FormMachineOmni).
