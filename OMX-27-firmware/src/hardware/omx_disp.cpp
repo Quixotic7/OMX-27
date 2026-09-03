@@ -1152,7 +1152,7 @@ void OmxDisp::dispToolGenPage(const char *pLabels[], const char *pVals[], uint8_
 	drawStepRow(23, stepState, pageLen, playhead);
 }
 
-void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus)
+void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus, bool stepStrip)
 {
 	if (isMessageActive())
 	{
@@ -1231,7 +1231,10 @@ void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepSta
 		display.drawLine(112, wkHeight - 8, 112, wkHeight - 1, WHITE); // right wall
 
 	// --- 16 step-marker cells beneath the keyboard (shared renderer) ---
-	drawStepRow(23, stepState, pageLen, focus);
+	// (skippable: the Notes view swaps this band for the record/playhead page bars
+	// while record is armed)
+	if (stepStrip)
+		drawStepRow(23, stepState, pageLen, focus);
 }
 
 void OmxDisp::dispStepOverview(const char *modeName, const uint8_t *stepState, uint8_t pageLen, int8_t playhead, bool invertTitle)
@@ -1314,6 +1317,13 @@ void OmxDisp::dispNoteSlots(const char *slotNames[6], const char *header, uint8_
 
 void OmxDisp::dispTrackLength(const char *rateStr, uint8_t activeCount)
 {
+	// Standard message gate (this renderer repaints every frame while F3 is held, and
+	// without the gate it hid the F3+encoder "BPM nnn" popup underneath itself).
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
 	display.fillRect(0, 0, 128, 32, BLACK);
 
 	// Rate value, centred on top (chunky pixel font).

@@ -72,6 +72,9 @@ step row** — the view name previews while AUX is held and commits when you **r
 
 (Keys 13–19 are the 3rd–9th keys of the bottom row.)
 
+Views **remember their menu position** across switches. **Double-tap** a view key (still
+holding AUX) to also send that view **back to its first page** — "HOME" pops to confirm.
+
 ---
 
 ## 4. The transport (AUX layer)
@@ -98,7 +101,8 @@ misfire a Play on the way in).
 
 ## 5. Function keys inside a view (F1 / F2 / F3)
 
-Without AUX, the two leftmost playable keys are momentary shortcuts *within the current view*:
+Without AUX, the two leftmost playable keys are momentary shortcuts *within the current view*
+(**except MI**, where the whole keybed plays notes — no F-keys there):
 
 - **F1** = hold **key 1**
 - **F2** = hold **key 2**
@@ -111,8 +115,8 @@ What they do is view-specific, but the pattern is consistent across the Seq/Note
 - **Hold F2** — **top row** = track select (tap a key 3–10 to jump tracks); in the Seq view
   the **low row** is the step **pick-up/drop tool** (see §8).
 - **Hold F3** — **rate & length**: set the track's step rate and the active page's length.
-  Also: **F3 + turn the encoder = tempo**, from any view — the BPM pops as you turn (tap
-  tempo lives in the Tools → BPM tool).
+  Also: **F3 + turn the encoder = tempo**, from any view with F-keys — the BPM pops as you
+  turn (tap tempo lives in the Tools → BPM tool).
 
 ---
 
@@ -304,7 +308,9 @@ key — to return to the lane. Per-step **Accum** (Seq param page 2) makes indiv
 
 **NOTES** — a focused chord editor: pick a step, edit its up-to-6 notes as names or numbers,
 with the scale params, the full step params ("STEP LOCKS" group), and an ACTIONS page on
-the same encoder walk.
+the same encoder walk. With **record armed**, the bottom strip swaps the selected-step
+markers for the MI-style **page/playhead bars** — you're capturing live at that point, not
+editing a step.
 
 **TOOLS** — **13 one-shot pattern operations** on the selected track. Turn the encoder to move
 through the tools (a tool's name pops as you cross into it) — or jump straight to one:

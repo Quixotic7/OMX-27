@@ -1628,8 +1628,18 @@ void OmxModeForm::onDisplayNotes()
 		return;
 	}
 
-	// Page 0: the main keyboard + step strip.
-	omxDisp.dispStepNoteKeyboard(noteKeys, stepState, pageLen, notesSelStep_);
+	// Page 0: the main keyboard + step strip — except while RECORD is armed. Recording in
+	// Notes captures live (like MI), so the selected-step markers would be misleading
+	// mid-take; show the MI-style page/playhead progress bars along the bottom instead.
+	if (omxFormGlobal.recArm)
+	{
+		omxDisp.dispStepNoteKeyboard(noteKeys, stepState, pageLen, -1, false);
+		uint8_t pageLens[4] = {omni->getPageLen(0), omni->getPageLen(1), omni->getPageLen(2), omni->getPageLen(3)};
+		int8_t playAbs = (int8_t)omni->playingStepIndex();
+		omxDisp.drawPageBars(pageLens, omni->getEnabledPages(), playAbs);
+	}
+	else
+		omxDisp.dispStepNoteKeyboard(noteKeys, stepState, pageLen, notesSelStep_);
 }
 
 // ---- Tools view (AUX+19): destructive pattern tools on the selected track ----
@@ -1685,6 +1695,30 @@ static bool toolHasScope(uint8_t tool)
 
 // Perform a tool's action button (shared by the top-row keys and the encoder click).
 // No popups — the step row / bars show the result (per the Tools UI spec).
+// AUX + double-tap a view key: jump that view back to its first page/overview. Views
+// deliberately remember their menu position across switches — this is the escape hatch
+// when you're parked deep in a menu and just want the top of the view.
+void OmxModeForm::viewHome(uint8_t view)
+{
+	switch (view)
+	{
+	case FORMVIEW_MIX: mixCursor_ = 0; break;
+	case FORMVIEW_STEP: stepMenuPage_ = 0; stepMenuSel_ = 0; break;
+	case FORMVIEW_TRANSPOSE: transParamsPage_ = false; transSel_ = 0; break;
+	case FORMVIEW_NOTES: notesCursor_ = 0; break;
+	case FORMVIEW_MI: miCursor_ = 0; break;
+	case FORMVIEW_TOOLS:
+		toolIndex_ = 0;
+		toolCell_ = 0;
+		stepEditMode_ = toolStepMode(0); // keep the hold-step palette in sync with the tool
+		break;
+	// FORMVIEW_PATTERNS has no cursor to reset
+	}
+	omxDisp.displayMessage("HOME");
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+}
+
 // Shared BPM edit (P1): used by the BPM tool's encoder cell and the global F3+encoder
 // gesture, so the clamp and the reclock can never drift apart.
 void OmxModeForm::editBpm(int delta)
@@ -3786,8 +3820,11 @@ void OmxModeForm::updateShortcutMode()
 
 	// Keys 1/2 pressed as AUX transport (swallow mask set) are the AUX layer's until they
 	// release — they must not flip a phantom F1/F2/F3 on when AUX lifts before they do.
-	bool k1Held = midiSettings.keyState[1] && !(auxSwallowMask_ & (1u << 1));
-	bool k2Held = midiSettings.keyState[2] && !(auxSwallowMask_ & (1u << 2));
+	// MI view: the whole keybed is the playable keyboard — keys 1/2 are NOTES there, never
+	// F1/F2/F3 (the AUX layer below is unaffected).
+	bool fkeys = (formView_ != FORMVIEW_MI);
+	bool k1Held = fkeys && midiSettings.keyState[1] && !(auxSwallowMask_ & (1u << 1));
+	bool k2Held = fkeys && midiSettings.keyState[2] && !(auxSwallowMask_ & (1u << 2));
 
 	if (omxFormGlobal.shortcutMode != FORMSHORTCUT_AUX && k1Held && k2Held)
 	{
@@ -4691,6 +4728,12 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 				// Switch live (the view renders immediately, while AUX is still held).
 				setFormView(thisKey - 13, true);
 				omxDisp.displayMessage(kViewNames[pendingView_]);
+				// AUX + DOUBLE-tap the view key = also jump the view to its first page
+				// (views deliberately remember their position; this is the way back up).
+				// clicks() counts RELEASES, so on a second press within the click window
+				// it reads 1 — >=1 on a down event IS the double-tap.
+				if (e.clicks() >= 1)
+					viewHome((uint8_t)(thisKey - 13));
 				omxLeds.setDirty();
 				keyConsumed = true;
 			}

@@ -302,6 +302,8 @@ private:
 	void toolUndo();
 	// Shared BPM edit (P1): the BPM tool's encoder cell and F3+encoder-from-any-view.
 	void editBpm(int delta);
+	// AUX + double-tap a view key: put that view back on its first page/overview.
+	void viewHome(uint8_t view);
 	// Live-record overflow feedback (P4): rate-limit the REC FULL popup + AUX-LED flash.
 	uint32_t recFullWarnMs_ = 0;
 	uint32_t recFullFlashMs_ = 0;
