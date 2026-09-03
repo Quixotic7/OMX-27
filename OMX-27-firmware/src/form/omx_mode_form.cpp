@@ -621,6 +621,9 @@ void OmxModeForm::updateMILEDs()
 	for (uint8_t k = 1; k < 27; k++)
 		if (midiSettings.keyState[k])
 			strip.setPixelColor(k, WHITE);
+	// REC FULL flash (P4): a short red blink on the AUX key when live-rec drops a note.
+	if ((uint32_t)(millis() - recFullFlashMs_) < 150)
+		strip.setPixelColor(0, RED);
 }
 
 // Encoder turn in the MI view: select mode moves the menu cursor; edit mode changes the value.
@@ -891,7 +894,20 @@ void OmxModeForm::recordPlayedNote(int8_t note)
 	if (note < 0 || note > 127)
 		return;
 	if (recHeldCount_ >= 8)
-		return; // full — don't clear a step's content for a note we can't record
+	{
+		// Full — don't clear a step's content for a note we can't record, but SAY so (P4):
+		// a rate-limited REC FULL popup plus a short red flash on the AUX key, instead of
+		// the note just silently vanishing mid-take.
+		uint32_t now = millis();
+		if ((uint32_t)(now - recFullWarnMs_) > 600)
+		{
+			recFullWarnMs_ = now;
+			recFullFlashMs_ = now;
+			omxDisp.displayMessage("REC FULL");
+			omxLeds.setDirty();
+		}
+		return;
+	}
 	auto omni = getSelectedMachine();
 	int8_t nudge;
 	uint8_t step = omni->recordResolveStep(recQuantize_, nudge); // resolve step + nudge at play time
@@ -1493,6 +1509,10 @@ void OmxModeForm::updateNotesLEDs()
 			if (chord[n] == note) { c = (uint32_t)LTYELLOW; break; }
 		strip.setPixelColor(key, c);
 	}
+
+	// REC FULL flash (P4): a short red blink on the AUX key when live-rec drops a note.
+	if ((uint32_t)(millis() - recFullFlashMs_) < 150)
+		strip.setPixelColor(0, RED);
 }
 
 void OmxModeForm::onDisplayNotes()
@@ -1665,9 +1685,52 @@ static bool toolHasScope(uint8_t tool)
 
 // Perform a tool's action button (shared by the top-row keys and the encoder click).
 // No popups — the step row / bars show the result (per the Tools UI spec).
+// Shared BPM edit (P1): used by the BPM tool's encoder cell and the global F3+encoder
+// gesture, so the clamp and the reclock can never drift apart.
+void OmxModeForm::editBpm(int delta)
+{
+	clockConfig.newtempo = constrain((int)clockConfig.clockbpm + delta, 40, 300);
+	if (clockConfig.newtempo != clockConfig.clockbpm)
+	{
+		clockConfig.clockbpm = clockConfig.newtempo;
+		omxUtil.resetClocks();
+	}
+}
+
+// One-level undo (P2): snapshot the selected track before a destructive tool action.
+void OmxModeForm::toolSnapshotUndo()
+{
+	undoSeq_ = getSelectedMachine()->getSeq();
+	undoTrack_ = (int8_t)selectedMachine_;
+	undoPattern_ = (int8_t)activePattern_;
+	undoNextIsRedo_ = false;
+}
+
+// Tools key 10: swap the snapshot with the live track — pressing again swaps back (redo).
+// The slot dies with a pattern switch: restoring across patterns would paste the wrong music.
+void OmxModeForm::toolUndo()
+{
+	if (undoTrack_ < 0 || undoPattern_ != (int8_t)activePattern_)
+	{
+		omxDisp.displayMessage("NO UNDO");
+		return;
+	}
+	FormOmni::OmniSeq cur = machines_[undoTrack_]->getSeq();
+	machines_[undoTrack_]->setSeq(undoSeq_);
+	undoSeq_ = cur;
+	omxDisp.displayMessage(undoNextIsRedo_ ? "REDO" : "UNDO");
+	undoNextIsRedo_ = !undoNextIsRedo_;
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+}
+
 void OmxModeForm::toolAction(uint8_t tool, uint8_t action)
 {
 	auto omni = getSelectedMachine();
+	// Every destructive action snapshots the track first (key 10 = undo). BPM/tap and the
+	// PAGE tool's COPY don't mutate the pattern, so they leave the undo slot alone.
+	if (!(tool == TOOL_BPM || (tool == TOOL_PAGE && action == 0)))
+		toolSnapshotUndo();
 	switch (tool)
 	{
 	case TOOL_ROTATE:  omni->toolRotate(action == 0 ? -1 : 1, toolScopeAll_); break;
@@ -1773,12 +1836,20 @@ void OmxModeForm::onKeyUpdateTools(OMXKeypadEvent e)
 	if (e.held() || !e.down() || k < 3 || k > 10)
 		return;
 
-	// Shared SCOPE shortcuts: 9 = page, 10 = track (tools that have a scope).
-	if (toolHasScope(toolIndex_) && (k == 9 || k == 10))
+	// Shared SCOPE shortcut: key 9 toggles page/track (tools that have a scope).
+	// (Key 10 used to be "track"; it's the UNDO key now — the scope is a single toggle.)
+	if (toolHasScope(toolIndex_) && k == 9)
 	{
-		toolScopeAll_ = (k == 10);
+		toolScopeAll_ = !toolScopeAll_;
+		omxDisp.displayMessage(toolScopeAll_ ? "TRACK" : "PAGE");
 		omxDisp.setDirty();
 		omxLeds.setDirty();
+		return;
+	}
+	// UNDO (key 10, every tool): restore the last destructive action; press again = redo.
+	if (k == 10)
+	{
+		toolUndo();
 		return;
 	}
 	// Per-tool action keys.
@@ -1912,14 +1983,7 @@ bool OmxModeForm::onEncoderTools(int dir)
 		break;
 	case TOOL_BPM:
 		if (cell == 0)
-		{
-			clockConfig.newtempo = constrain((int)clockConfig.clockbpm + dir, 40, 300);
-			if (clockConfig.newtempo != clockConfig.clockbpm)
-			{
-				clockConfig.clockbpm = clockConfig.newtempo;
-				omxUtil.resetClocks();
-			}
-		}
+			editBpm(dir); // shared with the global F3+encoder gesture
 		break;
 	// TOOL_PAGE has no params — only CUT/COPY/PASTE buttons; nothing to edit here.
 	}
@@ -1976,10 +2040,10 @@ void OmxModeForm::updateToolsLEDs()
 	default:          strip.setPixelColor(7, c); break;
 	}
 	if (toolHasScope(toolIndex_))
-	{
-		strip.setPixelColor(9, toolScopeAll_ ? LOWWHITE : WHITE);  // page
-		strip.setPixelColor(10, toolScopeAll_ ? WHITE : LOWWHITE); // track
-	}
+		strip.setPixelColor(9, toolScopeAll_ ? WHITE : LOWWHITE); // scope toggle: bright = track
+	// Key 10 = UNDO: lit while a snapshot is restorable (dies with a pattern switch).
+	bool undoReady = undoTrack_ >= 0 && undoPattern_ == (int8_t)activePattern_;
+	strip.setPixelColor(10, undoReady ? DKORANGE : LEDOFF);
 
 	// Step row: only actual triggers light (notes bright, ghosts dim, muted dark red);
 	// empty steps stay OFF so the pattern reads at a glance. Playhead = steady green.
@@ -3951,6 +4015,11 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 				auxSwallowMask_ &= ~(1u << k);
 	}
 
+	// While the REC FULL flash window is live (plus a beat after), keep the LEDs repainting
+	// so the red blink both appears and CLEARS even when nothing else dirties them.
+	if (recFullFlashMs_ != 0 && (uint32_t)(millis() - recFullFlashMs_) < 300)
+		omxLeds.setDirty();
+
 	// Solo/mute audibility: keep anySolo current and flush notes on any track that just
 	// became inaudible, so muting or soloing can never leave notes ringing (stuck).
 	bool anySolo = false;
@@ -4077,6 +4146,16 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 {
 	if (auxMacroManager_.onEncoderChanged(enc))
 		return;
+
+	// F3 + encoder = BPM from ANY view (P1). F3 is otherwise unused with the encoder, and
+	// AUX+turn must stay "edit the selected cell". Tap tempo stays in the BPM tool.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
+	{
+		editBpm(enc.accel(5));
+		omxDisp.displayMessage("BPM " + String((int)clockConfig.clockbpm));
+		omxDisp.setDirty();
+		return;
+	}
 
 	switch (formView_)
 	{
@@ -4391,6 +4470,18 @@ void OmxModeForm::onEncoderButtonDown()
 	if (action == 2)
 	{
 		openPotConfig();
+		return;
+	}
+	if (action == 3)
+	{
+		// TRACK page's FX cell (P3): open the routed MidiFX group's editor — the menu
+		// front door for what AUX+hold already does. Unrouted tracks get told, not sent
+		// into an editor for a group they aren't using.
+		uint8_t g = selMachine->getSelectedMidiFX();
+		if (g >= NUM_MIDIFX_GROUPS)
+			omxDisp.displayMessage("MFX OFF");
+		else
+			auxMacroManager_.enableSubmode(&subModeMidiFx[g]);
 		return;
 	}
 	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect;

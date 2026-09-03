@@ -63,7 +63,7 @@ Things that already feel like an instrument, and why they matter musically:
 
 ## 3. Proposals (owner's verdicts recorded 2026-09-03 — none implemented yet)
 
-### P1 · BPM from anywhere — **APPROVED** (owner, 2026-09-03: "doesn't destroy the AUX shortcut")
+### P1 · BPM from anywhere — **IMPLEMENTED** (approved 2026-09-03; F3+encoder in every view)
 **Itch:** friction #1. **Proposal:** `F3 + encoder turn = BPM` in every view. F3 (F1+F2 held)
 is already the "track/page-level" modifier and is otherwise unused with the encoder; the
 gesture was floated earlier and fits ("could work for BPM"). Tap tempo *stays* in the BPM
@@ -72,7 +72,7 @@ while turning. **Cost:** small; one hook in the shared encoder dispatch, per-vie
 needed. **Rejected alternative (stands):** AUX+encoder — AUX+turn must stay "edit the
 selected cell."
 
-### P2 · One-level undo — **APPROVED as a Tools-view feature** (owner, 2026-09-03)
+### P2 · One-level undo — **IMPLEMENTED** (approved 2026-09-03; Tools key 10, press again = redo)
 History: first declined for RAM reasons, then reconsidered. The accepted shape:
 
 - **Gesture: key 10 (top row) in the TOOLS view.** Most tools leave key 10 unused (only
@@ -85,18 +85,23 @@ History: first declined for RAM reasons, then reconsidered. The accepted shape:
   Grids, randomizers, PAGE cut/paste); whether it also snapshots CLR and Seq-view F2
   cut/paste-over is a design question to settle before building.
 
-Not yet implemented.
+Implementation notes: every destructive toolAction snapshots the selected track first
+(BPM/tap and PAGE-COPY excluded); key 10 swaps the snapshot and the live track so a second press
+redoes; the slot dies on a pattern switch ("NO UNDO"); key 10 LED glows while restorable.
+SCOPE became a single key-9 toggle (bright = track) to free key 10. RAM: one OmniSeq
+(~1.3 KB), measured fine on Teensy 3.1.
 
-### P3 · A front door for MidiFX — **APPROVED with a constraint** (owner, 2026-09-03)
-Constraint: **do not modify the existing AUX+MFX hold or double-click shortcuts** — the
-menu action cell is purely additive. Not yet implemented.
+### P3 · A front door for MidiFX — **IMPLEMENTED** (approved 2026-09-03)
+An **FX ↗ action cell** on the Mix machine menu's TRACK page: click opens the routed
+group's editor; unrouted tracks pop "MFX OFF". The AUX+MFX hold and double-click shortcuts
+are untouched, per the constraint.
 
 **Itch:** friction #3. **Proposal:** add an `FX` cell to the MIX machine menu (next to the
 TRACK page's MidiFX-routing cell): click = open the routed group's editor, exactly what
 AUX+hold-key-6 does today. The expert shortcut stays; the menu path makes it discoverable.
 **Cost:** trivial — the submode open call already exists.
 
-### P4 · Feedback when live-record drops a note — **APPROVED** (owner, 2026-09-03)
+### P4 · Feedback when live-record drops a note — **IMPLEMENTED** (approved 2026-09-03)
 **Itch:** friction #4. **Proposal:** when the 8-slot held-note buffer overflows, flash the
 rec-arm AUX LED red for ~150 ms and pop `REC FULL` once. No behavior change, just honesty.
 **Cost:** trivial.

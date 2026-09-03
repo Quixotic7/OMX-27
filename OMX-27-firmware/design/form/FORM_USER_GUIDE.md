@@ -111,6 +111,8 @@ What they do is view-specific, but the pattern is consistent across the Seq/Note
 - **Hold F2** — **top row** = track select (tap a key 3–10 to jump tracks); in the Seq view
   the **low row** is the step **pick-up/drop tool** (see §8).
 - **Hold F3** — **rate & length**: set the track's step rate and the active page's length.
+  Also: **F3 + turn the encoder = tempo**, from any view — the BPM pops as you turn (tap
+  tempo lives in the Tools → BPM tool).
 
 ---
 
@@ -153,7 +155,10 @@ play on the **selected track's** MIDI channel and velocity.
    **nudge** (how early/late you played) and the **length** (how long you held).
 4. **Overdub** layers onto existing steps; **Replace** (AUX + key 4) clears a step the first
    time you record into it on a pass.
-5. Stop (AUX + F1 + F2) — rec-arm turns itself off.
+5. Up to **8 notes can be held at once** while recording; past that the extras can't be
+   captured — the screen pops **REC FULL** and the AUX key flashes red so a lost note is
+   never silent.
+6. Stop (AUX + F1 + F2) — rec-arm turns itself off.
 
 ### The MI menu (turn the encoder in SELECT to move through it)
 
@@ -249,8 +254,10 @@ pop as you cross between them):
   per-track **velocity mixer**; editing a bar sets that track's default velocity (pushed
   to every step without its own velocity lock).
 - **TRACK group — TRACK grid** (Mute / Solo / Gate / Rate for the selected track) and the
-  machine's full param menu: Length/MFX, modes, MIDI, timings, scale, and an **ACTIONS**
-  page (Quant @ / Clear µ / Pots @). Global **BPM** lives on the TIMINGS page. (The
+  machine's full param menu: Length / MFX routing / an **FX ↗ cell** (click it to open the
+  routed MidiFX group's editor — the menu front door to the chord/arp engine; the AUX-hold
+  shortcuts still work too), then modes, MIDI, timings, scale, and an **ACTIONS**
+  page (Quant @ / Clear µ / Pots @ / NTRY). Global **BPM** lives on the TIMINGS page. (The
   transpose params live in the **Transpose view**; the CC page lives in the **Seq view**,
   where steps can be held for P-Locks.)
 
@@ -308,8 +315,12 @@ are silent: the step row (and the step **LEDs**, which here light *only* actual 
 show the result immediately. F1/F2/F3 behave exactly like the Seq view.
 
 **Shared conventions:**
-- **SCOPE** (on most tools) — act on the **active page** or the **whole loop**. Keys **9 =
-  page, 10 = track**, everywhere; the 9/10 LEDs show the current setting.
+- **SCOPE** (on most tools) — act on the **active page** or the **whole loop**. **Key 9
+  toggles** page ↔ track (bright LED = track); the SCOPE cell on the page shows it too.
+- **UNDO — key 10, in every tool.** Each destructive tool action snapshots the track
+  first; key 10 restores it, and pressing again brings the action back (**redo**). One
+  slot, last action only. The key glows while a restore is available; the slot dies when
+  you switch patterns.
 - **Key 7** fires the single action button (ROTATE uses **6 = left, 7 = right**; TRANSPOSE
   uses **5–8**).
 - **Hold a low-row step** and the top row becomes the Seq view's editor for that tool —
@@ -377,7 +388,9 @@ on the top row (Seq: low row = step pick-up/drop) · hold F3 (keys 1+2) = rate &
 
 **Tools:** hold key 3 + low row = **jump to a tool** · key 7 = apply (ROTATE 6/7 =
 left/right · PAGE 6/7/8 = Copy/Cut/Paste · TRANSPOSE 5–8 = Oct−/Oct+/Semi−/Semi+) ·
-keys 9/10 = scope page/track · encoder click on a button also fires it.
+key 9 = scope toggle · **key 10 = undo/redo** · encoder click on a button also fires it.
+
+**Anywhere:** hold F3 + turn the encoder = **tempo**.
 
 > **Heads-up on Macros:** an AUX macro (M8/NRN/DEL) can take over the pots. In FORM this is
 > **off by default** — a selected macro leaves the knobs on the track's CC bank. If you *want*

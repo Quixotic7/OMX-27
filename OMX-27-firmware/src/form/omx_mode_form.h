@@ -290,6 +290,21 @@ private:
 	uint8_t transSel_ = 0;
 	// Tool params (persist while in the mode):
 	bool toolScopeAll_ = false;              // ROTATE: whole loop vs active page
+	// One-level undo for Tools-view destructive actions (P2, restored with key 10). A
+	// single OmniSeq slot snapshotted before every destructive toolAction; pressing key 10
+	// swaps it with the live track (so pressing again = redo). Only valid for the pattern
+	// it was taken in — a pattern switch orphans it.
+	FormOmni::OmniSeq undoSeq_;
+	int8_t undoTrack_ = -1;    // -1 = empty slot
+	int8_t undoPattern_ = -1;  // activePattern_ when the snapshot was taken
+	bool undoNextIsRedo_ = false;
+	void toolSnapshotUndo();
+	void toolUndo();
+	// Shared BPM edit (P1): the BPM tool's encoder cell and F3+encoder-from-any-view.
+	void editBpm(int delta);
+	// Live-record overflow feedback (P4): rate-limit the REC FULL popup + AUX-LED flash.
+	uint32_t recFullWarnMs_ = 0;
+	uint32_t recFullFlashMs_ = 0;
 	// PAGE tool clipboard: a whole 16-step page (steps + length). Persists across pages and
 	// tracks so you can copy a page and paste it wherever (workflow: F1-select a page, COPY,
 	// F1-select another page, PASTE). Lazily "loaded" by the first cut/copy.

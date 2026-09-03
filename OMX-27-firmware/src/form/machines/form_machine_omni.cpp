@@ -91,7 +91,7 @@ namespace FormOmni
             return;
 
         trackParams_.addPage(7);  // OMNIPAGE_STEPNOTES
-        trackParams_.addPage(2);  // OMNIPAGE_TRACK: Length, MidiFX
+        trackParams_.addPage(3);  // OMNIPAGE_TRACK: Length, MidiFX, FX (open-editor action)
         trackParams_.addPage(3);  // OMNIPAGE_TRACKMODES: Triplet, Direction, Mode (scale mode moved to SCALE)
         trackParams_.addPage(3);  // OMNIPAGE_SEQTPOSE: Transpose, Mode, Apply TPat
         trackParams_.addPage(4);  // OMNIPAGE_SEQMIDI: Chan, Mono, SendMidi, SendCV
@@ -2513,6 +2513,12 @@ namespace FormOmni
             trackParams_.getSelPage() == OMNIPAGE_POTS && trackParams_.getSelParam() < 3)
             actionRequested_ = (int8_t)trackParams_.getSelParam(); // 0 QNT / 1 CLR / 2 POTS
             // (param 3, NTRY, is a normal value param — click toggles select/edit as usual)
+
+        // TRACK page's FX cell (P3): ask the shell to open the routed MidiFX group's editor.
+        // Purely additive — the AUX+hold and double-click MFX shortcuts are untouched.
+        if ((omniUiMode_ == OMNIUIMODE_CONFIG || omniUiMode_ == OMNIUIMODE_MIX) &&
+            trackParams_.getSelPage() == OMNIPAGE_TRACK && trackParams_.getSelParam() == 2)
+            actionRequested_ = 3; // 3 = open MidiFX editor
     }
     bool FormMachineOmni::onKeyUpdate(OMXKeypadEvent e)
     {
@@ -2602,6 +2608,7 @@ namespace FormOmni
             {
                 track->midiFx = constrain(track->midiFx + amtSlow, 0, NUM_MIDIFX_GROUPS + 1 - 1);
             }
+            // (param 2, FX, is an action cell — the click handler requests the editor)
         }
         break;
         // Triplet Mode, Direction, Mode
@@ -2844,10 +2851,11 @@ namespace FormOmni
         case OMNIPAGE_TRACK:
         {
             auto track = getTrack();
-            const char *labels[4] = {"LEN", "MFX", "", ""};
+            const char *labels[4] = {"LEN", "MFX", "FX", ""};
             String vals[4];
             vals[0] = String(track->len + 1);
             vals[1] = track->midiFx == 0 ? "--" : String(track->midiFx);
+            vals[2] = "@"; // action: click to open the routed MidiFX group's editor (P3)
             dispParamGrid(labels, vals, selParam);
         }
             return false;
