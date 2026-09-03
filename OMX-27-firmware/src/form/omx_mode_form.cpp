@@ -2277,6 +2277,51 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 	uint8_t thisKey = e.key();
 	auto omni = getSelectedMachine();
 
+	// SCALE page (5): top-row keys 3-10 are a value palette for the SELECTED scale cell,
+	// like the P-Lock param pages. MODE: 3/4/5 = GLOBAL/CHROMATIC/LOCAL. ROOT: 3-9 = the 7
+	// major-scale notes (C D E F G A B). SCALE: 3-10 = the first 8 scale patterns. LOCK &
+	// GROUP: 6 = off, 7 = on.
+	if (stepMenuPage_ == 5 && omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE &&
+		e.down() && !e.held() && thisKey >= 3 && thisKey <= 10)
+	{
+		uint8_t k = thisKey - 3; // 0..7 across keys 3..10
+		bool localScale = omni->getScaleMode() == FormOmni::FormMachineOmni::TRACKSCALE_LOCAL;
+		switch (stepMenuSel_)
+		{
+		case 0: // MODE
+			if (k <= 2)
+				omni->editScaleMode((int)k - (int)omni->getScaleMode());
+			break;
+		case 1: // ROOT -> the 7 major-scale notes
+		{
+			static const uint8_t kMajRoots[7] = {0, 2, 4, 5, 7, 9, 11};
+			if (k < 7)
+			{
+				int cur = localScale ? omni->getLocalRoot() : scaleConfig.scaleRoot;
+				omni->editScaleRoot((int)kMajRoots[k] - cur);
+			}
+			break;
+		}
+		case 2: // SCALE -> the first 8 scale patterns (keys 3-10)
+		{
+			int cur = localScale ? omni->getLocalPattern() : scaleConfig.scalePattern;
+			omni->editScalePattern((int)k - cur);
+			break;
+		}
+		case 3: // LOCK
+			if (thisKey == 6) scaleConfig.lockScale = false;
+			else if (thisKey == 7) scaleConfig.lockScale = true;
+			break;
+		case 4: // GROUP
+			if (thisKey == 6) scaleConfig.group16 = false;
+			else if (thisKey == 7) scaleConfig.group16 = true;
+			break;
+		}
+		omxDisp.setDirty();
+		omxLeds.setDirty();
+		return;
+	}
+
 	// While step(s) are held on a param page (1-2), the top row is the SELECTED param's
 	// value palette (applied to the held steps).
 	if (heldStepMask_ != 0 && (stepMenuPage_ == 1 || stepMenuPage_ == 2) && thisKey >= 1 && thisKey <= 10)
@@ -2712,6 +2757,46 @@ void OmxModeForm::updateStepLEDs()
 			if (i < pageLen)
 				c = (i == pageLen - 1) ? (uint32_t)GREEN : (uint32_t)LOWWHITE;
 			strip.setPixelColor(11 + i, c);
+		}
+		return;
+	}
+
+	// SCALE page (5): the top row is a value palette for the selected scale cell (the
+	// current value lit bright, the other choices dim); the low row keeps the pattern.
+	if (stepMenuPage_ == 5)
+	{
+		for (uint8_t k = 1; k <= 10; k++)
+			strip.setPixelColor(k, LEDOFF);
+		paintStepRow(omni);
+		bool localScale = omni->getScaleMode() == FormOmni::FormMachineOmni::TRACKSCALE_LOCAL;
+		const uint32_t AV = DKCYAN, HOT = WHITE;
+		if (stepMenuSel_ == 0) // MODE 3/4/5
+		{
+			for (uint8_t i = 0; i < 3; i++)
+				strip.setPixelColor(3 + i, i == omni->getScaleMode() ? HOT : AV);
+		}
+		else if (stepMenuSel_ == 1) // ROOT 3-9 = major-scale notes
+		{
+			static const uint8_t kMajRoots[7] = {0, 2, 4, 5, 7, 9, 11};
+			uint8_t cur = localScale ? omni->getLocalRoot() : (uint8_t)scaleConfig.scaleRoot;
+			for (uint8_t i = 0; i < 7; i++)
+				strip.setPixelColor(3 + i, kMajRoots[i] == cur ? HOT : AV);
+		}
+		else if (stepMenuSel_ == 2) // SCALE 3-10 = first 8 patterns
+		{
+			int cur = localScale ? omni->getLocalPattern() : scaleConfig.scalePattern;
+			for (uint8_t i = 0; i < 8; i++)
+				strip.setPixelColor(3 + i, (int)i == cur ? HOT : AV);
+		}
+		else if (stepMenuSel_ == 3) // LOCK 6/7
+		{
+			strip.setPixelColor(6, !scaleConfig.lockScale ? HOT : AV);
+			strip.setPixelColor(7, scaleConfig.lockScale ? HOT : AV);
+		}
+		else if (stepMenuSel_ == 4) // GROUP 6/7
+		{
+			strip.setPixelColor(6, !scaleConfig.group16 ? HOT : AV);
+			strip.setPixelColor(7, scaleConfig.group16 ? HOT : AV);
 		}
 		return;
 	}

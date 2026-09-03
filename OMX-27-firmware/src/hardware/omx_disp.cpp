@@ -834,9 +834,8 @@ void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const
 }
 
 // 5-cell param grid (like dispStepParams, one more column). 128px doesn't divide by 5,
-// so cells are 26/25/26/25/26 px. Dotted rules (a lighter touch than solid at this size)
-// separate the label band from the values and divide the columns. The selected cell gets a
-// bright outline when navigating; its value box inverts while editing. A `dimmed` cell (the
+// so cells are 26/25/26/25/26 px. Same look as the 4-cell grid: a bright selection outline
+// when navigating, the value box inverting while editing, no dividers. A `dimmed` cell (its
 // param is inactive in the current mode) is knocked back with a checkerboard so it reads as
 // muted without a per-pixel grey the 1-bit panel can't do.
 void OmxDisp::dispParams5(const char *labels[5], const char *values[5], const bool dimmed[5], uint8_t sel, bool editing)
@@ -851,19 +850,10 @@ void OmxDisp::dispParams5(const char *labels[5], const char *values[5], const bo
 
 	static const uint8_t bx[6] = {0, 26, 51, 77, 102, 128}; // column boundaries
 
-	// dotted rule under the label band
-	for (int x = 0; x < 128; x += 2)
-		display.drawPixel(x, 10, WHITE);
-
 	for (uint8_t i = 0; i < 5; i++)
 	{
 		int x = bx[i], cw = bx[i + 1] - bx[i];
 		bool valInv = (i == sel) && editing;
-
-		// dotted column divider on the right edge (not after the last cell)
-		if (i < 4)
-			for (int y = 1; y < 31; y += 2)
-				display.drawPixel(bx[i + 1] - 1, y, WHITE);
 
 		// label (top band)
 		u8g2_display.setFont(FONT_LABELS);
