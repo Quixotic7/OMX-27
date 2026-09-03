@@ -23,8 +23,8 @@ Things that already feel like an instrument, and why they matter musically:
   leave on. The unified 5-cell scale page (one renderer everywhere, palette keys in Seq)
   makes it legible.
 - **F2 pick-up/drop.** A step becomes a physical object you grab and put down; the cut/paste
-  alternation gives you *swap* for free. And F2+top-row still selects tracks, so the hand
-  never leaves the view.
+  alternation lets you keep grabbing and dropping in one hold. And F2+top-row still selects
+  tracks, so the hand never leaves the view.
 - **Per-step depth.** CC P-Locks (5 slots × pot banks) *and* per-step MidiFX routing — a
   single step sent through its own chord/arp group is genuinely novel; Elektron boxes can't
   route FX per step. Combined with chance/cond/math/accum, one 16-step page goes a long way.
@@ -41,9 +41,9 @@ Things that already feel like an instrument, and why they matter musically:
 1. **Tempo lives in one tool.** BPM + tap are inside Tools → BPM. Tempo is a *performance*
    control; reaching it should not require leaving the view you're playing in. (Known open
    decision — see P1.)
-2. **No undo — by design.** CLR, randomize, shuffle, mirror, Euclid/Grids apply, paste-over
-   all commit instantly. The fear tax is real, but undo is deliberately declined for RAM
-   reasons (see P2) — the mitigation is per-tool previews, not a buffer.
+2. **No undo (yet).** CLR, randomize, shuffle, mirror, Euclid/Grids apply, paste-over all
+   commit instantly. A **one-level undo on Tools key 10** is approved but not built (see
+   P2); until then the mitigation is per-tool previews and non-destructive defaults.
 3. **The MidiFX editor has no front door.** AUX+*hold* key 6 is a great expert shortcut and an
    invisible one. A producer who doesn't read the manual will never find the chord/arp
    engine. (P3.)
@@ -61,9 +61,9 @@ Things that already feel like an instrument, and why they matter musically:
    Teensy 4 saves only the active pattern; LOCK/GROUP on the scale page stay global even for
    LOCAL-scale tracks (document it in the user guide rather than change it).
 
-## 3. Proposals (not implemented — for discussion)
+## 3. Proposals (owner's verdicts recorded 2026-09-03 — none implemented yet)
 
-### P1 · BPM from anywhere
+### P1 · BPM from anywhere — **APPROVED** (owner, 2026-09-03: "doesn't destroy the AUX shortcut")
 **Itch:** friction #1. **Proposal:** `F3 + encoder turn = BPM` in every view. F3 (F1+F2 held)
 is already the "track/page-level" modifier and is otherwise unused with the encoder; the
 gesture was floated earlier and fits ("could work for BPM"). Tap tempo *stays* in the BPM
@@ -72,26 +72,36 @@ while turning. **Cost:** small; one hook in the shared encoder dispatch, per-vie
 needed. **Rejected alternative (stands):** AUX+encoder — AUX+turn must stay "edit the
 selected cell."
 
-### ~~P2 · One-level undo for destructive edits~~ — **DECLINED (owner decision)**
-Undo is intentionally out: these devices are tight on RAM and an undo slot costs a full
-`OmniSeq` copy on boards that can't spare it. The decision stands — **do not re-propose.**
-The fear-tax itch is instead softened at the edges: the QUANT tool previews before applying,
-Euclid/Grids preview before apply, and the PAGE tool's resting cell is the non-destructive
-COPY. If a specific destructive tool still bites in practice, the cheaper shape is a preview
-mode for *that tool*, not a general undo buffer.
+### P2 · One-level undo — **APPROVED as a Tools-view feature** (owner, 2026-09-03)
+History: first declined for RAM reasons, then reconsidered. The accepted shape:
 
-### P3 · A front door for MidiFX
+- **Gesture: key 10 (top row) in the TOOLS view.** Most tools leave key 10 unused (only
+  the SCOPE toggle uses 9/10 on scoped tools — resolve that overlap in design). Explicitly
+  **NOT `AUX + F1`** — that's Play and would cause confusion.
+- Scope: one slot, last destructive action only, restoring the affected track's pattern —
+  not a history. RAM cost is one `OmniSeq` copy; verify headroom on Teensy 3.1 and gate to
+  the bigger boards if it doesn't fit there.
+- Since it lives in Tools, it naturally covers the tool applies (rotate, shuffle, Euclid,
+  Grids, randomizers, PAGE cut/paste); whether it also snapshots CLR and Seq-view F2
+  cut/paste-over is a design question to settle before building.
+
+Not yet implemented.
+
+### P3 · A front door for MidiFX — **APPROVED with a constraint** (owner, 2026-09-03)
+Constraint: **do not modify the existing AUX+MFX hold or double-click shortcuts** — the
+menu action cell is purely additive. Not yet implemented.
+
 **Itch:** friction #3. **Proposal:** add an `FX` cell to the MIX machine menu (next to the
 TRACK page's MidiFX-routing cell): click = open the routed group's editor, exactly what
 AUX+hold-key-6 does today. The expert shortcut stays; the menu path makes it discoverable.
 **Cost:** trivial — the submode open call already exists.
 
-### P4 · Feedback when live-record drops a note
+### P4 · Feedback when live-record drops a note — **APPROVED** (owner, 2026-09-03)
 **Itch:** friction #4. **Proposal:** when the 8-slot held-note buffer overflows, flash the
 rec-arm AUX LED red for ~150 ms and pop `REC FULL` once. No behavior change, just honesty.
 **Cost:** trivial.
 
-### P5 · Momentary (performance) mute
+### P5 · Momentary (performance) mute — **ON HOLD** (owner, 2026-09-03: too high a cost)
 **Itch:** live sets are built on ducking a track for two bars. Mutes today are toggles.
 **Proposal:** in MIX, `F1 + hold a track key ≥ ~350 ms` = momentary mute that releases with
 the key; a quick F1+tap stays a toggle (unchanged). Same shape for F2/solo. Uses the existing
@@ -99,7 +109,7 @@ flushNotes path so releases can't strand notes. **Cost:** moderate — needs a h
 track key and careful interaction with the existing hold-track controls; prototype behind a
 CONFIG toggle first.
 
-### P6 · Optional MIDI click out
+### P6 · Optional MIDI click out — **SKIPPED** (owner, 2026-09-03: "I can just program a beat to act as metronome")
 **Itch:** recording the *first* track against silence. **Prior decision respected:** count-in
 was dropped — on a MIDI-only device a count-in has nothing to sound through, and that logic
 was right. A *click track* is the adjacent thing that still makes sense **only when routed to
@@ -107,14 +117,14 @@ a sound source**: an off-by-default `CLICK` setting (channel, note, velocity, ac
 CONFIG that emits quarter notes while playing/recording. If this still feels like the dropped
 feature wearing a hat, skip it — P4 + start-on-note already cover most of the need.
 
-### P7 · Per-pattern tempo (opt-in)
+### P7 · Per-pattern tempo (opt-in) — **SKIPPED** (owner, 2026-09-03)
 **Itch:** switching between two songs' patterns live means riding the BPM tool between them.
 **Proposal:** store BPM in the pattern (bank-tail field, RP2040 only), plus a global
 `PBPM: On/--` switch (default off) that applies a pattern's BPM when the switch commits at
 its boundary. Off = exactly today's behavior. **Cost:** small field + one apply hook; the
 subtlety is only applying on *committed* switches, not previews.
 
-### P8 · Pattern chains as a list (v3-scale idea)
+### P8 · Pattern chains as a list (v3-scale idea) — **ON HOLD** (owner, 2026-09-03)
 **Itch:** `Chained` switch-mode advances patterns, but an arrangement ("A A B C") lives in
 your head. **Proposal sketch:** in PATTERNS with switch-mode = Chained, `F3 + tap slots` in
 order builds a chain list (repeat a slot by tapping it again); low row shows the chain as
