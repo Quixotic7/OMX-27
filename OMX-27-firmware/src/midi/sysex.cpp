@@ -65,6 +65,10 @@ void SysEx::processIncomingSysex(const byte *sysexData, unsigned size)
 			nornsLink.setMirrorEnabled(sysexData[5] != 0);
 		}
 		break;
+	case NL_CMD_LED_STATE:
+		// 54 - host LED-state query: F0 7D 00 00 54 F7 -> device replies with two 0x54 parts
+		nornsLink.sendLedState();
+		break;
 	case NL_CMD_REQ:
 		// 5E - norns missed some screen chunks, resend: F0 7D 00 00 5E <m0> <m1> <m2> F7
 		if (size > 7)
