@@ -12,7 +12,7 @@ namespace FormOmni
 {
     // Bump whenever the OmniSeq layout changes so old saves are skipped rather than
     // blitted into a mismatched struct. Also stamps the V3 pattern-bank file.
-    constexpr uint8_t kOmniSaveVersion = 8; // v8: default MIDI ch 1-8 + default velocity 100
+    constexpr uint8_t kOmniSaveVersion = 9; // v9: per-track scale (mode/root/pattern) moved into OmniSeq
 
 
     // FORM's one (and only) track engine — the polyphonic step sequencer. The old
@@ -349,20 +349,12 @@ namespace FormOmni
         // 1 CHROMATIC: the track ignores scales entirely (keyboard chromatic, transpose in
         //   semitones, no scale colours).
         // 2 LOCAL: the track has its own root + scale (localScale_), independent of global.
-        // Runtime + bank-file persisted (not in OmniSeq, so the save layout is unchanged).
+        // Persisted inside OmniSeq since v9: saves on every board through the normal
+        // kOmniSaveVersion gate and travels with the pattern (per-pattern scale).
         enum TrackScaleMode { TRACKSCALE_GLOBAL = 0, TRACKSCALE_CHROMATIC, TRACKSCALE_LOCAL, TRACKSCALE_COUNT };
-        uint8_t getScaleMode() { return scaleMode_; }
-        uint8_t getLocalRoot() { return localRoot_; }
-        int8_t getLocalPattern() { return localPattern_; }
-        void setScaleConfig(uint8_t mode, uint8_t root, int8_t pattern)
-        {
-            scaleMode_ = mode >= TRACKSCALE_COUNT ? TRACKSCALE_GLOBAL : mode;
-            localRoot_ = root > 11 ? 0 : root;
-            // Clamp BOTH ends: the bank-file tail is not covered by kOmniSaveVersion, so an
-            // out-of-range byte (newer build, torn write) must land on "off", not a bogus index.
-            localPattern_ = (pattern < -1 || pattern >= (int8_t)MusicScales::getNumScales()) ? -1 : pattern;
-            recalcLocalScale();
-        }
+        uint8_t getScaleMode() { return seq_.scaleMode; }
+        uint8_t getLocalRoot() { return seq_.localRoot; }
+        int8_t getLocalPattern() { return seq_.localPattern; }
         void editScaleMode(int amt);   // cycles GLOBAL/CHROMATIC/LOCAL (pops the name)
         void editScaleRoot(int amt);   // LOCAL: local root; else the global root
         void editScalePattern(int amt);// LOCAL: local pattern; else the global pattern
@@ -378,7 +370,7 @@ namespace FormOmni
         // get the local instance calculated with pattern -1 = chromatic degrees).
         MusicScales *paletteScale()
         {
-            return scaleMode_ == TRACKSCALE_GLOBAL ? omxFormGlobal.musicScale : &localScale_;
+            return seq_.scaleMode == TRACKSCALE_GLOBAL ? omxFormGlobal.musicScale : &localScale_;
         }
         // Effective scale for the live keyboard (null = plain chromatic mapping, no lock/group).
         // Gates on scaleIsChromatic(), not just the mode: a LOCAL track whose scale is dialed
@@ -392,8 +384,8 @@ namespace FormOmni
         // True when this track plays chromatically (mode chromatic, or its scale is off).
         bool scaleIsChromatic()
         {
-            if (scaleMode_ == TRACKSCALE_CHROMATIC) return true;
-            if (scaleMode_ == TRACKSCALE_LOCAL) return localPattern_ < 0;
+            if (seq_.scaleMode == TRACKSCALE_CHROMATIC) return true;
+            if (seq_.scaleMode == TRACKSCALE_LOCAL) return seq_.localPattern < 0;
             return scaleConfig.scalePattern < 0;
         }
 
@@ -483,11 +475,9 @@ namespace FormOmni
 
         uint8_t activePage_ = 0;
 
-        // Per-track scale mode (see TrackScaleMode). localScale_ is calculated whenever the
-        // mode/root/pattern change; chromatic mode keeps it calculated with pattern -1.
-        uint8_t scaleMode_ = 0;    // TRACKSCALE_GLOBAL
-        uint8_t localRoot_ = 0;    // 0-11
-        int8_t localPattern_ = 0;  // -1 = off/chromatic
+        // Per-track scale state lives in seq_ (scaleMode/localRoot/localPattern, saved with
+        // the pattern since v9). localScale_ is the derived MusicScales cache, recalculated
+        // whenever the scale fields change (edits) or seq_ is replaced (sanitizeSeq).
         MusicScales localScale_;
         void recalcLocalScale();
 

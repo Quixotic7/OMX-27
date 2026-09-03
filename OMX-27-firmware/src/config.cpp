@@ -5,18 +5,19 @@ const OMXMode DEFAULT_MODE = MODE_MIDI;
 // v39 - merge of FormSequencer (FORM mode + shared improvements) into the q7-2026 line.
 // Both branches independently used v38 for divergent layouts; bumped to 39 so existing
 // saves re-initialize cleanly instead of being misread against the merged layout.
-// v42/43 - FORM moved to the TAIL of the save stream (was saved first). The other modes +
-// MidiFX now occupy fixed leading offsets, so a change in FORM's save size no longer shifts or
-// corrupts them. Reordering the stream invalidates the old FORM-first layout, so bump the
-// version to force a one-time clean re-init instead of misreading it.
+// v43/44 - FORM save format v9: the per-track scale (mode/root/pattern) moved into OmniSeq
+// (per-pattern, all boards) and a note-entry pref byte now leads the FORM FRAM block, so
+// FORM's region layout changed. FORM sits last in the stream, but bump the version anyway so
+// old saves take the clean one-time re-init path instead of blitting a mismatched layout.
+// (v42/43 was the FORM-moved-to-tail reorder.)
 #if BOARDTYPE == TEENSY32
 // Teensy 3.1 reduced FORM to 4 tracks, which shrinks FORM's slice of the sequential save
 // stream and shifts every later mode's offset. A distinct version forces a one-time storage
 // re-init so old 8-track saves aren't misread. Keep this one ahead of the shared version so a
 // future base bump still re-inits the T3.1.
-const uint8_t EEPROM_VERSION = 43;
+const uint8_t EEPROM_VERSION = 44;
 #else
-const uint8_t EEPROM_VERSION = 42;
+const uint8_t EEPROM_VERSION = 43;
 #endif
 
 const char* VERSION_STRING = "ALPHA";

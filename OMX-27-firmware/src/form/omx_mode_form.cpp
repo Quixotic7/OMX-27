@@ -3546,11 +3546,9 @@ void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 		{
 			if (mixCopyMode_ == 2)
 			{
+				// setSeq carries the whole OmniSeq — including the per-track scale (v9).
 				machines_[track]->setSeq(machines_[heldTrackKey_]->getSeq());
 				trackHue_[track] = trackHue_[heldTrackKey_];
-				machines_[track]->setScaleConfig(machines_[heldTrackKey_]->getScaleMode(),
-												 machines_[heldTrackKey_]->getLocalRoot(),
-												 machines_[heldTrackKey_]->getLocalPattern());
 			}
 			else
 				machines_[track]->setTrackData(machines_[heldTrackKey_]->getSeq().tracks[0]);
@@ -5317,6 +5315,12 @@ int OmxModeForm::saveToDisk(int startingAddress, Storage *storage)
 {
 	int initStart = startingAddress;
 
+	// Global FORM prefs (1 byte): note-entry Pressed/Toggle. In the FRAM stream so it
+	// persists on every board (the old RP2040-only bank tail is gone). FORM sits LAST in
+	// the storage stream, so growing this region can't shift any other mode.
+	storage->write(startingAddress, omxFormGlobal.noteEntryToggle ? 1 : 0);
+	startingAddress++;
+
 	for (uint8_t i = 0; i < kNumMachines; i++)
 	{
 		// Single-engine: the per-slot type byte stays in the format (always OMNI) so
@@ -5338,6 +5342,10 @@ int OmxModeForm::saveToDisk(int startingAddress, Storage *storage)
 
 int OmxModeForm::loadFromDisk(int startingAddress, Storage *storage)
 {
+	// Global FORM prefs (mirrors saveToDisk): note-entry Pressed/Toggle.
+	omxFormGlobal.noteEntryToggle = storage->read(startingAddress) == 1;
+	startingAddress++;
+
 	for (uint8_t i = 0; i < kNumMachines; i++)
 	{
 		startingAddress++; // skip the legacy machine-type byte (every track is OMNI)
@@ -5411,18 +5419,8 @@ void OmxModeForm::saveBankToFS()
 	f.write(&recQuantize_, 1);
 	f.write(trackHue_, sizeof(trackHue_));
 	f.write((uint8_t *)patterns_, sizeof(patterns_));
-	// Optional tail (older files simply end here and load fine): note-entry behavior +
-	// per-track scale mode/root/pattern (pattern stored +1 so 0 = off).
-	uint8_t tail[2 + 3 * kNumMachines];
-	tail[0] = 'T';
-	tail[1] = omxFormGlobal.noteEntryToggle ? 1 : 0;
-	for (uint8_t i = 0; i < kNumMachines; i++)
-	{
-		tail[2 + i * 3] = machines_[i]->getScaleMode();
-		tail[3 + i * 3] = machines_[i]->getLocalRoot();
-		tail[4 + i * 3] = (uint8_t)(machines_[i]->getLocalPattern() + 1);
-	}
-	f.write(tail, sizeof(tail));
+	// (No tail any more: per-track scale lives inside OmniSeq since v9 — saved with every
+	// pattern above — and note-entry persists in the FORM FRAM stream on all boards.)
 	f.close();
 	Serial.println("FORM bank saved (" + String((unsigned)sizeof(patterns_)) + " bytes)");
 }
@@ -5456,27 +5454,18 @@ bool OmxModeForm::loadBankFromFS()
 			  f.read(&recQ, 1) == 1 &&
 			  f.read(hues, sizeof(hues)) == (int)sizeof(hues) &&
 			  f.read((uint8_t *)patterns_, sizeof(patterns_)) == (int)sizeof(patterns_);
-	// Optional tail (note-entry + per-track scale modes) — absent in older files.
-	uint8_t tail[2 + 3 * kNumMachines];
-	bool tailOk = ok && f.read(tail, sizeof(tail)) == (int)sizeof(tail) && tail[0] == 'T';
 	f.close();
 	if (!ok)
 	{
 		Serial.println("FORM bank: short read, skipping");
 		return false;
 	}
-	// Commit, clamped.
+	// Commit, clamped. (Per-track scale rides inside each pattern's OmniSeq since v9 —
+	// no tail to parse; note-entry comes from the FORM FRAM stream.)
 	activePattern_ = (activePat >= FORM_NUM_PATTERNS) ? 0 : activePat;
 	switchStyle_ = (swStyle > 3) ? 0 : swStyle;
 	recQuantize_ = recQ;
 	memcpy(trackHue_, hues, sizeof(trackHue_));
-	if (tailOk)
-	{
-		omxFormGlobal.noteEntryToggle = tail[1] == 1;
-		for (uint8_t i = 0; i < kNumMachines; i++)
-			machines_[i]->setScaleConfig(tail[2 + i * 3], tail[3 + i * 3],
-										 (int8_t)tail[4 + i * 3] - 1);
-	}
 	Serial.println("FORM bank loaded");
 	return true;
 }

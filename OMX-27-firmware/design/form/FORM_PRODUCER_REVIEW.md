@@ -41,25 +41,22 @@ Things that already feel like an instrument, and why they matter musically:
 1. **Tempo lives in one tool.** BPM + tap are inside Tools → BPM. Tempo is a *performance*
    control; reaching it should not require leaving the view you're playing in. (Known open
    decision — see P1.)
-2. **No undo.** CLR, randomize, shuffle, mirror, Euclid/Grids apply, paste-over — all commit
-   instantly. The fear tax is real: you stop experimenting with the destructive tools on a
-   pattern you like, which is exactly when they'd be most fun. (P2.)
+2. **No undo — by design.** CLR, randomize, shuffle, mirror, Euclid/Grids apply, paste-over
+   all commit instantly. The fear tax is real, but undo is deliberately declined for RAM
+   reasons (see P2) — the mitigation is per-tool previews, not a buffer.
 3. **The MidiFX editor has no front door.** AUX+*hold* key 6 is a great expert shortcut and an
    invisible one. A producer who doesn't read the manual will never find the chord/arp
    engine. (P3.)
 4. **Live-record silently drops notes past 8 held.** Rare, but when it happens (big sustained
    chord + moving line) there's no feedback that anything was lost. (P4.)
-5. **Per-track scale persistence needs a decision** (sharpened by the code review): the
-   scale modes + NTRY live only in the RP2040 bank-file tail — on **Teensy builds they are
-   never saved at all** (every power cycle reverts tracks to GLOBAL/Pressed while their
-   notes reload), on V3 they are global-not-per-pattern (switching pattern slots keeps the
-   previous pattern's scale modes, though Copy Track does copy them), and the tail is an
-   exact-length match with no version byte, so the next added field silently resets all
-   saved scale config. Two candidate fixes, both format changes: (a) move the 3 bytes into
-   `OmniSeq` + bump `kOmniSaveVersion` — per-pattern scale + all boards, at the cost of a
-   one-time invalidation of existing saved FORM patterns; (b) version the tail (marker +
-   version + length) — keeps saves, stays RP2040-only and global-scope. (a) is the honest
-   fix if a reinit is acceptable now, pre-release. **Owner's call — not implemented.**
+5. ~~Per-track scale persistence needs a decision~~ — **RESOLVED (owner chose (a), save
+   format v9):** the scale mode/root/pattern now live inside `OmniSeq` (`kOmniSaveVersion`
+   9), so they save on **every board** through the normal version gate and travel **with the
+   pattern** (per-pattern scale — switching slots switches scales). Note-entry moved into
+   the FORM FRAM stream (all boards) and the fragile bank-file tail was deleted outright.
+   One-time re-init of existing saves, accepted pre-release. Verified on V3: LOCAL D/2 and
+   CHROMATIC tracks + NTRY all reload after a power cycle, and an empty pattern shows its
+   own defaults.
 6. Quiet limits worth knowing, fine as they are: track hue is global (not per-pattern);
    Teensy 4 saves only the active pattern; LOCK/GROUP on the scale page stay global even for
    LOCAL-scale tracks (document it in the user guide rather than change it).
@@ -75,13 +72,13 @@ while turning. **Cost:** small; one hook in the shared encoder dispatch, per-vie
 needed. **Rejected alternative (stands):** AUX+encoder — AUX+turn must stay "edit the
 selected cell."
 
-### P2 · One-level undo for destructive edits
-**Itch:** friction #2. **Proposal:** before any destructive commit (tool apply, CLR, F2
-paste-over/cut, randomize), snapshot the affected *track's* pattern into a single undo slot;
-`AUX + F1` (or an UNDO entry as tool 0) restores it. One slot, last action only, per session
-— not a history. **Cost:** one `OmniSeq` copy (~a few KB RAM — verify headroom on Teensy 3.1,
-which is the tight board; if it doesn't fit there, gate it to RP2040/T4). The win is
-outsized: undo converts every destructive tool from "careful" to "playable."
+### ~~P2 · One-level undo for destructive edits~~ — **DECLINED (owner decision)**
+Undo is intentionally out: these devices are tight on RAM and an undo slot costs a full
+`OmniSeq` copy on boards that can't spare it. The decision stands — **do not re-propose.**
+The fear-tax itch is instead softened at the edges: the QUANT tool previews before applying,
+Euclid/Grids preview before apply, and the PAGE tool's resting cell is the non-destructive
+COPY. If a specific destructive tool still bites in practice, the cheaper shape is a preview
+mode for *that tool*, not a general undo buffer.
 
 ### P3 · A front door for MidiFX
 **Itch:** friction #3. **Proposal:** add an `FX` cell to the MIX machine menu (next to the

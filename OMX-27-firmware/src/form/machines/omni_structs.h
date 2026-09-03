@@ -435,6 +435,14 @@ namespace FormOmni
 
         TransposePattern transposePattern;
 
+        // Per-track scale (v9): mode GLOBAL/CHROMATIC/LOCAL, plus the track's own root and
+        // pattern for LOCAL mode (-1 = off). Living inside OmniSeq means the scale saves on
+        // every board through the normal kOmniSaveVersion gate and travels with the pattern
+        // (per-pattern scale) instead of the old RP2040-only bank-file tail.
+        uint8_t scaleMode;    // TrackScaleMode: 0 GLOBAL, 1 CHROMATIC, 2 LOCAL
+        uint8_t localRoot;    // 0-11
+        int8_t localPattern;  // -1 = off/chromatic
+
         OmniSeq()
         {
             transpose = 0;
@@ -448,6 +456,9 @@ namespace FormOmni
             sendMidi = true;
             sendCV = true;
             gate = 40;
+            scaleMode = 0;
+            localRoot = 0;
+            localPattern = 0;
         }
     };
 }
