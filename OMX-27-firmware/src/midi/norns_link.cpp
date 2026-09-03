@@ -4,6 +4,8 @@
 
 #include "midi.h"
 #include "../ClearUI/ClearUI_Display.h" // extern Adafruit_SSD1306 display
+#include "../hardware/omx_leds.h"       // extern Adafruit_NeoPixel strip
+#include "../config.h"                  // LED_COUNT
 
 NornsLink nornsLink;
 
@@ -86,6 +88,31 @@ void NornsLink::sendFrameEnd(uint8_t fid, uint16_t mask)
 	buf[7] = (uint8_t)((mask >> 14) & 0x03); // chunks 14-15
 	MM::sendSysExUSB(8, buf, false);
 	lastEndMask_ = mask;
+}
+
+void NornsLink::sendLedState()
+{
+	// Dump all LED_COUNT keypad LEDs in two parts so each SysEx stays small enough for the
+	// TinyUSB TX FIFO. getPixelColor() returns the logical (pre-brightness) 0xRRGGBB colour,
+	// downscaled here to 7-bit per channel. Wire: 7D 00 00 54 <part> [r g b]*  (F0/F7 added).
+	const uint8_t split = LED_COUNT / 2; // part 0 = [0,split), part 1 = [split,LED_COUNT)
+	for (uint8_t part = 0; part < 2; part++)
+	{
+		uint8_t lo = part == 0 ? 0 : split;
+		uint8_t hi = part == 0 ? split : (uint8_t)LED_COUNT;
+		uint8_t buf[5 + 3 * 32];
+		buf[0] = 0x7D; buf[1] = 0x00; buf[2] = 0x00;
+		buf[3] = NL_CMD_LED_STATE; buf[4] = part;
+		uint16_t n = 5;
+		for (uint8_t i = lo; i < hi; i++)
+		{
+			uint32_t c = strip.getPixelColor(i);
+			buf[n++] = (uint8_t)(((c >> 16) & 0xFF) >> 1); // R (7-bit)
+			buf[n++] = (uint8_t)(((c >> 8) & 0xFF) >> 1);  // G
+			buf[n++] = (uint8_t)((c & 0xFF) >> 1);         // B
+		}
+		MM::sendSysExUSB(n, buf, false);
+	}
 }
 
 void NornsLink::streamFrame()

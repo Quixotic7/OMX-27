@@ -168,6 +168,9 @@ private:
 	bool onEncoderNotes(int dir);       // encoder turn in the Notes view. consumed?
 	bool onEncoderButtonNotes();        // encoder click in the Notes view. consumed?
 	void notesEditScaleParam(uint8_t param, int dir); // 0 root · 1 scale · 2 lock · 3 group
+	// Shell wrapper: render the 5-cell scale page for the selected track. Delegates to the
+	// machine's modular FormMachineOmni::drawScalePage5 (the single source of the scale look).
+	void dispScalePage5(uint8_t sel, bool editing);
 	void onKeyUpdateNotes(OMXKeypadEvent e);
 	void updateNotesLEDs();
 	void onDisplayNotes();
@@ -228,6 +231,9 @@ private:
 	void onDisplaySeqTrackPage(bool keyboardMode = false);
 	void stepApplyToHeld(uint8_t paletteIndex); // set the palette value on every held step
 	void updateStepLEDs();
+	// Paint the low row (11-26) with the pattern step colours + playhead. Shared by the
+	// Step overview and the F1/F2 layers so the step row reads identically under those holds.
+	void paintStepRow(FormOmni::FormMachineOmni *omni);
 	void onDisplayStep();
 	void onKeyUpdateMix(OMXKeypadEvent e);     // Mix-view track keys (mute/solo/select)
 	bool onKeyUpdateMixRoute(OMXKeypadEvent e); // Mix key routing; false = machine F3 fall-through
@@ -284,6 +290,35 @@ private:
 	uint8_t transSel_ = 0;
 	// Tool params (persist while in the mode):
 	bool toolScopeAll_ = false;              // ROTATE: whole loop vs active page
+	// One-level undo for Tools-view destructive actions (P2, restored with key 10). A
+	// single OmniSeq slot snapshotted before every destructive toolAction; pressing key 10
+	// swaps it with the live track (so pressing again = redo). Only valid for the pattern
+	// it was taken in — a pattern switch orphans it.
+	FormOmni::OmniSeq undoSeq_;
+	int8_t undoTrack_ = -1;    // -1 = empty slot
+	int8_t undoPattern_ = -1;  // activePattern_ when the snapshot was taken
+	bool undoNextIsRedo_ = false;
+	void toolSnapshotUndo();
+	void toolUndo();
+	// Shared BPM edit (P1): the BPM tool's encoder cell and F3+encoder-from-any-view.
+	void editBpm(int delta);
+	// AUX + double-tap a view key: put that view back on its first page/overview.
+	void viewHome(uint8_t view);
+	// F1 + keys 8/9/10 in Step/Notes/Tools: clear page / clear all pages / undo-redo.
+	bool handleF1PageActions(uint8_t k, OMXKeypadEvent e);
+	void paintUndoKey(bool blink);       // key-10 undo LED (blue / flash-after-destructive)
+	void paintF1ActionKeys(bool blink);  // F1 layer keys 8/9/10 LEDs
+	uint32_t undoFlashMs_ = 0;           // "you can undo" flash window start
+	uint32_t pagePopupMs_ = 0;           // F1+encoder page-icons popup window start
+	// Live-record overflow feedback (P4): rate-limit the REC FULL popup + AUX-LED flash.
+	uint32_t recFullWarnMs_ = 0;
+	uint32_t recFullFlashMs_ = 0;
+	// PAGE tool clipboard: a whole 16-step page (steps + length). Persists across pages and
+	// tracks so you can copy a page and paste it wherever (workflow: F1-select a page, COPY,
+	// F1-select another page, PASTE). Lazily "loaded" by the first cut/copy.
+	FormOmni::Step pageBuffer_[16];
+	uint8_t pageBufferLen_ = 16;
+	bool pageBufferLoaded_ = false;
 	uint8_t toolVelMin_ = 64, toolVelMax_ = 127;
 	uint8_t toolEucPulses_ = 4, toolEucRot_ = 0;
 	uint8_t toolGridsInst_ = 0, toolGridsX_ = 128, toolGridsY_ = 128, toolGridsDens_ = 128;
@@ -411,10 +446,44 @@ private:
 
 	void stopSequencers();
 
+	// ---- AUX-layer transport / key tracking ----
+	// Keys whose DOWN the AUX layer consumed: their releases belong to the AUX layer too
+	// (transport / rec-arm act on release) and must never leak into the active view —
+	// even when AUX itself was released first (the old pass-through fired quick-tap
+	// copy/paste/palette actions and phantom F1/F2 states).
+	uint32_t auxSwallowMask_ = 0;
+	bool aux1Used_ = false; // transport key consumed by a chord/hold this press
+	bool aux2Used_ = false;
+	// STOP (chord) while playing; a second STOP while already stopped = KILL all notes.
+	void doStopOrKill();
+	void killAllNotes();
+	// Tap tempo helper (rolling average), driven by the BPM tool's TAP button.
+	uint32_t lastTapMs_ = 0;
+	uint8_t tapCount_ = 0;
+	float tapAvgMs_ = 0;
+	void tapTempo();
+	// When the TAP button was last hit — the BPM tool flashes it "pressed" briefly instead
+	// of popping a message, so each tap gives visual feedback on the button itself.
+	uint32_t bpmTapFlashMs_ = 0;
+	// Seq F2 = a pick-up / drop tool.
+	//  - The FIRST press with nothing loaded (seqF2Loaded_ = false) CUTS/grabs that step —
+	//    even an empty one — into the buffer. This is the ONLY time an empty step is cut.
+	//  - Once loaded, NON-empty steps alternate cut/paste (seqF2Holding_): holding -> paste,
+	//    empty-handed -> cut; so one step pressed repeatedly cuts, pastes, cuts...
+	//  - Once loaded, an EMPTY step is ALWAYS a paste (never cut).
+	// F1 copy loads the buffer (holding). Releasing F2 (or a view/track change) resets both
+	// flags, so the next F2 hold begins with a fresh grab.
+	bool seqF2Loaded_ = false;  // has this F2 hold grabbed/copied anything yet?
+	bool seqF2Holding_ = false; // holding content ready to drop (drives the non-empty alternation)
+	// Audibility tracking (mute/solo): notes are flushed when a track goes inaudible.
+	bool trackAudible_[FORM_NUM_TRACKS];
+	// The selected track's keyboard scale (null = chromatic — see FormMachineOmni).
+	MusicScales *kbScale();
+
 	void selectMidiFx(uint8_t mfxIndex, bool dispMsg);
 
-	// uint8_t mfxIndex_ = 0;
-
+	// No-op preset hooks: the shared presetManager save/load path expects these callbacks, but
+	// FORM has no drum-kit concept, so they intentionally do nothing (see the .cpp).
 	void saveKit(uint8_t saveIndex);
 	void loadKit(uint8_t loadIndex);
 

@@ -85,3 +85,18 @@ All messages: `F0 7D 00 00 <cmd> <payload...> F7`.
 The screen buffer is SSD1306 page layout (`byte = buf[x + (y/8)*128]`, bit
 `y%8`), stored 180deg rotated vs the physical panel — same orientation the
 mirror streams out, see `tools/remote_test.py::Omx._pack()`.
+
+## `0x54` - LED-state query
+
+A host can read the current RGB state of the 27 keypad LEDs (which the OLED
+mirror can't show — useful for automated UI/QA). Works in any mode.
+
+- host -> OMX: `F0 7D 00 00 54 F7` (no args) — request the LED state.
+- OMX -> host: two replies, `F0 7D 00 00 54 <part> <r g b>*  F7`:
+  - `part 0` = LEDs 0-12, `part 1` = LEDs 13-26 (LED 0 = AUX).
+  - each channel is 7-bit = the LED's logical (pre-brightness) `0xRRGGBB` value
+    from `strip.getPixelColor()`, downscaled `>> 1`; multiply by 2 to restore ~8-bit.
+  - split into two parts so each SysEx stays well under the TinyUSB TX FIFO.
+
+Host helper: `tools/omxctl.py` `leds()` / `led_name()` / `leds_ascii()`, and the
+`python omxctl.py leds` CLI.

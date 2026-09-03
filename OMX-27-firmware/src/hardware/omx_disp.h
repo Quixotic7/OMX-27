@@ -53,6 +53,9 @@ public:
 	// selected cell is boxed when navigating; when `editing` (holding a step) it is fully
 	// inverted to show the encoder is locked onto it.
 	void dispStepParams(const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel, bool editing);
+	// Like dispStepParams but a 5-cell grid (e.g. the track-aware SCALE page: Mode/Root/
+	// Scale/Lock/Group). dimmed[i] greys a cell whose param is inactive in the current mode.
+	void dispParams5(const char *labels[5], const char *values[5], const bool dimmed[5], uint8_t sel, bool editing);
 	// FORM Mix bar pages (LEVELS / CC): count bars; sel boxed, inverted while editing.
 	// FORM Mix bar pages. locked marks P-Locked slots; bigNum >= 0 draws a large number
 	// block on the right (the pot bank) selectable as cell index `count`.
@@ -65,7 +68,7 @@ public:
 	// Step F2 view: the current play-direction icon + its name on top, a bottom label below.
 	// Step view Note hold: a compact piano keyboard (chord = notesAsKeys[6]) on top, with the
 	// 16 step-marker cells beneath (filled = has content; `focus` step gets a tick). No text.
-	void dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus);
+	void dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus, bool stepStrip = true, int8_t pageNum = -1);
 	// Seq page-1 track overview: 8 track-state squares (selected underlined, muted = outline)
 	// top-left, left-justified track name, rate + 4 page icons + BPM on the right, and 16 step
 	// boxes on the bottom (stepState: 0 empty / 1 has-notes / 2 ghost). playhead -1 = none.
@@ -105,6 +108,8 @@ public:
 	// playAbsStep is the absolute playing step (0-63), or -1 when stopped. Does NOT clear the buffer
 	// (draws over the already-rendered keyboard view).
 	void drawPageBars(const uint8_t *pageLens, uint8_t enabledMask, int8_t playAbsStep);
+	// Large page icons (F1+encoder page-change popup): the overview glyphs at ~3x.
+	void dispPageIconsLarge(uint8_t enabledPages, uint8_t activePage);
 
 	// FORM Patterns view: a big "Pn" (TENFAT) on the left, the switch-style name top-right, an
 	// optional tag under it (">Pq" queued / "CHn" chain), and a bottom progress bar (0-1) showing

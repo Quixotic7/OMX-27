@@ -1,6 +1,6 @@
 // OMX-27 MIDI KEYBOARD / SEQUENCER
 
-//	v1.15.3 — First feature rev of Form Sequencer complete
+//	v1.15.4 — Solid pass of QOL improvements and bugfixes for Form Sequencer
 //	Last update: April 2026
 //
 //	Original concept and initial code by Steven Noreyko
@@ -628,12 +628,10 @@ void savePatterns(void)
 	}
 	// Serial.println((String)"nLocalAddress: " + nLocalAddress); // 5784
 
-#ifndef OMXMODESEQ
-	Serial.println("Saving FORM");
-	Serial.println((String)"nLocalAddress: " + nLocalAddress); 
-	nLocalAddress = omxModeForm.saveToDisk(nLocalAddress, storage);
-	Serial.println((String)"nLocalAddress: " + nLocalAddress); 
-#endif
+	// FORM is saved LAST — see the tail of this function. The other modes + MidiFX below
+	// therefore keep stable storage offsets, so a change in FORM's (large, evolving) save
+	// size can no longer shift or corrupt them. EEPROM_VERSION is bumped for the one-time
+	// re-init that retires the old FORM-first layout.
 
 #ifdef OMXMODEGRIDS
 	// Serial.println("Saving Grids");
@@ -678,6 +676,15 @@ void savePatterns(void)
 		// Serial.println((String)"nLocalAddress: " + nLocalAddress);
 	}
 	// Serial.println((String)"nLocalAddress: " + nLocalAddress); // 11585
+
+#ifndef OMXMODESEQ
+	// FORM saved LAST: its footprint is the largest and the most likely to change, so
+	// anchoring it at the tail keeps every mode + MidiFX above at fixed offsets.
+	Serial.println("Saving FORM");
+	Serial.println((String)"nLocalAddress: " + nLocalAddress);
+	nLocalAddress = omxModeForm.saveToDisk(nLocalAddress, storage);
+	Serial.println((String)"nLocalAddress: " + nLocalAddress);
+#endif
 
 	// Starting 11545
 	// MidiFX with nothing 11585
@@ -731,12 +738,7 @@ void loadPatterns(void)
 		return;
 	}
 
-#ifndef OMXMODESEQ
-	Serial.print("Loading FORM");
-	Serial.println((String) "nLocalAddress: " + nLocalAddress); // 5988
-	nLocalAddress = omxModeForm.loadFromDisk(nLocalAddress, storage);
-	Serial.println((String) "nLocalAddress: " + nLocalAddress); // 5988
-#endif
+	// FORM is loaded LAST to mirror savePatterns() — see the tail of this function.
 
 	Serial.print("Grids patterns - nLocalAddress: ");
 	Serial.println(nLocalAddress);
@@ -790,6 +792,14 @@ void loadPatterns(void)
 		// Serial.println((String)"nLocalAddress: " + nLocalAddress);
 	}
 	// Serial.println((String) "nLocalAddress: " + nLocalAddress); // 5988
+
+#ifndef OMXMODESEQ
+	// FORM loaded LAST to match savePatterns()'s tail placement.
+	Serial.print("Loading FORM");
+	Serial.println((String) "nLocalAddress: " + nLocalAddress);
+	nLocalAddress = omxModeForm.loadFromDisk(nLocalAddress, storage);
+	Serial.println((String) "nLocalAddress: " + nLocalAddress);
+#endif
 
 	// with 8 note chords, 10929
 

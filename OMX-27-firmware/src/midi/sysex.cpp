@@ -65,6 +65,16 @@ void SysEx::processIncomingSysex(const byte *sysexData, unsigned size)
 			nornsLink.setMirrorEnabled(sysexData[5] != 0);
 		}
 		break;
+	case NL_CMD_LED_STATE:
+		// 54 - host LED-state query: F0 7D 00 00 54 F7 -> device replies with two 0x54 parts.
+		// The query is EXACTLY 6 bytes; the replies reuse the same opcode (>=45 bytes), so a
+		// MIDI-thru/echo loop would bounce each reply back as a new query and storm the port
+		// without this size check.
+		if (size == 6)
+		{
+			nornsLink.sendLedState();
+		}
+		break;
 	case NL_CMD_REQ:
 		// 5E - norns missed some screen chunks, resend: F0 7D 00 00 5E <m0> <m1> <m2> F7
 		if (size > 7)

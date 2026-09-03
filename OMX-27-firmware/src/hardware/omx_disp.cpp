@@ -647,6 +647,34 @@ static void drawPageIcon(int x, int y, bool filled, uint16_t color)
 	}
 }
 
+// Large page icons for the F1+encoder page-change popup: the overview's folded-corner
+// page glyphs at ~3x — filled = enabled, outline = disabled, underline = the active page.
+void OmxDisp::dispPageIconsLarge(uint8_t enabledPages, uint8_t activePage)
+{
+	display.fillRect(0, 0, 128, 32, BLACK);
+	const int y = 2;
+	for (uint8_t p = 0; p < 4; p++)
+	{
+		int x = 14 + p * 28;
+		if (enabledPages & (1 << p))
+		{
+			display.fillRect(x, y, 12, 3, WHITE);      // top (to the fold)
+			display.fillRect(x, y + 3, 15, 3, WHITE);  // folded diagonal band
+			display.fillRect(x, y + 6, 16, 18, WHITE); // body
+		}
+		else
+		{
+			display.drawLine(x, y, x + 9, y, WHITE);            // top edge (to fold)
+			display.drawLine(x + 9, y, x + 15, y + 6, WHITE);   // folded diagonal
+			display.drawLine(x + 15, y + 6, x + 15, y + 23, WHITE); // right
+			display.drawLine(x, y + 23, x + 15, y + 23, WHITE); // bottom
+			display.drawLine(x, y, x, y + 23, WHITE);           // left
+		}
+		if (p == activePage)
+			display.fillRect(x, y + 27, 16, 2, WHITE); // active underline
+	}
+}
+
 void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
 							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
 							   uint8_t activePage, const uint8_t *stepState, int8_t playhead,
@@ -830,6 +858,62 @@ void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const
 		// Selection box when navigating (not editing).
 		if (i == sel && !editing)
 			display.drawRect(x + 1, 0, cw - 2, 31, WHITE);
+	}
+}
+
+// 5-cell param grid (like dispStepParams, one more column). 128px doesn't divide by 5,
+// so cells are 26/25/26/25/26 px. Same look as the 4-cell grid: a bright selection outline
+// when navigating, the value box inverting while editing, no dividers. A `dimmed` cell (its
+// param is inactive in the current mode) is knocked back with a checkerboard so it reads as
+// muted without a per-pixel grey the 1-bit panel can't do.
+void OmxDisp::dispParams5(const char *labels[5], const char *values[5], const bool dimmed[5], uint8_t sel, bool editing)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+
+	static const uint8_t bx[6] = {0, 26, 51, 77, 102, 128}; // column boundaries
+
+	for (uint8_t i = 0; i < 5; i++)
+	{
+		int x = bx[i], cw = bx[i + 1] - bx[i];
+		bool valInv = (i == sel) && editing;
+
+		// label (top band)
+		u8g2_display.setFont(FONT_LABELS);
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+		u8g2centerText(labels[i], x, 8, cw, 8);
+
+		// value (lower band); box inverts while this cell is being edited
+		if (valInv)
+		{
+			display.fillRect(x + 2, 13, cw - 4, 17, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		u8g2_display.setFont(FONT_TENFAT);
+		u8g2centerText(values[i], x, 27, cw, 8);
+
+		// muted cell (param not applicable in this mode): checkerboard the value band
+		if (dimmed[i] && !valInv)
+			for (int yy = 12; yy < 31; yy++)
+				for (int xx = x + 1; xx < bx[i + 1] - 1; xx++)
+					if ((xx + yy) & 1)
+						display.drawPixel(xx, yy, BLACK);
+
+		// selection outline when navigating (not editing)
+		if (i == sel && !editing)
+			display.drawRect(x, 0, cw, 31, WHITE);
 	}
 }
 
@@ -1096,7 +1180,7 @@ void OmxDisp::dispToolGenPage(const char *pLabels[], const char *pVals[], uint8_
 	drawStepRow(23, stepState, pageLen, playhead);
 }
 
-void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus)
+void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus, bool stepStrip, int8_t pageNum)
 {
 	if (isMessageActive())
 	{
@@ -1174,8 +1258,23 @@ void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepSta
 	if (!whiteNotes[15])
 		display.drawLine(112, wkHeight - 8, 112, wkHeight - 1, WHITE); // right wall
 
+	// Active page number: a single TENFAT digit pinned to the top-right corner.
+	if (pageNum >= 0)
+	{
+		u8g2_display.setFontMode(1);
+		u8g2_display.setFont(FONT_TENFAT);
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+		char pb[3];
+		snprintf(pb, sizeof(pb), "%d", (int)pageNum);
+		u8g2centerText(pb, 116, 10, 12, 8);
+	}
+
 	// --- 16 step-marker cells beneath the keyboard (shared renderer) ---
-	drawStepRow(23, stepState, pageLen, focus);
+	// (skippable: the Notes view swaps this band for the record/playhead page bars
+	// while record is armed)
+	if (stepStrip)
+		drawStepRow(23, stepState, pageLen, focus);
 }
 
 void OmxDisp::dispStepOverview(const char *modeName, const uint8_t *stepState, uint8_t pageLen, int8_t playhead, bool invertTitle)
@@ -1258,6 +1357,13 @@ void OmxDisp::dispNoteSlots(const char *slotNames[6], const char *header, uint8_
 
 void OmxDisp::dispTrackLength(const char *rateStr, uint8_t activeCount)
 {
+	// Standard message gate (this renderer repaints every frame while F3 is held, and
+	// without the gate it hid the F3+encoder "BPM nnn" popup underneath itself).
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
 	display.fillRect(0, 0, 128, 32, BLACK);
 
 	// Rate value, centred on top (chunky pixel font).

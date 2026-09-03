@@ -21,6 +21,7 @@ static const uint8_t NL_CMD_FRAME = 0x50;     // chunk: [chunk(0-15)] [fid7] [ck
 static const uint8_t NL_CMD_INPUT = 0x51;     // NT input event (phase 2)
 static const uint8_t NL_CMD_STATUS = 0x52;    // status: [0x01]=user input activity
 static const uint8_t NL_CMD_FRAME_END = 0x53; // pass complete: [fid7] [mask x3] -> norns presents atomically
+static const uint8_t NL_CMD_LED_STATE = 0x54; // reply to a host LED-state query: [part 0/1] [r g b ... 7-bit per LED]
 
 // norns -> OMX
 static const uint8_t NL_CMD_MIRROR_EN = 0x58; // [0/1] enable screen-mirror streaming
@@ -48,6 +49,11 @@ public:
 	// norns asked for these chunks again (it missed/rejected them); mask 0 =
 	// it missed the FRAME_END, resend that.
 	void requestChunks(uint16_t mask);
+
+	// Reply to a host LED-state query (NL_CMD_LED_STATE 0x54): dump all 27 keypad LEDs'
+	// current RGB (each channel 7-bit) in two SysEx parts (LEDs 0-12, then 13-26). Lets a
+	// host verify the RGB LED state the OLED mirror can't show.
+	void sendLedState();
 
 	// Signal user input to norns (for the "auto" mirror mode). Rate-limited.
 	void markActivity();

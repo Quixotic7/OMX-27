@@ -39,6 +39,14 @@ bool recReplace = false; // false = overdub (add to step), true = replace (clear
 // to FORM's AuxMacroManager instance; other modes keep the macro's own behavior.)
 bool macroConsumesPots = false;
 
+// Note-entry behavior for the step editors: false = Pressed (a fresh press replaces the
+// step's notes), true = Toggle (each press adds/removes that note — drum programming).
+bool noteEntryToggle = false;
+
+// True while any track is soloed — non-soloed tracks are inaudible. Recomputed by the
+// shell every loop; machines consult it in their audibility check.
+bool anySolo = false;
+
 MusicScales *musicScale;
 
 uint8_t shortcutMode;

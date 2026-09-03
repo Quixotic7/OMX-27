@@ -21,6 +21,9 @@ namespace FormOmni
         int8_t getCurrentTranspose(TransposePattern *tPat);
         int8_t getTransposeAtStep(uint8_t step, TransposePattern *tPat);
 
+        // Current playback position in the transpose pattern (for the playhead display).
+        uint8_t position(TransposePattern *tPat) { return transpPos_ % (tPat->len + 1); }
+
         void onUIEnabled();
 
         bool getEncoderSelect();
@@ -54,6 +57,7 @@ namespace FormOmni
         void copyStep(uint8_t keyIndex, TransposePattern *tPat);
         void cutStep(uint8_t keyIndex, TransposePattern *tPat);
         void pasteStep(uint8_t keyIndex, TransposePattern *tPat);
-        void fullRandomize(TransposePattern *tPat);
+        // randomizeLen true (key 9) also picks a new pattern length; false (key 8) keeps it.
+        void fullRandomize(TransposePattern *tPat, bool randomizeLen = true);
     };
 }

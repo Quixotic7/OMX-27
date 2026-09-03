@@ -12,7 +12,7 @@ namespace FormOmni
 {
     // Bump whenever the OmniSeq layout changes so old saves are skipped rather than
     // blitted into a mismatched struct. Also stamps the V3 pattern-bank file.
-    constexpr uint8_t kOmniSaveVersion = 8; // v8: default MIDI ch 1-8 + default velocity 100
+    constexpr uint8_t kOmniSaveVersion = 9; // v9: per-track scale (mode/root/pattern) moved into OmniSeq
 
 
     // FORM's one (and only) track engine — the polyphonic step sequencer. The old
@@ -36,6 +36,12 @@ namespace FormOmni
         void setMute(bool isMuted);
         void setSolo(bool isSoloed);
 	    bool didTriggerThisStep();
+
+        // Audibility: muted tracks — and, while any track is soloed, non-soloed tracks —
+        // don't send notes (they keep advancing so unmute/unsolo re-enters in time).
+        bool isAudible() { return seq_.mute == 0 && (!omxFormGlobal.anySolo || seq_.solo == 1); }
+        // Send note-offs for every note this track currently has sounding (mute/solo/kill).
+        void flushNotes();
 
 
         // Encoder turn: dispatch to select (navigate) or edit per getEncoderSelect().
@@ -195,9 +201,22 @@ namespace FormOmni
         {
             if (note < 0 || note > 127) return;
             Step *s = &getTrack()->steps[key16toStep(key16)];
+            if (seq_.monoPhonic) // mono tracks hold one note per step: replace, don't add
+            {
+                for (uint8_t i = 0; i < 6; i++) s->notes[i] = -1;
+                s->notes[0] = note;
+                return;
+            }
             for (uint8_t i = 0; i < 6; i++) if (s->notes[i] == note) return; // dedup
             for (uint8_t i = 0; i < 6; i++) if (s->notes[i] < 0) { s->notes[i] = note; return; }
         }
+        // Toggle-entry: remove one note from a step (keeps the rest).
+        void stepRemoveNote(uint8_t key16, int8_t note)
+        {
+            Step *s = &getTrack()->steps[key16toStep(key16)];
+            for (uint8_t i = 0; i < 6; i++) if (s->notes[i] == note) s->notes[i] = -1;
+        }
+        bool isMono() { return seq_.monoPhonic == 1; }
         void stepSetNotes(uint8_t key16, const int8_t src[6])
         {
             Step *s = &getTrack()->steps[key16toStep(key16)];
@@ -325,6 +344,83 @@ namespace FormOmni
                 t->steps[s].setToInit();
         }
 
+        // ---- Per-track scale mode ----
+        // 0 GLOBAL: the track follows the global scale settings (default).
+        // 1 CHROMATIC: the track ignores scales entirely (keyboard chromatic, transpose in
+        //   semitones, no scale colours).
+        // 2 LOCAL: the track has its own root + scale (localScale_), independent of global.
+        // Persisted inside OmniSeq since v9: saves on every board through the normal
+        // kOmniSaveVersion gate and travels with the pattern (per-pattern scale).
+        enum TrackScaleMode { TRACKSCALE_GLOBAL = 0, TRACKSCALE_CHROMATIC, TRACKSCALE_LOCAL, TRACKSCALE_COUNT };
+        uint8_t getScaleMode() { return seq_.scaleMode; }
+        uint8_t getLocalRoot() { return seq_.localRoot; }
+        int8_t getLocalPattern() { return seq_.localPattern; }
+        void editScaleMode(int amt);   // cycles GLOBAL/CHROMATIC/LOCAL (pops the name)
+        void editScaleRoot(int amt);   // LOCAL: local root; else the global root
+        void editScalePattern(int amt);// LOCAL: local pattern; else the global pattern
+        // The single, modular renderer for the 5-cell scale page (MODE/ROOT/SCALE/LOCK/GROUP).
+        // Every view delegates here (Seq/MI/Notes via the shell, plus the Mix machine menu) so
+        // the grid, values, checkbox glyphs and checkerboard-muting stay identical everywhere.
+        void drawScalePage5(uint8_t sel, bool editing);
+        // Track-aware ROOT/SCALE display values ("--" on a chromatic track, the track's own
+        // values when LOCAL, else the global scale). Shared by drawScalePage5 and the
+        // SCALE SNAP tool page so a display can never disagree with what the edits touch.
+        void scaleValueStrings(String &rootV, String &patV);
+        // Effective scale for interval math / note palettes (never null; chromatic tracks
+        // get the local instance calculated with pattern -1 = chromatic degrees).
+        MusicScales *paletteScale()
+        {
+            return seq_.scaleMode == TRACKSCALE_GLOBAL ? omxFormGlobal.musicScale : &localScale_;
+        }
+        // Effective scale for the live keyboard (null = plain chromatic mapping, no lock/group).
+        // Gates on scaleIsChromatic(), not just the mode: a LOCAL track whose scale is dialed
+        // to "--" holds a never-calculated MusicScales — handing that to getNoteNumber with
+        // global LOCK/GROUP set filtered EVERY key to -1 (a completely dead keyboard).
+        MusicScales *keyboardScale()
+        {
+            if (scaleIsChromatic()) return nullptr;
+            return paletteScale();
+        }
+        // True when this track plays chromatically (mode chromatic, or its scale is off).
+        bool scaleIsChromatic()
+        {
+            if (seq_.scaleMode == TRACKSCALE_CHROMATIC) return true;
+            if (seq_.scaleMode == TRACKSCALE_LOCAL) return seq_.localPattern < 0;
+            return scaleConfig.scalePattern < 0;
+        }
+
+        // Tools PAGE clipboard: read / write / clear one 16-step page (steps + page length).
+        // The buffer itself lives in the shell so it can move a page between pages or tracks.
+        void copyPageOut(uint8_t page, Step dst[16], uint8_t &lenOut)
+        {
+            Track *t = getTrack();
+            uint8_t p = page > 3 ? 3 : page;
+            for (uint8_t i = 0; i < 16; i++) dst[i].CopyFrom(&t->steps[p * 16 + i]);
+            lenOut = t->pageLen[p];
+        }
+        void pastePageIn(uint8_t page, Step src[16], uint8_t len)
+        {
+            if (page >= 4) return;
+            Track *t = getTrack();
+            for (uint8_t i = 0; i < 16; i++) t->steps[page * 16 + i].CopyFrom(&src[i]);
+            t->pageLen[page] = len < 1 ? 1 : (len > 16 ? 16 : len);
+            t->enabledPages |= (1 << page);
+            t->syncLen();
+            onTrackLengthChanged();
+        }
+        void clearPageSteps(uint8_t page)
+        {
+            if (page >= 4) return;
+            Track *t = getTrack();
+            for (uint8_t i = 0; i < 16; i++) t->steps[page * 16 + i].setToInit();
+        }
+
+        // Live recording: the loop position that fired most recently (for nearest-step resolve).
+        uint16_t lastPlayedPos() { return lastTriggeredStepIndex_; }
+
+        // Transpose view: the pattern position currently applied (playhead).
+        uint8_t transposePos() { return transpPat_.position(&seq_.transposePattern); }
+
         // v2 pattern data layer: snapshot / restore this track's sequencer data.
         const OmniSeq &getSeq() const { return seq_; }
         // Mix track-copy "Copy Pat": replace only the pattern (steps/pages/play mode/step
@@ -336,6 +432,7 @@ namespace FormOmni
             seqDynamic_.Reset();
             ratchetDivs_ = 0;
             ratchetStepIdx_ = -1;
+            onRateChanged(); // the copied pattern's timing must not run on stale tick/micros
         }
         void setSeq(const OmniSeq &s)
         {
@@ -344,6 +441,9 @@ namespace FormOmni
             seqDynamic_.Reset();  // loaded pattern starts from a clean playback state
             ratchetDivs_ = 0;     // and no ratchet carried over from the old pattern
             ratchetStepIdx_ = -1;
+            onRateChanged();      // pattern switches used to leave ticksPerStep_/stepMicros_ at the
+                                  // OLD pattern's rate — wrong step rate AND note lengths until the
+                                  // rate was next edited.
         }
 
     private:
@@ -374,6 +474,12 @@ namespace FormOmni
         int8_t auditionNotes_[16][6];
 
         uint8_t activePage_ = 0;
+
+        // Per-track scale state lives in seq_ (scaleMode/localRoot/localPattern, saved with
+        // the pattern since v9). localScale_ is the derived MusicScales cache, recalculated
+        // whenever the scale fields change (edits) or seq_ is replaced (sanitizeSeq).
+        MusicScales localScale_;
+        void recalcLocalScale();
 
         OmniTransposePattern transpPat_;
 

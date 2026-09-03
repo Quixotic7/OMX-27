@@ -63,13 +63,12 @@ namespace FormOmni
         tPat->pat[keyIndex] = transpCopyBuffer_;
     }
 
-    void OmniTransposePattern::fullRandomize(TransposePattern *tPat)
+    void OmniTransposePattern::fullRandomize(TransposePattern *tPat, bool randomizeLen)
     {
-        for(uint8_t i = 0; i < 16; i++)
-        {
+        for (uint8_t i = 0; i < 16; i++)
             tPat->pat[i] = random(-12, 12);
-            tPat->len = random(1, 15);
-        }
+        if (randomizeLen)
+            tPat->len = random(1, 15); // key 9 also rolls a new length; key 8 keeps the current one
     }
 
     bool OmniTransposePattern::getEncoderSelect()
@@ -116,7 +115,9 @@ namespace FormOmni
             auto randShortColor = (patShortcut_ == TPATSHORT_RAND && blinkState) ? LEDOFF : FUNKONE;
             strip.setPixelColor(3, randShortColor);
 
-            // Full Randomize
+            // Randomize values only (keeps length) — dimmer/warmer than full randomize
+            strip.setPixelColor(8, DKORANGE);
+            // Full Randomize (values + length)
             strip.setPixelColor(9, ORANGE);
             // Clear pattern
             strip.setPixelColor(10, RED);
@@ -184,6 +185,13 @@ namespace FormOmni
                 }
             }
         }
+
+        // Playhead: the transpose-pattern position currently applied, like the step
+        // editors' green playhead. Overrides the value colours while playing.
+        if (omxFormGlobal.isPlaying)
+        {
+            strip.setPixelColor(11 + (transpPos_ % (tPat->len + 1)), GREEN);
+        }
     }
 
     void OmniTransposePattern::onKeyUpdate(OMXKeypadEvent e, ParamManager *params, TransposePattern *tPat)
@@ -208,13 +216,22 @@ namespace FormOmni
                 {
                     patShortcut_ = TPATSHORT_RAND;
                 }
-                else if (thisKey == 9)
+                else if (e.down() && thisKey == 8)
                 {
-                    fullRandomize(tPat);
+                    // Randomize the values but keep the current length.
+                    fullRandomize(tPat, false);
+                    headerMessage_ = "Random Values";
+                    showMessage();
+                }
+                else if (e.down() && thisKey == 9)
+                {
+                    // Guard on down: without it this fired on BOTH press and release,
+                    // randomizing the pattern twice per tap. Also rolls a new length.
+                    fullRandomize(tPat, true);
                     headerMessage_ = "Everything is RAND";
                     showMessage();
                 }
-                else if (thisKey == 10)
+                else if (e.down() && thisKey == 10)
                 {
                     tPat->Reinit();
                     headerMessage_ = "Clear Pat";
