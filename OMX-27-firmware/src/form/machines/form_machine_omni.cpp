@@ -32,7 +32,7 @@ namespace FormOmni
         OMNIPAGE_SEQTPOSE,   // Transpose, Mode, Apply TPat
         OMNIPAGE_SEQMIDI,    // Chan, Mono, SendMidi, SendCV
         OMNIPAGE_TIMINGS,    // BPM, Rate, Swing, Swing Div
-        OMNIPAGE_SCALE,      // Root, Scale, Lock, Group
+        OMNIPAGE_SCALE,      // Mode, Root, Scale, Lock, Group (5-cell)
         OMNIPAGE_POTS,       // click to open the shared Pot Config submode (Mix + Seq menus)
         OMNIPAGE_COUNT,
         OMNIPAGE_TPAT = OMNIPAGE_COUNT // Transpose-view render id (not in trackParams_)
@@ -93,11 +93,11 @@ namespace FormOmni
 
         trackParams_.addPage(7);  // OMNIPAGE_STEPNOTES
         trackParams_.addPage(2);  // OMNIPAGE_TRACK: Length, MidiFX
-        trackParams_.addPage(4);  // OMNIPAGE_TRACKMODES: Triplet, Direction, Mode, Scale mode
+        trackParams_.addPage(3);  // OMNIPAGE_TRACKMODES: Triplet, Direction, Mode (scale mode moved to SCALE)
         trackParams_.addPage(3);  // OMNIPAGE_SEQTPOSE: Transpose, Mode, Apply TPat
         trackParams_.addPage(4);  // OMNIPAGE_SEQMIDI: Chan, Mono, SendMidi, SendCV
         trackParams_.addPage(4);  // OMNIPAGE_TIMINGS: BPM, Rate, Swing, Swing Div
-        trackParams_.addPage(4);  // OMNIPAGE_SCALE: Root, Scale, Lock, Group (track-aware)
+        trackParams_.addPage(5);  // OMNIPAGE_SCALE: Mode, Root, Scale, Lock, Group (track-aware, 5-cell)
         trackParams_.addPage(4);  // OMNIPAGE_POTS: ACTIONS (Quant / Clear / Pots / Note entry)
 
         tPatParams_.addPage(17);
@@ -2676,10 +2676,7 @@ namespace FormOmni
                 // The cell only fits a 2-char code — the full name shows while turning (§4 rule).
                 omxDisp.displayMessage(kTrackModeMsg[track->playMode]);
             }
-            else if (param == 3)
-            {
-                editScaleMode(amtSlow); // GLOBAL / CHROMATIC / LOCAL (name pops)
-            }
+            // (scale mode now lives on the 5-cell OMNIPAGE_SCALE page, param 0)
         }
         break;
         // Apply Transpose Pat, Transpose, Transpose Mode (menu-map PG20 order)
@@ -2755,24 +2752,28 @@ namespace FormOmni
         break;
         case OMNIPAGE_SCALE:
         {
-            // ROOT/SCALE are track-aware: on a LOCAL-scale track they edit the track's own
-            // root/pattern; otherwise the global scale (with the lock/group preservation).
+            // 5-cell: MODE / ROOT / SCALE / LOCK / GROUP. MODE is the per-track scale mode;
+            // ROOT/SCALE are track-aware (edit the track's own scale when LOCAL, else global).
             if (param == 0)
             {
-                editScaleRoot(amtSlow);
+                editScaleMode(amtSlow); // GLOBAL / CHROMATIC / LOCAL (name pops)
             }
             if (param == 1)
             {
-                editScalePattern(amtSlow);
+                editScaleRoot(amtSlow);
             }
             if (param == 2)
+            {
+                editScalePattern(amtSlow);
+            }
+            if (param == 3)
             {
                 if (scaleConfig.scalePattern >= 0)
                 {
                     scaleConfig.lockScale = constrain(scaleConfig.lockScale + amtSlow, 0, 1);
                 }
             }
-            if (param == 3)
+            if (param == 4)
             {
                 if (scaleConfig.scalePattern >= 0)
                 {
@@ -2852,13 +2853,11 @@ namespace FormOmni
         case OMNIPAGE_TRACKMODES:
         {
             auto track = getTrack();
-            static const char *kScaleModeShort[3] = {"GL", "CH", "LO"};
-            const char *labels[4] = {"TRIP", "DIR", "MODE", "SCAL"};
+            const char *labels[4] = {"TRIP", "DIR", "MODE", ""};
             String vals[4];
             vals[0] = track->tripletMode ? "On" : "--";
             vals[1] = track->playDirection == TRACKDIRECTION_FORWARD ? ">>" : "<<";
             vals[2] = kTrackModeShort[track->playMode];
-            vals[3] = kScaleModeShort[scaleMode_ < 3 ? scaleMode_ : 0];
             dispParamGrid(labels, vals, selParam);
         }
             return false;
@@ -2897,26 +2896,36 @@ namespace FormOmni
             return false;
         case OMNIPAGE_SCALE:
         {
-            const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
-            String vals[4];
+            // 5-cell track-aware scale page: MODE / ROOT / SCALE / LOCK / GROUP. Inactive cells
+            // are checkerboard-muted (ROOT/SCALE on a chromatic track; LOCK/GROUP when no scale).
+            static const char *kScaleModeShort[3] = {"GL", "CH", "LO"};
+            const char *labels[5] = {"MODE", "ROOT", "SCALE", "LOCK", "GROUP"};
+            String vals[5];
+            vals[0] = kScaleModeShort[scaleMode_ < 3 ? scaleMode_ : 0];
             if (scaleMode_ == TRACKSCALE_CHROMATIC)
             {
-                vals[0] = "--"; // chromatic track: no scale applies
-                vals[1] = "--";
+                vals[1] = "--"; // chromatic track: no scale applies
+                vals[2] = "--";
             }
             else if (scaleMode_ == TRACKSCALE_LOCAL)
             {
-                vals[0] = MusicScales::getNoteName(localRoot_);
-                vals[1] = localPattern_ < 0 ? "--" : String((int)localPattern_);
+                vals[1] = MusicScales::getNoteName(localRoot_);
+                vals[2] = localPattern_ < 0 ? "--" : String((int)localPattern_);
             }
             else
             {
-                vals[0] = MusicScales::getNoteName(scaleConfig.scaleRoot);
-                vals[1] = scaleConfig.scalePattern < 0 ? "--" : String(scaleConfig.scalePattern);
+                vals[1] = MusicScales::getNoteName(scaleConfig.scaleRoot);
+                vals[2] = scaleConfig.scalePattern < 0 ? "--" : String(scaleConfig.scalePattern);
             }
-            vals[2] = scaleConfig.lockScale ? "On" : "--";
-            vals[3] = scaleConfig.group16 ? "On" : "--";
-            dispParamGrid(labels, vals, selParam);
+            vals[3] = scaleConfig.lockScale ? "On" : "--";
+            vals[4] = scaleConfig.group16 ? "On" : "--";
+            const char *values[5] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str(), vals[4].c_str()};
+            bool chromatic = scaleIsChromatic();
+            const bool dimmed[5] = {false,
+                                    scaleMode_ == TRACKSCALE_CHROMATIC,
+                                    scaleMode_ == TRACKSCALE_CHROMATIC,
+                                    chromatic, chromatic};
+            omxDisp.dispParams5(labels, values, dimmed, selParam, !getEncoderSelect());
         }
             return false;
         case OMNIPAGE_POTS:

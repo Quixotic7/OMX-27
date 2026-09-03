@@ -641,9 +641,9 @@ bool OmxModeForm::onEncoderMI(int dir)
 	}
 	if (getEncoderSelect())
 	{
-		// Select mode: navigate the cursor. 0 keyboard; 1-4 SCALE; 5-8 MIDI (chan/vel/oct/macro);
-		// 9-15 CC page (5 slots + bank + CC-editor title); 16-19 QUANT/CLEAR/POTS/MPOT.
-		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 19);
+		// Select mode: navigate the cursor. 0 keyboard; 1-5 SCALE (mode/root/scale/lock/group);
+		// 6-8 MIDI; 9-10 MACROS; 11-13 ACTIONS; 14-19 CC slots+bank; 20 CC title.
+		miCursor_ = (uint8_t)constrain((int)miCursor_ + dir, 0, 20);
 		omxDisp.setDirty();
 		return true;
 	}
@@ -658,27 +658,29 @@ bool OmxModeForm::onEncoderMI(int dir)
 		omxLeds.setDirty();
 		return true;
 	}
-	// Cursor map (menu-map §4): 0 keys · 1-4 SCALE · 5-7 MIDI · 8-9 MACROS ·
-	// 10-12 ACTIONS · 13-18 CC · 19 CC title.
+	// Cursor map (menu-map §4): 0 keys · 1-5 SCALE (mode/root/scale/lock/group) · 6-8 MIDI ·
+	// 9-10 MACROS · 11-13 ACTIONS · 14-19 CC · 20 CC title.
 	auto omni = getSelectedMachine();
-	if (miCursor_ >= 1 && miCursor_ <= 4) // scale params
-		notesEditScaleParam(miCursor_ - 1, dir);
-	else if (miCursor_ == 5) // channel
+	if (miCursor_ == 1) // scale mode (GLOBAL / CHROMATIC / LOCAL)
+		omni->editScaleMode(dir);
+	else if (miCursor_ >= 2 && miCursor_ <= 5) // scale params: root/scale/lock/group
+		notesEditScaleParam(miCursor_ - 2, dir);
+	else if (miCursor_ == 6) // channel
 		omni->setChannel((uint8_t)constrain((int)omni->getChannel() + dir, 0, 15));
-	else if (miCursor_ == 6) // default velocity (also governs AUX-macro play, see doNoteOn)
+	else if (miCursor_ == 7) // default velocity (also governs AUX-macro play, see doNoteOn)
 		omni->editParamDefault(0, dir);
-	else if (miCursor_ == 7) // octave
+	else if (miCursor_ == 8) // octave
 		midiSettings.octave = constrain(midiSettings.octave + dir, -5, 4);
-	else if (miCursor_ == 8) // AUX macro select: Off / M8 / NRN / DEL
+	else if (miCursor_ == 9) // AUX macro select: Off / M8 / NRN / DEL
 		midiMacroConfig.midiMacro = constrain(midiMacroConfig.midiMacro + dir, 0, nummacromodes);
-	else if (miCursor_ == 9) // MPOT: may a selected macro take the pots in FORM? (default no)
+	else if (miCursor_ == 10) // MPOT: may a selected macro take the pots in FORM? (default no)
 	{
 		omxFormGlobal.macroConsumesPots = (dir > 0);
 		auxMacroManager_.setMacrosConsumePots(omxFormGlobal.macroConsumesPots);
 	}
-	else if (miCursor_ >= 13 && miCursor_ <= 18) // CC page (slots + bank), shared renderer
-		editCCPage(miCursor_ - 13, dir);
-	// 10-12 = action cells (click to fire); 19 = the CC title (click opens the editor)
+	else if (miCursor_ >= 14 && miCursor_ <= 19) // CC page (slots + bank), shared renderer
+		editCCPage(miCursor_ - 14, dir);
+	// 11-13 = action cells (click to fire); 20 = the CC title (click opens the editor)
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 	return true;
@@ -704,18 +706,18 @@ bool OmxModeForm::onEncoderButtonMI()
 		closeClearSub();
 		return true;
 	}
-	if (miCursor_ == 19) // the selectable "CC" title: open the CC-number editor for this bank
+	if (miCursor_ == 20) // the selectable "CC" title: open the CC-number editor for this bank
 	{
 		openPotConfig();
 		return true;
 	}
-	if (miCursor_ == 10)
+	if (miCursor_ == 11)
 	{
 		clearReturnView_ = -1; // opened from the MI menu -> stay in MI on exit
 		quantEnterSubmenu();
 		return true;
 	}
-	if (miCursor_ == 11)
+	if (miCursor_ == 12)
 	{
 		miClearSub_ = true; // open the Yes/No confirm submenu (default NO)
 		clearSel_ = 0;
@@ -723,7 +725,7 @@ bool OmxModeForm::onEncoderButtonMI()
 		omxDisp.setDirty();
 		return true;
 	}
-	if (miCursor_ == 12)
+	if (miCursor_ == 13)
 	{
 		openPotConfig();
 		return true;
@@ -737,23 +739,16 @@ void OmxModeForm::onDisplayMI()
 {
 	auto omni = getSelectedMachine();
 
-	// Scale page (cursor 1-4): Root / Scale / Lock / Group.
-	if (miCursor_ >= 1 && miCursor_ <= 4)
+	// Scale page (cursor 1-5): the shared 5-cell Mode / Root / Scale / Lock / Group grid.
+	if (miCursor_ >= 1 && miCursor_ <= 5)
 	{
-		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
-		String vals[4];
-		scaleRootPatternVals(vals[0], vals[1]); // track-aware (local / chromatic / global)
-		vals[2] = scaleConfig.lockScale ? "Ĉ" : "Ć";
-		vals[3] = scaleConfig.group16 ? "Ĉ" : "Ć";
-		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
-		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 1, !getEncoderSelect());
+		dispScalePage5(miCursor_ - 1, !getEncoderSelect());
 		return;
 	}
 
-	// MIDI page (cursor 5-7): Channel / Velocity / Octave. Velocity is the per-track
+	// MIDI page (cursor 6-8): Channel / Velocity / Octave. Velocity is the per-track
 	// default that also governs AUX-macro play.
-	if (miCursor_ >= 5 && miCursor_ <= 7)
+	if (miCursor_ >= 6 && miCursor_ <= 8)
 	{
 		const char *labels[4] = {"CHAN", "VEL", "OCT", ""};
 		String vals[4];
@@ -762,13 +757,13 @@ void OmxModeForm::onDisplayMI()
 		vals[2] = String((int)midiSettings.octave);
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), ""};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 5, !getEncoderSelect());
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 6, !getEncoderSelect());
 		return;
 	}
 
-	// MACROS page (cursor 8-9): AUX macro select (Off/M8/NRN/DEL) + MPOT (may the macro
+	// MACROS page (cursor 9-10): AUX macro select (Off/M8/NRN/DEL) + MPOT (may the macro
 	// take the pots in FORM).
-	if (miCursor_ >= 8 && miCursor_ <= 9)
+	if (miCursor_ >= 9 && miCursor_ <= 10)
 	{
 		const char *labels[4] = {"MCRO", "MPOT", "", ""};
 		String vals[4];
@@ -776,15 +771,15 @@ void OmxModeForm::onDisplayMI()
 		vals[1] = omxFormGlobal.macroConsumesPots ? "Ĉ" : "Ć";
 		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), "", ""};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 8, !getEncoderSelect());
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 9, !getEncoderSelect());
 		return;
 	}
 
-	// CC page (cursor 13-19): the shared renderer. No P-Locks here — MI's low row plays
+	// CC page (cursor 14-20): the shared renderer. No P-Locks here — MI's low row plays
 	// the keyboard, not steps.
-	if (miCursor_ >= 13 && miCursor_ <= 19)
+	if (miCursor_ >= 14 && miCursor_ <= 20)
 	{
-		onDisplayCCPage(miCursor_ - 13, 0, -1);
+		onDisplayCCPage(miCursor_ - 14, 0, -1);
 		return;
 	}
 
@@ -801,14 +796,14 @@ void OmxModeForm::onDisplayMI()
 		omxDisp.dispOptionCombo("Clear Track?", kYesNo, 2, clearSel_, true);
 		return;
 	}
-	// Actions page (cursor 10-12): QUANTIZE + CLEAR + POTS — click to fire/open
+	// Actions page (cursor 11-13): QUANTIZE + CLEAR + POTS — click to fire/open
 	// (@ = opens a submenu, µ = destructive).
-	if (miCursor_ >= 10 && miCursor_ <= 12)
+	if (miCursor_ >= 11 && miCursor_ <= 13)
 	{
 		const char *labels[4] = {"QUANT", "CLEAR", "POTS", ""};
 		const char *values[4] = {"@", "µ", "@", ""};
 		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 10, false);
+		omxDisp.dispStepParams(labels, values, locked, miCursor_ - 11, false);
 		return;
 	}
 
@@ -1114,12 +1109,12 @@ bool OmxModeForm::onEncoderNotes(int dir)
 	if (getEncoderSelect())
 	{
 		uint8_t prev = notesCursor_;
-		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 23); // 20-23 = ACTIONS
+		notesCursor_ = (uint8_t)constrain((int)notesCursor_ + dir, 0, 24); // 21-24 = ACTIONS
 		// Group messages (menu map): STEP LOCKS = the step-param grids, ACTIONS at the end.
 		// (The notes/scale groups pop nothing.)
-		if (notesCursor_ >= 20 && prev < 20)
+		if (notesCursor_ >= 21 && prev < 21)
 			omxDisp.displayMessage("ACTIONS");
-		else if (notesCursor_ >= 12 && notesCursor_ < 20 && (prev < 12 || prev >= 20))
+		else if (notesCursor_ >= 13 && notesCursor_ < 21 && (prev < 13 || prev >= 21))
 			omxDisp.displayMessage("STEP LOCKS");
 		omxDisp.setDirty();
 		omxLeds.setDirty();
@@ -1138,18 +1133,20 @@ bool OmxModeForm::onEncoderNotes(int dir)
 	}
 	else if (notesCursor_ == 7) // the names/numbers switch
 		omxFormGlobal.useNoteNumbers = (dir > 0);
-	else if (notesCursor_ <= 11) // scale params
-		notesEditScaleParam(notesCursor_ - 8, dir);
-	else if (notesCursor_ <= 19) // step params (pid 0-7)
-		omni->editStepParam(notesSelStep_, notesCursor_ - 12, dir);
-	else if (notesCursor_ == 23) // NTRY: note-entry behavior (Pressed / Toggle)
+	else if (notesCursor_ == 8) // scale mode (GLOBAL / CHROMATIC / LOCAL)
+		omni->editScaleMode(dir);
+	else if (notesCursor_ <= 12) // scale params: root/scale/lock/group
+		notesEditScaleParam(notesCursor_ - 9, dir);
+	else if (notesCursor_ <= 20) // step params (pid 0-7)
+		omni->editStepParam(notesSelStep_, notesCursor_ - 13, dir);
+	else if (notesCursor_ == 24) // NTRY: note-entry behavior (Pressed / Toggle)
 	{
 		bool prev = omxFormGlobal.noteEntryToggle;
 		omxFormGlobal.noteEntryToggle = dir > 0;
 		if (prev != omxFormGlobal.noteEntryToggle)
 			omxDisp.displayMessage(omxFormGlobal.noteEntryToggle ? "TOGGLE" : "PRESSED");
 	}
-	// cursors 20-22 = ACTIONS (Quant / Clear / Pots — no turn edit; fire on click)
+	// cursors 21-23 = ACTIONS (Quant / Clear / Pots — no turn edit; fire on click)
 	omxDisp.setDirty();
 	omxLeds.setDirty();
 	return true;
@@ -1158,13 +1155,13 @@ bool OmxModeForm::onEncoderNotes(int dir)
 // Encoder click in the Notes view: the ACTIONS cells fire; otherwise toggle select/edit.
 bool OmxModeForm::onEncoderButtonNotes()
 {
-	if (notesCursor_ == 20)
+	if (notesCursor_ == 21)
 	{
 		submenuSetReturn(); // the submenu renders in MI; come back here after
 		quantEnterSubmenu();
 		return true;
 	}
-	if (notesCursor_ == 21)
+	if (notesCursor_ == 22)
 	{
 		submenuSetReturn();
 		miClearSub_ = true;
@@ -1173,12 +1170,12 @@ bool OmxModeForm::onEncoderButtonNotes()
 		omxLeds.setDirty();
 		return true;
 	}
-	if (notesCursor_ == 22)
+	if (notesCursor_ == 23)
 	{
 		openPotConfig();
 		return true;
 	}
-	// cursor 23 (NTRY) is a normal value param: click toggles select/edit like any other.
+	// cursor 24 (NTRY) is a normal value param: click toggles select/edit like any other.
 	omxFormGlobal.encoderSelect = !omxFormGlobal.encoderSelect;
 	omxDisp.setDirty();
 	return true;
@@ -1380,8 +1377,8 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 		{
 			if (e.quickClicked())
 				omni->stepCut(notesSelStep_);
-			else if (notesCursor_ >= 12 && notesCursor_ <= 19)
-				omni->clearStepParamLock(notesSelStep_, notesCursor_ - 12);
+			else if (notesCursor_ >= 13 && notesCursor_ <= 20)
+				omni->clearStepParamLock(notesSelStep_, notesCursor_ - 13);
 			omxDisp.setDirty();
 			omxLeds.setDirty();
 		}
@@ -1603,26 +1600,17 @@ void OmxModeForm::onDisplayNotes()
 		return;
 	}
 
-	// Scale page (cursor 8-11): Root / Scale / Lock / Group.
-	if (notesCursor_ >= 8 && notesCursor_ <= 11)
+	// Scale page (cursor 8-12): the shared 5-cell Mode / Root / Scale / Lock / Group grid.
+	if (notesCursor_ >= 8 && notesCursor_ <= 12)
 	{
-		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
-		String vals[4];
-		// §4 label rules: SCALE shows a number (the name pops as a message on change);
-		// LOCK/GROUP show On/-- — full words overflow the cell.
-		scaleRootPatternVals(vals[0], vals[1]); // track-aware (local / chromatic / global)
-		vals[2] = scaleConfig.lockScale ? "Ĉ" : "Ć";
-		vals[3] = scaleConfig.group16 ? "Ĉ" : "Ć";
-		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
-		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 8, !getEncoderSelect());
+		dispScalePage5(notesCursor_ - 8, !getEncoderSelect());
 		return;
 	}
 
-	// Step-param pages (cursor 12-19): pid 0-3 (Vel/Nudge/Len/MFX) or 4-7 (Prob/Cond/Func/Accum).
-	if (notesCursor_ >= 12 && notesCursor_ <= 19)
+	// Step-param pages (cursor 13-20): pid 0-3 (Vel/Nudge/Len/MFX) or 4-7 (Prob/Cond/Func/Accum).
+	if (notesCursor_ >= 13 && notesCursor_ <= 20)
 	{
-		uint8_t base = (notesCursor_ <= 15) ? 0 : 4;
+		uint8_t base = (notesCursor_ <= 16) ? 0 : 4;
 		const char *labels[4];
 		String vals[4];
 		const char *values[4];
@@ -1635,19 +1623,19 @@ void OmxModeForm::onDisplayNotes()
 			values[i] = vals[i].c_str();
 			locked[i] = omni->stepParamLocked(notesSelStep_, pid);
 		}
-		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 12 - base, !getEncoderSelect());
+		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 13 - base, !getEncoderSelect());
 		return;
 	}
 
-	// ACTIONS (cursor 20-23): Quant / Clear / Pots / Note entry — click to fire
+	// ACTIONS (cursor 21-24): Quant / Clear / Pots / Note entry — click to fire
 	// (@ = submenu, µ = destructive); NTRY toggles Pressed/Toggle.
-	if (notesCursor_ >= 20)
+	if (notesCursor_ >= 21)
 	{
 		const char *labels[4] = {"QNT", "CLR", "POTS", "NTRY"};
 		const char *values[4] = {"@", "µ", "@", omxFormGlobal.noteEntryToggle ? "TG" : "PR"};
 		bool locked[4] = {false, false, false, false};
-		bool editing = (notesCursor_ == 23 && !getEncoderSelect()); // only NTRY edits
-		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 20, editing);
+		bool editing = (notesCursor_ == 24 && !getEncoderSelect()); // only NTRY edits
+		omxDisp.dispStepParams(labels, values, locked, notesCursor_ - 21, editing);
 		return;
 	}
 
