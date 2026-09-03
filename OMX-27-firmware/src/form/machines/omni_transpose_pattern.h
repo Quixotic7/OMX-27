@@ -57,6 +57,7 @@ namespace FormOmni
         void copyStep(uint8_t keyIndex, TransposePattern *tPat);
         void cutStep(uint8_t keyIndex, TransposePattern *tPat);
         void pasteStep(uint8_t keyIndex, TransposePattern *tPat);
-        void fullRandomize(TransposePattern *tPat);
+        // randomizeLen true (key 9) also picks a new pattern length; false (key 8) keeps it.
+        void fullRandomize(TransposePattern *tPat, bool randomizeLen = true);
     };
 }
