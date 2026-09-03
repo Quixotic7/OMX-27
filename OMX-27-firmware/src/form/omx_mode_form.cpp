@@ -1385,11 +1385,19 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 		togglePlayback();
 		recClearedMask_ = 0;
 	}
-	bool recording = omxFormGlobal.recArm && omxFormGlobal.isPlaying;
 	if (down && !held)
 	{
-		if (recording)
-			recordPlayedNote((int8_t)note); // quantize into the nearest playing step
+		if (omxFormGlobal.recArm)
+		{
+			// Armed = a live MI-style keyboard: the keys play (preview on the track's
+			// channel) and record — they NEVER step-edit. Gating on recArm alone (not
+			// "armed && playing") means the very first start-on-note press can't fall
+			// into the toggle/step-edit branch below.
+			if (note >= 0 && note <= 127)
+				previewKeyOn(k, (int8_t)note); // remembered per key; release sends the off
+			if (omxFormGlobal.isPlaying)
+				recordPlayedNote((int8_t)note); // quantize into the nearest playing step
+		}
 		else if (omxFormGlobal.noteEntryToggle)
 		{
 			// Toggle entry: each press adds the note to the step, or removes it if present.
@@ -1402,10 +1410,10 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 			}
 		}
 		else
-			notesSetChordFromHeld(); // edit the selected step (stopped / not armed)
-		// Audible feedback while auditioning (stopped) or recording (armed + playing).
-		if ((!omxFormGlobal.isPlaying || recording) && note >= 0 && note <= 127)
-			previewKeyOn(k, (int8_t)note); // remembered per key; the release flush sends the off
+			notesSetChordFromHeld(); // edit the selected step (not armed)
+		// Audible feedback while auditioning the step edits (stopped, unarmed).
+		if (!omxFormGlobal.recArm && !omxFormGlobal.isPlaying && note >= 0 && note <= 127)
+			previewKeyOn(k, (int8_t)note);
 		omxDisp.setDirty();
 		omxLeds.setDirty();
 	}
@@ -4624,6 +4632,18 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 
 	int thisKey = e.key();
 	// AUX KEY
+
+	// F3 + AUX = TAP TEMPO (the tempo companion to F3+encoder BPM). While F3 is held the
+	// AUX key has no other job — the AUX layer only engages from NONE/AUX below — and the
+	// reversed order (F-keys first, THEN AUX) can never collide with an AUX-layer shortcut,
+	// which all require AUX to go down first. The BPM pops after each tap.
+	if (thisKey == 0 && e.down() && !e.held() && omxFormGlobal.shortcutMode == FORMSHORTCUT_F3)
+	{
+		tapTempo();
+		omxDisp.displayMessage("BPM " + String((int)clockConfig.clockbpm));
+		omxDisp.setDirty();
+		return;
+	}
 
 	// Don't go into aux mode if shortcuts F1 or F2 are being used
 	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_NONE || omxFormGlobal.shortcutMode == FORMSHORTCUT_AUX)

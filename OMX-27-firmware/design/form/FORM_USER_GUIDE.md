@@ -115,8 +115,8 @@ What they do is view-specific, but the pattern is consistent across the Seq/Note
 - **Hold F2** — **top row** = track select (tap a key 3–10 to jump tracks); in the Seq view
   the **low row** is the step **pick-up/drop tool** (see §8).
 - **Hold F3** — **rate & length**: set the track's step rate and the active page's length.
-  Also: **F3 + turn the encoder = tempo**, from any view with F-keys — the BPM pops as you
-  turn (tap tempo lives in the Tools → BPM tool).
+  Also: **F3 + turn the encoder = tempo** and **F3 + tap AUX = tap tempo**, from any view
+  with F-keys — the BPM pops as you turn or tap. (Both also live in the Tools → BPM tool.)
 
 ---
 
@@ -308,9 +308,10 @@ key — to return to the lane. Per-step **Accum** (Seq param page 2) makes indiv
 
 **NOTES** — a focused chord editor: pick a step, edit its up-to-6 notes as names or numbers,
 with the scale params, the full step params ("STEP LOCKS" group), and an ACTIONS page on
-the same encoder walk. With **record armed**, the bottom strip swaps the selected-step
-markers for the MI-style **page/playhead bars** — you're capturing live at that point, not
-editing a step.
+the same encoder walk. With **record armed**, the view becomes a live instrument: the note
+keys **play and record like the MI keyboard** (start-on-note included) instead of editing
+the selected step, and the bottom strip swaps the step markers for the MI-style
+**page/playhead bars**. Disarm to go back to step editing.
 
 **TOOLS** — **13 one-shot pattern operations** on the selected track. Turn the encoder to move
 through the tools (a tool's name pops as you cross into it) — or jump straight to one:
@@ -396,7 +397,7 @@ on the top row (Seq: low row = step pick-up/drop) · hold F3 (keys 1+2) = rate &
 left/right · PAGE 6/7/8 = Copy/Cut/Paste · TRANSPOSE 5–8 = Oct−/Oct+/Semi−/Semi+) ·
 key 9 = scope toggle · **key 10 = undo/redo** · encoder click on a button also fires it.
 
-**Anywhere:** hold F3 + turn the encoder = **tempo**.
+**Anywhere:** hold F3 + turn the encoder = **tempo** · hold F3 + tap AUX = **tap tempo**.
 
 > **Heads-up on Macros:** an AUX macro (M8/NRN/DEL) can take over the pots. In FORM this is
 > **off by default** — a selected macro leaves the knobs on the track's CC bank. If you *want*
