@@ -110,8 +110,11 @@ Without AUX, the two leftmost playable keys are momentary shortcuts *within the 
 
 What they do is view-specific, but the pattern is consistent across the Seq/Notes/Tools views:
 
-- **Hold F1** — page tools: shows the pages; **double-tap** a page key to solo it, or **hold
-  two** page keys to set a loop range.
+- **Hold F1** — page tools: keys 3–6 show/select the pages (**double-tap** to solo one,
+  **hold two** for a loop range); **turn the encoder** to change the active page
+  (Mix/Step/Notes/Tools). Keys **8/9/10**: **clear the active page** · **clear every
+  page** · **undo/redo** (the same one-level slot as Tools key 10 — both clears are
+  undoable).
 - **Hold F2** — **top row** = track select (tap a key 3–10 to jump tracks); in the Seq view
   the **low row** is the step **pick-up/drop tool** (see §8).
 - **Hold F3** — **rate & length**: set the track's step rate and the active page's length.
@@ -254,7 +257,8 @@ held track to cancel. Destructive on the destination, like the tools.
 Turn the encoder (SELECT) to move through the MIX pages, in two groups ("MIX" / "TRACK"
 pop as you cross between them):
 
-- **MIX group — Overview** (EDIT-turn selects the track) and **LEVELS**, an 8-bar
+- **MIX group — Overview** (EDIT-turn selects the track; **F1 + encoder** changes the
+  active page) and **LEVELS**, an 8-bar
   per-track **velocity mixer**; editing a bar sets that track's default velocity (pushed
   to every step without its own velocity lock).
 - **TRACK group — TRACK grid** (Mute / Solo / Gate / Rate for the selected track) and the
@@ -308,7 +312,10 @@ key — to return to the lane. Per-step **Accum** (Seq param page 2) makes indiv
 
 **NOTES** — a focused chord editor: pick a step, edit its up-to-6 notes as names or numbers,
 with the scale params, the full step params ("STEP LOCKS" group), and an ACTIONS page on
-the same encoder walk. With **record armed**, the view becomes a live instrument: the note
+the same encoder walk. The keyboard shows the **active page number** in its right gutter,
+and stepping past the end of a page with the encoder **auto-advances** to the next page
+(clamped at page 1 step 1 and page 4 step 16). With **record armed**, the view becomes a
+live instrument: the note
 keys **play and record like the MI keyboard** (start-on-note included) instead of editing
 the selected step; the keyboard and LEDs highlight the keys you're **holding** (white)
 rather than the selected step's chord, and the bottom strip swaps the step markers for
@@ -391,7 +398,8 @@ Edit turns change value.
 notes off)** · key 3 tap = rec-arm, hold = clear · key 4 = overdub/replace · keys 11/12 =
 octave.
 
-**In a view:** hold F1 (key 1) = pages (Seq: F1+step = copy) · hold F2 (key 2) = track select
+**In a view:** hold F1 (key 1) = pages (encoder = active page · 8/9/10 = clear page / clear
+all / undo · Seq: F1+step = copy) · hold F2 (key 2) = track select
 on the top row (Seq: low row = step pick-up/drop) · hold F3 (keys 1+2) = rate & length.
 
 **Tools:** hold key 3 + low row = **jump to a tool** · key 7 = apply (ROTATE 6/7 =

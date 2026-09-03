@@ -68,7 +68,7 @@ public:
 	// Step F2 view: the current play-direction icon + its name on top, a bottom label below.
 	// Step view Note hold: a compact piano keyboard (chord = notesAsKeys[6]) on top, with the
 	// 16 step-marker cells beneath (filled = has content; `focus` step gets a tick). No text.
-	void dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus, bool stepStrip = true);
+	void dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus, bool stepStrip = true, int8_t pageNum = -1);
 	// Seq page-1 track overview: 8 track-state squares (selected underlined, muted = outline)
 	// top-left, left-justified track name, rate + 4 page icons + BPM on the right, and 16 step
 	// boxes on the bottom (stepState: 0 empty / 1 has-notes / 2 ghost). playhead -1 = none.

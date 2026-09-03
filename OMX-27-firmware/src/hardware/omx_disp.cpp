@@ -1152,7 +1152,7 @@ void OmxDisp::dispToolGenPage(const char *pLabels[], const char *pVals[], uint8_
 	drawStepRow(23, stepState, pageLen, playhead);
 }
 
-void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus, bool stepStrip)
+void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepState, uint8_t pageLen, int8_t focus, bool stepStrip, int8_t pageNum)
 {
 	if (isMessageActive())
 	{
@@ -1229,6 +1229,18 @@ void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepSta
 		display.drawLine(16, wkHeight - 8, 16, wkHeight - 1, WHITE); // left wall
 	if (!whiteNotes[15])
 		display.drawLine(112, wkHeight - 8, 112, wkHeight - 1, WHITE); // right wall
+
+	// Active page number in the right-hand gutter (the keyboard leaves ~15px free there).
+	if (pageNum >= 0)
+	{
+		u8g2_display.setFontMode(1);
+		u8g2_display.setFont(FONT_LABELS);
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+		char pb[4];
+		snprintf(pb, sizeof(pb), "P%d", (int)pageNum);
+		u8g2centerText(pb, 113, 12, 15, 8);
+	}
 
 	// --- 16 step-marker cells beneath the keyboard (shared renderer) ---
 	// (skippable: the Notes view swaps this band for the record/playhead page bars

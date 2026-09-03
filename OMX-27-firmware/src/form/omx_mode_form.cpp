@@ -1106,8 +1106,25 @@ bool OmxModeForm::onEncoderNotes(int dir)
 		return true;
 	}
 	auto omni = getSelectedMachine();
-	if (notesCursor_ == 0) // keyboard: change the selected step
-		notesSelStep_ = (uint8_t)constrain((int)notesSelStep_ + dir, 0, 15);
+	if (notesCursor_ == 0)
+	{
+		// Keyboard page: the encoder walks the selected step and AUTO-ADVANCES across
+		// pages — past step 16 rolls into the next page's step 1 (and back). Clamped at
+		// page 1 step 1 (CCW) and page 4 step 16 (CW).
+		int s = (int)notesSelStep_ + dir;
+		uint8_t page = omni->activePage();
+		if (s > 15 && page < 3)
+		{
+			omni->setActivePage(page + 1);
+			s = 0;
+		}
+		else if (s < 0 && page > 0)
+		{
+			omni->setActivePage(page - 1);
+			s = 15;
+		}
+		notesSelStep_ = (uint8_t)constrain(s, 0, 15);
+	}
 	else if (notesCursor_ <= 6) // seq notes page, note slots 0-5: edit that note's value
 	{
 		int8_t chord[6];
@@ -1310,12 +1327,18 @@ void OmxModeForm::onKeyUpdateNotes(OMXKeypadEvent e)
 		return;
 	}
 
-	// ---- Hold F1: pages (top 3-6, select/solo/loop) + jump-to-step (low 11-26) ----
+	// ---- Hold F1: pages (top 3-6, select/solo/loop), clear/undo (8-10) + jump-to-step ----
 	if (sm == FORMSHORTCUT_F1)
 	{
 		if (k >= 3 && k <= 6)
 		{
 			handlePageGesture(omni, k - 3, e);
+			notesF1Used_ = true;
+			notesHoldUIShown_ = true;
+			return;
+		}
+		if (handleF1PageActions(k, e))
+		{
 			notesF1Used_ = true;
 			notesHoldUIShown_ = true;
 			return;
@@ -1654,13 +1677,13 @@ void OmxModeForm::onDisplayNotes()
 		for (uint8_t kk = 3; kk < 27 && cnt < 6; kk++)
 			if (midiSettings.keyState[kk] && kNotesKeyBase[kk] >= 0)
 				liveKeys[cnt++] = (int8_t)kk;
-		omxDisp.dispStepNoteKeyboard(liveKeys, stepState, pageLen, -1, false);
+		omxDisp.dispStepNoteKeyboard(liveKeys, stepState, pageLen, -1, false, (int8_t)(omni->activePage() + 1));
 		uint8_t pageLens[4] = {omni->getPageLen(0), omni->getPageLen(1), omni->getPageLen(2), omni->getPageLen(3)};
 		int8_t playAbs = (int8_t)omni->playingStepIndex();
 		omxDisp.drawPageBars(pageLens, omni->getEnabledPages(), playAbs);
 	}
 	else
-		omxDisp.dispStepNoteKeyboard(noteKeys, stepState, pageLen, notesSelStep_);
+		omxDisp.dispStepNoteKeyboard(noteKeys, stepState, pageLen, notesSelStep_, true, (int8_t)(omni->activePage() + 1));
 }
 
 // ---- Tools view (AUX+19): destructive pattern tools on the selected track ----
@@ -1716,6 +1739,33 @@ static bool toolHasScope(uint8_t tool)
 
 // Perform a tool's action button (shared by the top-row keys and the encoder click).
 // No popups — the step row / bars show the result (per the Tools UI spec).
+// F1 + keys 8/9/10 (Step/Notes/Tools — the F1 page layer's action keys): 8 = clear the
+// ACTIVE page's steps, 9 = clear every step on all pages, 10 = undo/redo (the same slot as
+// Tools key 10). Both clears snapshot the track first, so F1+10 immediately reverses them.
+bool OmxModeForm::handleF1PageActions(uint8_t k, OMXKeypadEvent e)
+{
+	if (k < 8 || k > 10 || !e.down() || e.held())
+		return false;
+	auto omni = getSelectedMachine();
+	if (k == 8)
+	{
+		toolSnapshotUndo();
+		omni->clearPageSteps(omni->activePage());
+		omxDisp.displayMessage("CLR P" + String(omni->activePage() + 1));
+	}
+	else if (k == 9)
+	{
+		toolSnapshotUndo();
+		omni->clearTrackSteps();
+		omxDisp.displayMessage("CLR TRACK");
+	}
+	else
+		toolUndo();
+	omxDisp.setDirty();
+	omxLeds.setDirty();
+	return true;
+}
+
 // AUX + double-tap a view key: jump that view back to its first page/overview. Views
 // deliberately remember their menu position across switches — this is the escape hatch
 // when you're parked deep in a menu and just want the top of the view.
@@ -2537,6 +2587,9 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 		handlePageGesture(omni, thisKey - 3, e);
 		return;
 	}
+	// F1 + 8/9/10: clear page / clear all pages / undo-redo (shared with Notes).
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && handleF1PageActions(thisKey, e))
+		return;
 	// Release of an F2-held track key clears the hold (even if F2 was let go first).
 	if (!e.down() && thisKey >= 3 && thisKey <= 10 && heldTrackKey_ == (int8_t)(thisKey - 3))
 	{
@@ -4212,6 +4265,24 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 		editBpm(enc.accel(5));
 		omxDisp.displayMessage("BPM " + String((int)clockConfig.clockbpm));
 		omxDisp.setDirty();
+		return;
+	}
+
+	// F1 + encoder = change the ACTIVE page (Mix/Step/Notes/Tools): the F1 page layer's
+	// encoder counterpart. Replaces the old Mix behavior (track select — redundant, the
+	// dedicated track keys already do that).
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 &&
+		(formView_ == FORMVIEW_MIX || formView_ == FORMVIEW_STEP ||
+		 formView_ == FORMVIEW_NOTES || formView_ == FORMVIEW_TOOLS))
+	{
+		auto omni = getSelectedMachine();
+		int p = constrain((int)omni->activePage() + enc.dir(), 0, 3);
+		omni->setActivePage((uint8_t)p);
+		omxDisp.displayMessage("PAGE " + String(p + 1));
+		stepF1Used_ = true; // the hold was "used": releasing F1 must not fire a quick-tap
+		notesF1Used_ = true;
+		omxDisp.setDirty();
+		omxLeds.setDirty();
 		return;
 	}
 
