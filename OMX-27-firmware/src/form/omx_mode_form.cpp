@@ -1018,52 +1018,12 @@ void OmxModeForm::closeClearSub()
 	omxLeds.setDirty();
 }
 
-// Track-aware ROOT/SCALE display values for the shared scale pages.
-void OmxModeForm::scaleRootPatternVals(String &rootV, String &patV)
-{
-	auto m = getSelectedMachine();
-	if (m->getScaleMode() == FormOmni::FormMachineOmni::TRACKSCALE_CHROMATIC)
-	{
-		rootV = "--";
-		patV = "--";
-	}
-	else if (m->getScaleMode() == FormOmni::FormMachineOmni::TRACKSCALE_LOCAL)
-	{
-		rootV = MusicScales::getNoteName(m->getLocalRoot());
-		patV = m->getLocalPattern() < 0 ? String("--") : String((int)m->getLocalPattern());
-	}
-	else
-	{
-		rootV = MusicScales::getNoteName(scaleConfig.scaleRoot);
-		patV = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
-	}
-}
-
-// Render the track-aware scale page as a 5-cell grid: MODE / ROOT / SCALE / LOCK / GROUP.
-// MODE is the per-track scale mode (GLOBAL/CHROMATIC/LOCAL); when LOCAL, ROOT/SCALE edit the
-// track's own scale. Cells that don't apply in the current mode are greyed.
+// The 5-cell track-aware scale page (MODE / ROOT / SCALE / LOCK / GROUP) is rendered by a single
+// modular renderer that lives on the machine (it owns the scale state). Every view — Seq, MI,
+// Notes, and the Mix machine menu — delegates here so the look/values stay identical everywhere.
 void OmxModeForm::dispScalePage5(uint8_t sel, bool editing)
 {
-	auto m = getSelectedMachine();
-	uint8_t mode = m->getScaleMode(); // 0 GLOBAL, 1 CHROMATIC, 2 LOCAL
-	static const char *kModeShort[3] = {"GL", "CH", "LO"};
-	String rootV, patV;
-	scaleRootPatternVals(rootV, patV); // track-aware root/scale (shows "--" for chromatic)
-	String vals[5];
-	vals[0] = kModeShort[mode < 3 ? mode : 0];
-	vals[1] = rootV;
-	vals[2] = patV;
-	vals[3] = scaleConfig.lockScale ? "Ĉ" : "Ć";
-	vals[4] = scaleConfig.group16 ? "Ĉ" : "Ć";
-	const char *labels[5] = {"MODE", "ROOT", "SCALE", "LOCK", "GROUP"};
-	const char *values[5] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str(), vals[4].c_str()};
-	bool chromatic = m->scaleIsChromatic();
-	// ROOT/SCALE muted on a chromatic-mode track; LOCK/GROUP muted whenever no scale is active.
-	bool dimmed[5] = {false,
-					  mode == FormOmni::FormMachineOmni::TRACKSCALE_CHROMATIC,
-					  mode == FormOmni::FormMachineOmni::TRACKSCALE_CHROMATIC,
-					  chromatic, chromatic};
-	omxDisp.dispParams5(labels, values, dimmed, sel, editing);
+	getSelectedMachine()->drawScalePage5(sel, editing);
 }
 
 // Which param palette a Notes-view hold selects: 11 = velocity, 12 = length, 11+12 = math,

@@ -2808,6 +2808,44 @@ namespace FormOmni
         omxDisp.dispStepParams(labels, values, locked, selParam, !getEncoderSelect());
     }
 
+    // The single, modular renderer for the 5-cell scale page (MODE / ROOT / SCALE / LOCK / GROUP).
+    // Every view routes here so the values, checkbox glyphs and checkerboard-muting are identical:
+    // Seq / MI / Notes via the shell's dispScalePage5 wrapper, and the Mix menu's OMNIPAGE_SCALE.
+    // MODE is the per-track scale mode; ROOT/SCALE are track-aware (LOCAL edits the track's own
+    // scale, else the global one). Inactive cells are greyed: ROOT/SCALE when chromatic, LOCK/GROUP
+    // whenever no scale is active.
+    void FormMachineOmni::drawScalePage5(uint8_t sel, bool editing)
+    {
+        static const char *kScaleModeShort[3] = {"GL", "CH", "LO"};
+        const char *labels[5] = {"MODE", "ROOT", "SCALE", "LOCK", "GROUP"};
+        String vals[5];
+        vals[0] = kScaleModeShort[scaleMode_ < 3 ? scaleMode_ : 0];
+        if (scaleMode_ == TRACKSCALE_CHROMATIC)
+        {
+            vals[1] = "--"; // chromatic track: no scale applies
+            vals[2] = "--";
+        }
+        else if (scaleMode_ == TRACKSCALE_LOCAL)
+        {
+            vals[1] = MusicScales::getNoteName(localRoot_);
+            vals[2] = localPattern_ < 0 ? String("--") : String((int)localPattern_);
+        }
+        else
+        {
+            vals[1] = MusicScales::getNoteName(scaleConfig.scaleRoot);
+            vals[2] = scaleConfig.scalePattern < 0 ? String("--") : String((int)scaleConfig.scalePattern);
+        }
+        vals[3] = scaleConfig.lockScale ? "Ĉ" : "Ć";
+        vals[4] = scaleConfig.group16 ? "Ĉ" : "Ć";
+        const char *values[5] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str(), vals[4].c_str()};
+        bool chromatic = scaleIsChromatic();
+        const bool dimmed[5] = {false,
+                                scaleMode_ == TRACKSCALE_CHROMATIC,
+                                scaleMode_ == TRACKSCALE_CHROMATIC,
+                                chromatic, chromatic};
+        omxDisp.dispParams5(labels, values, dimmed, sel, editing);
+    }
+
     bool FormMachineOmni::drawPage(uint8_t page, uint8_t selParam)
     {
         switch (page)
@@ -2895,38 +2933,7 @@ namespace FormOmni
         }
             return false;
         case OMNIPAGE_SCALE:
-        {
-            // 5-cell track-aware scale page: MODE / ROOT / SCALE / LOCK / GROUP. Inactive cells
-            // are checkerboard-muted (ROOT/SCALE on a chromatic track; LOCK/GROUP when no scale).
-            static const char *kScaleModeShort[3] = {"GL", "CH", "LO"};
-            const char *labels[5] = {"MODE", "ROOT", "SCALE", "LOCK", "GROUP"};
-            String vals[5];
-            vals[0] = kScaleModeShort[scaleMode_ < 3 ? scaleMode_ : 0];
-            if (scaleMode_ == TRACKSCALE_CHROMATIC)
-            {
-                vals[1] = "--"; // chromatic track: no scale applies
-                vals[2] = "--";
-            }
-            else if (scaleMode_ == TRACKSCALE_LOCAL)
-            {
-                vals[1] = MusicScales::getNoteName(localRoot_);
-                vals[2] = localPattern_ < 0 ? "--" : String((int)localPattern_);
-            }
-            else
-            {
-                vals[1] = MusicScales::getNoteName(scaleConfig.scaleRoot);
-                vals[2] = scaleConfig.scalePattern < 0 ? "--" : String(scaleConfig.scalePattern);
-            }
-            vals[3] = scaleConfig.lockScale ? "On" : "--";
-            vals[4] = scaleConfig.group16 ? "On" : "--";
-            const char *values[5] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str(), vals[4].c_str()};
-            bool chromatic = scaleIsChromatic();
-            const bool dimmed[5] = {false,
-                                    scaleMode_ == TRACKSCALE_CHROMATIC,
-                                    scaleMode_ == TRACKSCALE_CHROMATIC,
-                                    chromatic, chromatic};
-            omxDisp.dispParams5(labels, values, dimmed, selParam, !getEncoderSelect());
-        }
+            drawScalePage5(selParam, !getEncoderSelect()); // shared 5-cell renderer (see below)
             return false;
         case OMNIPAGE_POTS:
         {

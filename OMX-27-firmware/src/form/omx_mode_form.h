@@ -168,9 +168,8 @@ private:
 	bool onEncoderNotes(int dir);       // encoder turn in the Notes view. consumed?
 	bool onEncoderButtonNotes();        // encoder click in the Notes view. consumed?
 	void notesEditScaleParam(uint8_t param, int dir); // 0 root · 1 scale · 2 lock · 3 group
-	// Fill the ROOT/SCALE display values, track-aware (local scale / chromatic / global).
-	void scaleRootPatternVals(String &rootV, String &patV);
-	// Render the 5-cell track-aware scale page (MODE / ROOT / SCALE / LOCK / GROUP), sel 0-4.
+	// Shell wrapper: render the 5-cell scale page for the selected track. Delegates to the
+	// machine's modular FormMachineOmni::drawScalePage5 (the single source of the scale look).
 	void dispScalePage5(uint8_t sel, bool editing);
 	void onKeyUpdateNotes(OMXKeypadEvent e);
 	void updateNotesLEDs();

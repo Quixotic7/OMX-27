@@ -364,6 +364,10 @@ namespace FormOmni
         void editScaleMode(int amt);   // cycles GLOBAL/CHROMATIC/LOCAL (pops the name)
         void editScaleRoot(int amt);   // LOCAL: local root; else the global root
         void editScalePattern(int amt);// LOCAL: local pattern; else the global pattern
+        // The single, modular renderer for the 5-cell scale page (MODE/ROOT/SCALE/LOCK/GROUP).
+        // Every view delegates here (Seq/MI/Notes via the shell, plus the Mix machine menu) so
+        // the grid, values, checkbox glyphs and checkerboard-muting stay identical everywhere.
+        void drawScalePage5(uint8_t sel, bool editing);
         // Effective scale for interval math / note palettes (never null; chromatic tracks
         // get the local instance calculated with pattern -1 = chromatic degrees).
         MusicScales *paletteScale()
