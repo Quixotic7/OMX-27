@@ -15,12 +15,10 @@ namespace FormOmni
 
     enum OmniUIMode
     {
-        OMNIUIMODE_CONFIG,      // Should be same thing as OMNIUIMODE_PARAMS
-        OMNIUIMODE_MIX,         // 
-        OMNIUIMODE_LENGTH,
-        OMNIUIMODE_TRANSPOSE,
-        OMNIUIMODE_STEP,
-        OMNIUIMODE_NOTEEDIT,
+        OMNIUIMODE_CONFIG,   // the machine's param menu (Step view + Mix menu)
+        OMNIUIMODE_MIX,      // Mix/Tools track overview
+        OMNIUIMODE_TRANSPOSE,// Transpose editor
+        OMNIUIMODE_NOTEEDIT, // Notes view (shell-rendered; the machine no-ops in this mode)
         OMNIUIMODE_COUNT
     };
 

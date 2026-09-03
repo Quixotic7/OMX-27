@@ -7,7 +7,6 @@
 #include "../../midi/midi.h" // MM::sendControlChange for per-step CC locks
 #include "../../hardware/omx_disp.h"
 #include "../../hardware/omx_leds.h"
-#include "omni_note_editor.h"
 #include "../../modes/euclidean_sequencer.h" // EuclideanMath (static helpers) for the Euclid tool
 #include "../../modes/retro_grids.h"         // grids::GridsChannel for the Grids tool
 #include <U8g2_for_Adafruit_GFX.h>
@@ -43,7 +42,7 @@ namespace FormOmni
     const char* kTrackModeShort[] = {"--", "PG", "RD", "R2", "SF", "SH"};
     const char* kTranspModeShort[] = {"GI", "SE", "LI"};
 
-    const char* kUIModeMsg[] = {"CONFIG", "MIX", "LENGTH", "TRANSPOSE", "STEP", "NOTE EDIT"};
+    const char* kUIModeMsg[] = {"CONFIG", "MIX", "TRANSPOSE", "NOTE EDIT"};
 
     const char* kTranspModeLongMsg[] = {"GBL INTERVAL", "SEMITONES", "LOC INTERVAL"};
 
@@ -217,10 +216,8 @@ namespace FormOmni
         {
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
-        case OMNIUIMODE_LENGTH:
             return false;
         case OMNIUIMODE_TRANSPOSE:
-        case OMNIUIMODE_STEP:
         case OMNIUIMODE_NOTEEDIT:
             return true;
         }
@@ -233,10 +230,8 @@ namespace FormOmni
         {
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
-        case OMNIUIMODE_LENGTH:
             return false;
         case OMNIUIMODE_TRANSPOSE:
-        case OMNIUIMODE_STEP:
         case OMNIUIMODE_NOTEEDIT:
             return true;
         }
@@ -1854,55 +1849,17 @@ namespace FormOmni
         {
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
-        case OMNIUIMODE_LENGTH:
         {
+            trackParams_.changeParam(enc.dir());
+
+            // Menu map: the transpose params page lives in the Transpose view now —
+            // skip it when walking the Mix menu.
+            if (trackParams_.getSelPage() == OMNIPAGE_SEQTPOSE)
             {
-                trackParams_.changeParam(enc.dir());
-
-                // Menu map: the transpose params page lives in the Transpose view now —
-                // skip it when walking the Mix menu.
-                if (trackParams_.getSelPage() == OMNIPAGE_SEQTPOSE)
-                {
-                    if (enc.dir() > 0)
-                        trackParams_.setSelPageAndParam(OMNIPAGE_SEQMIDI, 0);
-                    else
-                        trackParams_.setSelPageAndParam(OMNIPAGE_TRACKMODES, 2);
-                }
-
-                // if (trackParams_.getSelPage() != prevPage)
-                // {
-                //     switch (trackParams_.getSelPage())
-                //     {
-                //     case OMNIPAGE_STEP1:
-                //         omxDisp.displayMessage("Step 1");
-                //         break;
-                //     case OMNIPAGE_STEPCONDITION:
-                //         omxDisp.displayMessage("Step Cond");
-                //         break;
-                //     case OMNIPAGE_STEPNOTES:
-                //         omxDisp.displayMessage("Step Notes");
-                //         break;
-                //     case OMNIPAGE_STEPPOTS:
-                //         omxDisp.displayMessage("Step Pots");
-                //         break;
-                //     case OMNIPAGE_GBL1:
-                //         omxDisp.displayMessage("Track 1");
-                //         break;
-                //     case OMNIPAGE_1:
-                //         // omxDisp.displayMessage("Step 1");
-                //         break;
-                //     case OMNIPAGE_2:
-                //         // omxDisp.displayMessage("Step 1");
-                //         break;
-                //     case OMNIPAGE_3:
-                //         // omxDisp.displayMessage("Step 1");
-                //         break;
-                //     case OMNIPAGE_TPAT:
-                //         transpPat_.onUIEnabled();
-                //         // omxDisp.displayMessage("Step 1");
-                //         break;
-                //     }
-                // }
+                if (enc.dir() > 0)
+                    trackParams_.setSelPageAndParam(OMNIPAGE_SEQMIDI, 0);
+                else
+                    trackParams_.setSelPageAndParam(OMNIPAGE_TRACKMODES, 2);
             }
         }
         break;
@@ -1911,12 +1868,6 @@ namespace FormOmni
             tPatParams_.changeParam(enc.dir());
         }
         break;
-        case OMNIUIMODE_STEP:
-        case OMNIUIMODE_NOTEEDIT:
-        {
-            omniNoteEditor.onEncoderChangedSelectParam(enc, getTrack());
-        }
-            break;
         }
 
         omxDisp.setDirty();
@@ -1939,17 +1890,10 @@ namespace FormOmni
             editPage(selPage, selParam, amtSlow, amtFast);
         }
         break;
-        case OMNIUIMODE_LENGTH:
         case OMNIUIMODE_TRANSPOSE:
             selParam = tPatParams_.getSelParam();
             transpPat_.onEncoderChangedEditParam(enc, selParam, &seq_.transposePattern);
             break;
-        case OMNIUIMODE_STEP:
-        case OMNIUIMODE_NOTEEDIT:
-        {
-            omniNoteEditor.onEncoderChangedEditParam(enc, getTrack());
-        }
-        break;
         }
 
         omxDisp.setDirty();
@@ -2532,17 +2476,11 @@ namespace FormOmni
             }
         }
         break;
-        case OMNIUIMODE_LENGTH:
-        break;
         case OMNIUIMODE_TRANSPOSE:
         {
             transpPat_.updateLEDs(&tPatParams_, &seq_.transposePattern);
         }
         break;
-        case OMNIUIMODE_STEP:
-        case OMNIUIMODE_NOTEEDIT:
-            omniNoteEditor.updateLEDs(getTrack());
-            break;
         }
 
         return true;
@@ -2963,7 +2901,6 @@ namespace FormOmni
         {
         case OMNIUIMODE_CONFIG:
         case OMNIUIMODE_MIX:
-        case OMNIUIMODE_LENGTH:
         {
             // Every page renders itself (the specialized editors, or the shared
             // dispParamGrid look) — the legacy dispGenericMode2 legend fallback is retired.
@@ -2976,10 +2913,6 @@ namespace FormOmni
             drawPage(OMNIPAGE_TPAT, selParam);
         }
         break;
-        case OMNIUIMODE_STEP:
-        case OMNIUIMODE_NOTEEDIT:
-            omniNoteEditor.onDisplayUpdate(getTrack());
-            break;
         }
     }
 
