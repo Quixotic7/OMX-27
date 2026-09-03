@@ -310,8 +310,9 @@ key — to return to the lane. Per-step **Accum** (Seq param page 2) makes indiv
 with the scale params, the full step params ("STEP LOCKS" group), and an ACTIONS page on
 the same encoder walk. With **record armed**, the view becomes a live instrument: the note
 keys **play and record like the MI keyboard** (start-on-note included) instead of editing
-the selected step, and the bottom strip swaps the step markers for the MI-style
-**page/playhead bars**. Disarm to go back to step editing.
+the selected step; the keyboard and LEDs highlight the keys you're **holding** (white)
+rather than the selected step's chord, and the bottom strip swaps the step markers for
+the MI-style **page/playhead bars**. Disarm to go back to step editing.
 
 **TOOLS** — **13 one-shot pattern operations** on the selected track. Turn the encoder to move
 through the tools (a tool's name pops as you cross into it) — or jump straight to one:

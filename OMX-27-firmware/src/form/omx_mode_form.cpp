@@ -1497,10 +1497,14 @@ void OmxModeForm::updateNotesLEDs()
 	strip.setPixelColor(14, DKRED);  // clear step
 
 	// Piano: scale-aware colours like MI mode (root periwinkle / in-scale dim blue / off-scale
-	// dark), with a chromatic fallback when no scale is set. The current step's chord = LTYELLOW.
+	// dark), with a chromatic fallback when no scale is set. The current step's chord = LTYELLOW
+	// — but ONLY while editing. With record ARMED this is a live keyboard: highlighting the
+	// selected step's chord read as "stuck notes" mid-take, so armed shows pressed keys WHITE
+	// (like MI) and nothing else.
 	bool haveScale = !omni->scaleIsChromatic(); // per-track scale mode aware
-	int8_t chord[6];
-	omni->getStepNotes(notesSelStep_, chord);
+	int8_t chord[6] = {-1, -1, -1, -1, -1, -1};
+	if (!omxFormGlobal.recArm)
+		omni->getStepNotes(notesSelStep_, chord);
 	for (uint8_t key = 3; key < 27; key++)
 	{
 		int8_t base = kNotesKeyBase[key];
@@ -1515,6 +1519,8 @@ void OmxModeForm::updateNotesLEDs()
 			c = (pc == 0) ? (uint32_t)0xA2A2FF : (key <= 10 ? (uint32_t)DKBLUE : (uint32_t)0x000090);
 		for (uint8_t n = 0; n < 6; n++)
 			if (chord[n] == note) { c = (uint32_t)LTYELLOW; break; }
+		if (omxFormGlobal.recArm && midiSettings.keyState[key])
+			c = WHITE; // live playing feedback while armed
 		strip.setPixelColor(key, c);
 	}
 
@@ -1637,11 +1643,18 @@ void OmxModeForm::onDisplayNotes()
 	}
 
 	// Page 0: the main keyboard + step strip — except while RECORD is armed. Recording in
-	// Notes captures live (like MI), so the selected-step markers would be misleading
-	// mid-take; show the MI-style page/playhead progress bars along the bottom instead.
+	// Notes captures live (like MI): the on-screen keyboard highlights the keys you're
+	// PHYSICALLY holding (not the selected step's chord, which read as stuck notes
+	// mid-take), and the bottom shows the MI-style page/playhead bars instead of the
+	// selected-step markers.
 	if (omxFormGlobal.recArm)
 	{
-		omxDisp.dispStepNoteKeyboard(noteKeys, stepState, pageLen, -1, false);
+		int8_t liveKeys[6] = {-1, -1, -1, -1, -1, -1};
+		uint8_t cnt = 0;
+		for (uint8_t kk = 3; kk < 27 && cnt < 6; kk++)
+			if (midiSettings.keyState[kk] && kNotesKeyBase[kk] >= 0)
+				liveKeys[cnt++] = (int8_t)kk;
+		omxDisp.dispStepNoteKeyboard(liveKeys, stepState, pageLen, -1, false);
 		uint8_t pageLens[4] = {omni->getPageLen(0), omni->getPageLen(1), omni->getPageLen(2), omni->getPageLen(3)};
 		int8_t playAbs = (int8_t)omni->playingStepIndex();
 		omxDisp.drawPageBars(pageLens, omni->getEnabledPages(), playAbs);
