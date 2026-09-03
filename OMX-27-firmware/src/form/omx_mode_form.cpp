@@ -1637,6 +1637,7 @@ enum ToolIndex
 	TOOL_ROTATE,   // shift steps left/right
 	TOOL_MIRROR,   // reverse step order
 	TOOL_PAGE,     // cut / copy / paste the active 16-step page (steps + page length)
+	TOOL_BPM,      // change tempo + tap tempo (global)
 	TOOL_SHUFFLE,  // random permutation of steps
 	TOOL_HUM,      // humanize: random nudge within a % range
 	TOOL_QUANT,    // pull nudges toward the grid by AMT%
@@ -1650,16 +1651,16 @@ enum ToolIndex
 };
 
 static const char *kToolNames[TOOL_COUNT] = {
-	"ROTATE", "MIRROR", "PAGE", "SHUFFLE", "HUMANIZE", "QUANTIZE", "TRANSPOSE",
+	"ROTATE", "MIRROR", "PAGE", "BPM", "SHUFFLE", "HUMANIZE", "QUANTIZE", "TRANSPOSE",
 	"SCALE SNAP", "VEL RANDOM", "CHANCE RND", "EUCLID", "GRIDS"};
 
 // Encoder cells per tool: params first, then action buttons. The cursor walks these.
-static const uint8_t kToolParams[TOOL_COUNT] = {1, 1, 0, 1, 2, 2, 1, 3, 18, 18, 3, 5};
-static const uint8_t kToolBtns[TOOL_COUNT]   = {2, 1, 3, 1, 1, 1, 4, 1, 0, 0, 0, 0};
+static const uint8_t kToolParams[TOOL_COUNT] = {1, 1, 0, 1, 1, 2, 2, 1, 3, 18, 18, 3, 5};
+static const uint8_t kToolBtns[TOOL_COUNT]   = {2, 1, 3, 1, 1, 1, 1, 4, 1, 0, 0, 0, 0};
 
 // Distinct hue per tool for the action keys.
 static const uint32_t kToolColors[TOOL_COUNT] = {
-	CYAN, LTCYAN, LTPURPLE, DKCYAN, MAGENTA, ROSE, ORANGE, DKORANGE, YELLOW, DKYELLOW, GREEN, BLUE};
+	CYAN, LTCYAN, LTPURPLE, RBLUE, DKCYAN, MAGENTA, ROSE, ORANGE, DKORANGE, YELLOW, DKYELLOW, GREEN, BLUE};
 
 static const char *kGridsInstNames[4] = {"BD", "SD", "HH", "AC"};
 
@@ -1675,7 +1676,7 @@ static uint8_t toolStepMode(uint8_t tool)
 // Which tools carry the shared SCOPE param (keys 9 = page / 10 = track everywhere).
 static bool toolHasScope(uint8_t tool)
 {
-	return tool != TOOL_VEL && tool != TOOL_CHANCE && tool != TOOL_PAGE;
+	return tool != TOOL_VEL && tool != TOOL_CHANCE && tool != TOOL_PAGE && tool != TOOL_BPM;
 }
 
 // Perform a tool's action button (shared by the top-row keys and the encoder click).
@@ -1701,6 +1702,9 @@ void OmxModeForm::toolAction(uint8_t tool, uint8_t action)
 	case TOOL_CHANCE:  omni->toolChanceRnd(toolChanceMin_, toolChanceMax_); break;
 	case TOOL_EUC:     omni->toolEuclid(toolEucPulses_, toolEucRot_, toolScopeAll_); break;
 	case TOOL_GRIDS:   omni->toolGrids(toolGridsInst_, toolGridsX_, toolGridsY_, toolGridsDens_, toolScopeAll_); break;
+	case TOOL_BPM: // the single button is TAP TEMPO
+		tapTempo();
+		break;
 	case TOOL_PAGE: // CUT (0) / COPY (1) / PASTE (2) the active page (F1 selects the page)
 	{
 		uint8_t page = omni->activePage();
@@ -1919,6 +1923,17 @@ bool OmxModeForm::onEncoderTools(int dir)
 		if (cell == 3) toolGridsDens_ = (uint8_t)constrain((int)toolGridsDens_ + dir * 4, 0, 255);
 		if (cell == 4) toolScopeAll_ = dir > 0;
 		break;
+	case TOOL_BPM:
+		if (cell == 0)
+		{
+			clockConfig.newtempo = constrain((int)clockConfig.clockbpm + dir, 40, 300);
+			if (clockConfig.newtempo != clockConfig.clockbpm)
+			{
+				clockConfig.clockbpm = clockConfig.newtempo;
+				omxUtil.resetClocks();
+			}
+		}
+		break;
 	// TOOL_PAGE has no params — only CUT/COPY/PASTE buttons; nothing to edit here.
 	}
 	omxDisp.setDirty();
@@ -1962,6 +1977,9 @@ void OmxModeForm::updateToolsLEDs()
 		return;
 	}
 	uint32_t c = kToolColors[toolIndex_];
+	// Key 3 is the tool-jump modifier: keep it dimly lit so it's obviously live (hold it +
+	// a low-row key to jump straight to a tool). It brightens to white while actually held.
+	strip.setPixelColor(3, 0x303030);
 	// Action keys lit in the tool colour; scope keys 9/10 show the current scope.
 	switch (toolIndex_)
 	{
@@ -2122,6 +2140,15 @@ void OmxModeForm::onDisplayTools()
 		// shows that page's content so you can see what you're cutting / copying.
 		const char *btns[3] = {"CUT", "COPY", "PASTE"};
 		omxDisp.dispToolActionPage(nullptr, nullptr, 0, btns, 3, sel, editing, stepState, pageLen, playhead);
+		return;
+	}
+	case TOOL_BPM:
+	{
+		String bpm = String((int)clockConfig.clockbpm);
+		const char *pl[1] = {"BPM"};
+		const char *pv[1] = {bpm.c_str()};
+		const char *btns[1] = {"TAP"};
+		omxDisp.dispToolActionPage(pl, pv, 1, btns, 1, sel, editing, stepState, pageLen, playhead);
 		return;
 	}
 	}
