@@ -2148,7 +2148,16 @@ void OmxModeForm::onDisplayTools()
 		const char *pl[1] = {"BPM"};
 		const char *pv[1] = {bpm.c_str()};
 		const char *btns[1] = {"TAP"};
-		omxDisp.dispToolActionPage(pl, pv, 1, btns, 1, sel, editing, stepState, pageLen, playhead);
+		// Flash the TAP button "pressed" (inverted) briefly on each tap, in place of a popup.
+		// The button is cell index 1 (after the 1 BPM param), so pass that as sel while flashing.
+		int8_t bsel = sel;
+		bool bedit = editing;
+		if (bpmTapFlashMs_ != 0 && (millis() - bpmTapFlashMs_) < 90)
+		{
+			bsel = 1;      // point the selection at the TAP button so it renders inverted
+			bedit = false; // buttons invert when selected regardless, but keep the param plain
+		}
+		omxDisp.dispToolActionPage(pl, pv, 1, btns, 1, bsel, bedit, stepState, pageLen, playhead);
 		return;
 	}
 	}
@@ -3872,6 +3881,19 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 		trackAudible_[i] = aud;
 	}
 
+	// BPM tool: keep the display live briefly after a tap so the TAP button shows pressed
+	// and then releases (the flash renders in onDisplayTools).
+	if (bpmTapFlashMs_ != 0)
+	{
+		if ((millis() - bpmTapFlashMs_) < 120)
+			omxDisp.setDirty();
+		else
+		{
+			bpmTapFlashMs_ = 0;
+			omxDisp.setDirty(); // final repaint to release the button
+		}
+	}
+
 	// Keep repainting while the transient CC meter is up (and once as it expires) so it clears.
 	bool ccActive = ccMeterActive();
 	if (ccActive || ccMeterWasActive_)
@@ -5160,13 +5182,14 @@ void OmxModeForm::killAllNotes()
 // a >2s gap starts a new run.
 void OmxModeForm::tapTempo()
 {
-	uint32_t now = millis();
+	bpmTapFlashMs_ = millis(); // flash the TAP button pressed (no popup — see onDisplayTools)
+	uint32_t now = bpmTapFlashMs_;
 	uint32_t gap = now - lastTapMs_;
 	lastTapMs_ = now;
+	omxDisp.setDirty();
 	if (gap > 2000 || gap < 100) // new run (or switch bounce)
 	{
 		tapCount_ = 1;
-		omxDisp.displayMessage("TAP..");
 		return;
 	}
 	tapAvgMs_ = (tapCount_ <= 1) ? (float)gap : (tapAvgMs_ + ((float)gap - tapAvgMs_) / 4.0f);
@@ -5179,8 +5202,6 @@ void OmxModeForm::tapTempo()
 		clockConfig.clockbpm = clockConfig.newtempo;
 		omxUtil.resetClocks();
 	}
-	omxDisp.displayMessage("TAP " + String((int)clockConfig.clockbpm));
-	omxDisp.setDirty();
 }
 
 void OmxModeForm::resetPlayback()

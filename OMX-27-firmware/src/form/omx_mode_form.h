@@ -433,12 +433,14 @@ private:
 	// STOP (chord) while playing; a second STOP while already stopped = KILL all notes.
 	void doStopOrKill();
 	void killAllNotes();
-	// Tap tempo helper (rolling average). NOT wired to a gesture yet — the AUX+encoder
-	// placement was rejected (AUX+turn must stay "edit the selected cell").
+	// Tap tempo helper (rolling average), driven by the BPM tool's TAP button.
 	uint32_t lastTapMs_ = 0;
 	uint8_t tapCount_ = 0;
 	float tapAvgMs_ = 0;
 	void tapTempo();
+	// When the TAP button was last hit — the BPM tool flashes it "pressed" briefly instead
+	// of popping a message, so each tap gives visual feedback on the button itself.
+	uint32_t bpmTapFlashMs_ = 0;
 	// Seq F2 = a pick-up / drop tool.
 	//  - The FIRST press with nothing loaded (seqF2Loaded_ = false) CUTS/grabs that step —
 	//    even an empty one — into the buffer. This is the ONLY time an empty step is cut.
