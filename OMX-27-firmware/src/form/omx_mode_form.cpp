@@ -3417,8 +3417,8 @@ bool OmxModeForm::onKeyUpdateMixRoute(OMXKeypadEvent e)
 	return false;
 }
 
-// Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, double-click = open Step,
-// single tap = select. (Low-row keys still go to the machine's step editor.)
+// Mix view — track keys (3-10): F1+tap = mute, F2+tap = solo, single tap = select
+// (+ hold for the low-row per-track controls). (Low-row keys go to the step editor.)
 void OmxModeForm::onKeyUpdateMix(OMXKeypadEvent e)
 {
 	uint8_t thisKey = e.key();

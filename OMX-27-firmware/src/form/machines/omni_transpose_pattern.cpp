@@ -215,13 +215,15 @@ namespace FormOmni
                 {
                     patShortcut_ = TPATSHORT_RAND;
                 }
-                else if (thisKey == 9)
+                else if (e.down() && thisKey == 9)
                 {
+                    // Guard on down: without it this fired on BOTH press and release,
+                    // randomizing the pattern twice per tap.
                     fullRandomize(tPat);
                     headerMessage_ = "Everything is RAND";
                     showMessage();
                 }
-                else if (thisKey == 10)
+                else if (e.down() && thisKey == 10)
                 {
                     tPat->Reinit();
                     headerMessage_ = "Clear Pat";
