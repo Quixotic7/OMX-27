@@ -833,6 +833,72 @@ void OmxDisp::dispStepParams(const char *labels[4], const char *values[4], const
 	}
 }
 
+// 5-cell param grid (like dispStepParams, one more column). 128px doesn't divide by 5,
+// so cells are 26/25/26/25/26 px. Dotted rules (a lighter touch than solid at this size)
+// separate the label band from the values and divide the columns. The selected cell gets a
+// bright outline when navigating; its value box inverts while editing. A `dimmed` cell (the
+// param is inactive in the current mode) is knocked back with a checkerboard so it reads as
+// muted without a per-pixel grey the 1-bit panel can't do.
+void OmxDisp::dispParams5(const char *labels[5], const char *values[5], const bool dimmed[5], uint8_t sel, bool editing)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+	display.fillRect(0, 0, 128, 32, BLACK);
+	u8g2_display.setFontMode(1);
+
+	static const uint8_t bx[6] = {0, 26, 51, 77, 102, 128}; // column boundaries
+
+	// dotted rule under the label band
+	for (int x = 0; x < 128; x += 2)
+		display.drawPixel(x, 10, WHITE);
+
+	for (uint8_t i = 0; i < 5; i++)
+	{
+		int x = bx[i], cw = bx[i + 1] - bx[i];
+		bool valInv = (i == sel) && editing;
+
+		// dotted column divider on the right edge (not after the last cell)
+		if (i < 4)
+			for (int y = 1; y < 31; y += 2)
+				display.drawPixel(bx[i + 1] - 1, y, WHITE);
+
+		// label (top band)
+		u8g2_display.setFont(FONT_LABELS);
+		u8g2_display.setForegroundColor(WHITE);
+		u8g2_display.setBackgroundColor(BLACK);
+		u8g2centerText(labels[i], x, 8, cw, 8);
+
+		// value (lower band); box inverts while this cell is being edited
+		if (valInv)
+		{
+			display.fillRect(x + 2, 13, cw - 4, 17, WHITE);
+			u8g2_display.setForegroundColor(BLACK);
+			u8g2_display.setBackgroundColor(WHITE);
+		}
+		else
+		{
+			u8g2_display.setForegroundColor(WHITE);
+			u8g2_display.setBackgroundColor(BLACK);
+		}
+		u8g2_display.setFont(FONT_TENFAT);
+		u8g2centerText(values[i], x, 27, cw, 8);
+
+		// muted cell (param not applicable in this mode): checkerboard the value band
+		if (dimmed[i] && !valInv)
+			for (int yy = 12; yy < 31; yy++)
+				for (int xx = x + 1; xx < bx[i + 1] - 1; xx++)
+					if ((xx + yy) & 1)
+						display.drawPixel(xx, yy, BLACK);
+
+		// selection outline when navigating (not editing)
+		if (i == sel && !editing)
+			display.drawRect(x, 0, cw, 31, WHITE);
+	}
+}
+
 // FORM Mix bar pages (LEVELS: 8 per-track velocity bars; CC: 5 live CC values).
 // Title top-left, the selected item + value top-right; the selected slot is boxed and
 // inverts while the encoder is editing it. count = number of bars (128/count px each).

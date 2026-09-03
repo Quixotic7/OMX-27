@@ -1044,6 +1044,33 @@ void OmxModeForm::scaleRootPatternVals(String &rootV, String &patV)
 	}
 }
 
+// Render the track-aware scale page as a 5-cell grid: MODE / ROOT / SCALE / LOCK / GROUP.
+// MODE is the per-track scale mode (GLOBAL/CHROMATIC/LOCAL); when LOCAL, ROOT/SCALE edit the
+// track's own scale. Cells that don't apply in the current mode are greyed.
+void OmxModeForm::dispScalePage5(uint8_t sel, bool editing)
+{
+	auto m = getSelectedMachine();
+	uint8_t mode = m->getScaleMode(); // 0 GLOBAL, 1 CHROMATIC, 2 LOCAL
+	static const char *kModeShort[3] = {"GL", "CH", "LO"};
+	String rootV, patV;
+	scaleRootPatternVals(rootV, patV); // track-aware root/scale (shows "--" for chromatic)
+	String vals[5];
+	vals[0] = kModeShort[mode < 3 ? mode : 0];
+	vals[1] = rootV;
+	vals[2] = patV;
+	vals[3] = scaleConfig.lockScale ? "Ĉ" : "Ć";
+	vals[4] = scaleConfig.group16 ? "Ĉ" : "Ć";
+	const char *labels[5] = {"MODE", "ROOT", "SCALE", "LOCK", "GROUP"};
+	const char *values[5] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str(), vals[4].c_str()};
+	bool chromatic = m->scaleIsChromatic();
+	// ROOT/SCALE muted on a chromatic-mode track; LOCK/GROUP muted whenever no scale is active.
+	bool dimmed[5] = {false,
+					  mode == FormOmni::FormMachineOmni::TRACKSCALE_CHROMATIC,
+					  mode == FormOmni::FormMachineOmni::TRACKSCALE_CHROMATIC,
+					  chromatic, chromatic};
+	omxDisp.dispParams5(labels, values, dimmed, sel, editing);
+}
+
 // Which param palette a Notes-view hold selects: 11 = velocity, 12 = length, 11+12 = math,
 // 13 = chance. -1 = none held.
 int8_t OmxModeForm::notesPaletteMode()
@@ -2927,14 +2954,18 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 	// notes editor (STEP group), forward off the end lands on ACTIONS.
 	if (stepMenuPage_ == 5)
 	{
+		// 5 cells: 0 MODE (per-track scale mode), 1 ROOT, 2 SCALE, 3 LOCK, 4 GROUP.
 		if (!getEncoderSelect())
 		{
-			notesEditScaleParam(stepMenuSel_, dir);
+			if (stepMenuSel_ == 0)
+				omni->editScaleMode(dir);
+			else
+				notesEditScaleParam(stepMenuSel_ - 1, dir); // 0 root / 1 scale / 2 lock / 3 group
 			omxDisp.setDirty();
 			return true;
 		}
 		int s = (int)stepMenuSel_ + dir;
-		if (s > 3)
+		if (s > 4)
 		{
 			stepMenuPage_ = 6;
 			stepMenuSel_ = 0;
@@ -2971,7 +3002,7 @@ bool OmxModeForm::onEncoderStep(Encoder::Update enc)
 		if (s < 0)
 		{
 			stepMenuPage_ = 5;
-			stepMenuSel_ = 3;
+			stepMenuSel_ = 4; // SCALE page now has 5 cells (0-4); land on the last (GROUP)
 		}
 		else
 			stepMenuSel_ = (uint8_t)constrain(s, 0, 3);
@@ -3225,17 +3256,10 @@ void OmxModeForm::onDisplayStep()
 		return;
 	}
 
-	// SCALE page (5, TRACK SETUP group): Root / Scale / Lock / Group.
+	// SCALE page (5, TRACK SETUP group): 5-cell Mode / Root / Scale / Lock / Group.
 	if (stepMenuPage_ == 5)
 	{
-		const char *labels[4] = {"ROOT", "SCALE", "LOCK", "GROUP"};
-		String vals[4];
-		scaleRootPatternVals(vals[0], vals[1]); // track-aware (local / chromatic / global)
-		vals[2] = scaleConfig.lockScale ? "Ĉ" : "Ć";
-		vals[3] = scaleConfig.group16 ? "Ĉ" : "Ć";
-		const char *values[4] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str()};
-		bool locked[4] = {false, false, false, false};
-		omxDisp.dispStepParams(labels, values, locked, stepMenuSel_, !getEncoderSelect());
+		dispScalePage5(stepMenuSel_, !getEncoderSelect());
 		return;
 	}
 

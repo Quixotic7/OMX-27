@@ -53,6 +53,9 @@ public:
 	// selected cell is boxed when navigating; when `editing` (holding a step) it is fully
 	// inverted to show the encoder is locked onto it.
 	void dispStepParams(const char *labels[4], const char *values[4], const bool locked[4], uint8_t sel, bool editing);
+	// Like dispStepParams but a 5-cell grid (e.g. the track-aware SCALE page: Mode/Root/
+	// Scale/Lock/Group). dimmed[i] greys a cell whose param is inactive in the current mode.
+	void dispParams5(const char *labels[5], const char *values[5], const bool dimmed[5], uint8_t sel, bool editing);
 	// FORM Mix bar pages (LEVELS / CC): count bars; sel boxed, inverted while editing.
 	// FORM Mix bar pages. locked marks P-Locked slots; bigNum >= 0 draws a large number
 	// block on the right (the pot bank) selectable as cell index `count`.

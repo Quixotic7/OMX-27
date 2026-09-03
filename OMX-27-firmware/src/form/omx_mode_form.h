@@ -170,6 +170,8 @@ private:
 	void notesEditScaleParam(uint8_t param, int dir); // 0 root · 1 scale · 2 lock · 3 group
 	// Fill the ROOT/SCALE display values, track-aware (local scale / chromatic / global).
 	void scaleRootPatternVals(String &rootV, String &patV);
+	// Render the 5-cell track-aware scale page (MODE / ROOT / SCALE / LOCK / GROUP), sel 0-4.
+	void dispScalePage5(uint8_t sel, bool editing);
 	void onKeyUpdateNotes(OMXKeypadEvent e);
 	void updateNotesLEDs();
 	void onDisplayNotes();
