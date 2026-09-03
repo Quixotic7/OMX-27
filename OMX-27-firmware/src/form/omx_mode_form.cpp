@@ -4391,16 +4391,16 @@ bool OmxModeForm::shouldBlockEncEdit()
 	return false;
 }
 
+// FORM has no drum-kit concept; these satisfy the shared presetManager save/load callback
+// interface (registered in the constructor) and intentionally do nothing.
 void OmxModeForm::saveKit(uint8_t saveIndex)
 {
-	// drumKits[saveIndex].CopyFrom(activeDrumKit);
-	// selDrumKit = saveIndex;
+	(void)saveIndex;
 }
 
 void OmxModeForm::loadKit(uint8_t loadIndex)
 {
-	// activeDrumKit.CopyFrom(drumKits[loadIndex]);
-	// selDrumKit = loadIndex;
+	(void)loadIndex;
 }
 
 void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)

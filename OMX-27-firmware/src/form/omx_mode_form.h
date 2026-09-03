@@ -459,8 +459,8 @@ private:
 
 	void selectMidiFx(uint8_t mfxIndex, bool dispMsg);
 
-	// uint8_t mfxIndex_ = 0;
-
+	// No-op preset hooks: the shared presetManager save/load path expects these callbacks, but
+	// FORM has no drum-kit concept, so they intentionally do nothing (see the .cpp).
 	void saveKit(uint8_t saveIndex);
 	void loadKit(uint8_t loadIndex);
 
