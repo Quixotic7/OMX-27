@@ -595,12 +595,15 @@ void OmxModeForm::updateMILEDs()
 	if (ks == nullptr) // chromatic track
 	{
 		for (uint8_t q = 1; q < 27; q++)
-			strip.setPixelColor(q, LEDOFF);
+			if (midiSettings.midiKeyState[q] == -1) // same guard as drawKeyboardScaleLEDs:
+				strip.setPixelColor(q, LEDOFF);     // don't repaint MIDI-held keys
 	}
 	else if (m->getScaleMode() == FormOmni::FormMachineOmni::TRACKSCALE_LOCAL)
 	{
 		for (uint8_t q = 1; q < 27; q++)
 		{
+			if (midiSettings.midiKeyState[q] != -1)
+				continue; // MIDI-held: leave its feedback alone (parity with the GLOBAL path)
 			int kc = scaleConfig.group16 ? ks->getGroup16Color(q)
 										 : ks->getScaleColor(((notes[q] % 12) + 12) % 12);
 			uint32_t c = LEDOFF;
@@ -739,6 +742,22 @@ void OmxModeForm::onDisplayMI()
 {
 	auto omni = getSelectedMachine();
 
+	// Modal submenus render FIRST, before any cursor-page branch: submenuSetReturn() lands
+	// here from other views' ACTIONS cells with miCursor_ still parked wherever the user
+	// last left MI — checking the pages first drew that page while the encoder was silently
+	// scrubbing the live quantize preview (or the CLEAR confirm) underneath it.
+	if (miQuantSub_)
+	{
+		omxDisp.dispGenericModeLabelDoubleLine("QUANTIZE", String(quantWork_).c_str(), 0, 0);
+		return;
+	}
+	if (miClearSub_)
+	{
+		static const char *kYesNo[2] = {"NO", "YES"};
+		omxDisp.dispOptionCombo("Clear Track?", kYesNo, 2, clearSel_, true);
+		return;
+	}
+
 	// Scale page (cursor 1-5): the shared 5-cell Mode / Root / Scale / Lock / Group grid.
 	if (miCursor_ >= 1 && miCursor_ <= 5)
 	{
@@ -783,19 +802,6 @@ void OmxModeForm::onDisplayMI()
 		return;
 	}
 
-	// QUANTIZE submenu (scrubbing the amount, previewing it live): dedicated display.
-	if (miQuantSub_)
-	{
-		omxDisp.dispGenericModeLabelDoubleLine("QUANTIZE", String(quantWork_).c_str(), 0, 0);
-		return;
-	}
-	// CLEAR confirm submenu — the same Yes/No combo as Clear Storage.
-	if (miClearSub_)
-	{
-		static const char *kYesNo[2] = {"NO", "YES"};
-		omxDisp.dispOptionCombo("Clear Track?", kYesNo, 2, clearSel_, true);
-		return;
-	}
 	// Actions page (cursor 11-13): QUANTIZE + CLEAR + POTS — click to fire/open
 	// (@ = opens a submenu, µ = destructive).
 	if (miCursor_ >= 11 && miCursor_ <= 13)
@@ -1053,8 +1059,11 @@ void OmxModeForm::notesEditScaleParam(uint8_t param, int dir)
 	{
 	case 0: getSelectedMachine()->editScaleRoot(dir); break;
 	case 1: getSelectedMachine()->editScalePattern(dir); break;
-	case 2: scaleConfig.lockScale = (dir > 0); break; // lock
-	case 3: scaleConfig.group16 = (dir > 0); break;   // group
+	// LOCK/GROUP are inert while the track is effectively chromatic — same predicate the
+	// renderer dims on. Arming GROUP with no active scale made getGroup16Note() return -1
+	// for every key: a completely dead keyboard with the offending cell drawn greyed-out.
+	case 2: if (!getSelectedMachine()->scaleIsChromatic()) scaleConfig.lockScale = (dir > 0); break; // lock
+	case 3: if (!getSelectedMachine()->scaleIsChromatic()) scaleConfig.group16 = (dir > 0); break;   // group
 	}
 	omxDisp.setDirty();
 	omxLeds.setDirty();
@@ -1680,8 +1689,11 @@ void OmxModeForm::toolAction(uint8_t tool, uint8_t action)
 	case TOOL_BPM: // the single button is TAP TEMPO
 		tapTempo();
 		break;
-	case TOOL_PAGE: // CUT (0) / COPY (1) / PASTE (2) the active page (F1 selects the page)
+	case TOOL_PAGE: // COPY (0) / CUT (1) / PASTE (2) the active page (F1 selects the page)
 	{
+		// COPY is deliberately button 0: this tool has no params, so the cursor rests on
+		// the first button and the universal encoder-click fires it — the default must
+		// never be the destructive CUT (a bare click used to blank the whole page).
 		uint8_t page = omni->activePage();
 		if (action == 2) // PASTE
 		{
@@ -1691,11 +1703,11 @@ void OmxModeForm::toolAction(uint8_t tool, uint8_t action)
 				omxDisp.displayMessage("PASTE P" + String(page + 1));
 			}
 		}
-		else // CUT (0) or COPY (1)
+		else // COPY (0) or CUT (1)
 		{
 			omni->copyPageOut(page, pageBuffer_, pageBufferLen_);
 			pageBufferLoaded_ = true;
-			if (action == 0) // CUT: clear the page after grabbing it
+			if (action == 1) // CUT: clear the page after grabbing it
 			{
 				omni->clearPageSteps(page);
 				omxDisp.displayMessage("CUT P" + String(page + 1));
@@ -1780,7 +1792,7 @@ void OmxModeForm::onKeyUpdateTools(OMXKeypadEvent e)
 		if (k >= 5 && k <= 8) toolAction(TOOL_TRANS, k - 5); // Oct- Oct+ Semi- Semi+
 		break;
 	case TOOL_PAGE:
-		if (k >= 6 && k <= 8) toolAction(TOOL_PAGE, k - 6); // CUT / COPY / PASTE
+		if (k >= 6 && k <= 8) toolAction(TOOL_PAGE, k - 6); // COPY / CUT / PASTE
 		break;
 	default:
 		if (k == 7) toolAction(toolIndex_, 0); // single apply/action key
@@ -2064,9 +2076,13 @@ void OmxModeForm::onDisplayTools()
 	}
 	case TOOL_SCALE:
 	{
-		String scaleV = (scaleConfig.scalePattern < 0) ? String("--") : String((int)scaleConfig.scalePattern);
+		// Track-aware values via the shared accessor: the encoder edits (and SNAP applies)
+		// the per-track scale, so the display must show the same one — the old hardcoded
+		// global readout never moved while a LOCAL track's scale was being edited under it.
+		String rootV, scaleV;
+		getSelectedMachine()->scaleValueStrings(rootV, scaleV);
 		const char *pl[3] = {"ROOT", "SCALE", "SCOPE"};
-		const char *pv[3] = {MusicScales::getNoteName(scaleConfig.scaleRoot), scaleV.c_str(), scopeVal};
+		const char *pv[3] = {rootV.c_str(), scaleV.c_str(), scopeVal};
 		const char *btns[1] = {"SNAP"};
 		omxDisp.dispToolActionPage(pl, pv, 3, btns, 1, sel, editing, nullptr, 0, -1);
 		return;
@@ -2113,7 +2129,7 @@ void OmxModeForm::onDisplayTools()
 	{
 		// No params — three buttons act on the ACTIVE page (F1 selects it). The step row
 		// shows that page's content so you can see what you're cutting / copying.
-		const char *btns[3] = {"CUT", "COPY", "PASTE"};
+		const char *btns[3] = {"COPY", "CUT", "PASTE"};
 		omxDisp.dispToolActionPage(nullptr, nullptr, 0, btns, 3, sel, editing, stepState, pageLen, playhead);
 		return;
 	}
@@ -2256,11 +2272,13 @@ void OmxModeForm::onKeyUpdateStep(OMXKeypadEvent e)
 			omni->editScalePattern((int)k - cur);
 			break;
 		}
-		case 3: // LOCK
+		case 3: // LOCK (inert while the track is effectively chromatic — cell renders dimmed)
+			if (omni->scaleIsChromatic()) break;
 			if (thisKey == 6) scaleConfig.lockScale = false;
 			else if (thisKey == 7) scaleConfig.lockScale = true;
 			break;
-		case 4: // GROUP
+		case 4: // GROUP (same guard: arming it with no active scale kills the keyboard)
+			if (omni->scaleIsChromatic()) break;
 			if (thisKey == 6) scaleConfig.group16 = false;
 			else if (thisKey == 7) scaleConfig.group16 = true;
 			break;
@@ -3922,7 +3940,18 @@ void OmxModeForm::onClockTick()
 
 void OmxModeForm::loopUpdate(Micros elapsedTime)
 {
-	// Serial.println("LoopUpdate");
+	// Self-heal the AUX swallow mask: a bit must never outlive its key being physically
+	// held. If any consumer ate the release event before onKeyUpdate's clear (e.g. a
+	// macro's early-return), the stale bit would report keys 1/2 as "swallowed" forever
+	// and silently disable the F1/F2/F3 layers. This runs AFTER event dispatch (keypad
+	// events are handled synchronously in tick(), before loopUpdate), so it can never
+	// steal the bit from a release that onKeyUpdate is still about to route.
+	if (auxSwallowMask_ != 0)
+	{
+		for (uint8_t k = 1; k < 27; k++)
+			if ((auxSwallowMask_ & (1u << k)) && !midiSettings.keyState[k])
+				auxSwallowMask_ &= ~(1u << k);
+	}
 
 	// Solo/mute audibility: keep anySolo current and flush notes on any track that just
 	// became inaudible, so muting or soloing can never leave notes ringing (stuck).
@@ -4424,12 +4453,16 @@ void OmxModeForm::onKeyUpdate(OMXKeypadEvent e)
 		if (!e.down() && k > 0 && (auxSwallowMask_ & (1u << k)))
 		{
 			auxSwallowMask_ &= ~(1u << k);
-			if (k == 1 && !aux1Used_ && e.quickClicked())
+			// Play/Pause + Reset fire on release whenever the key wasn't consumed by the
+			// STOP chord or the hold action — aux1Used_/aux2Used_ carry that protection.
+			// (An extra quickClicked() gate here created a dead zone: any press longer than
+			// the ~200 ms click window but shorter than the hold threshold did NOTHING.)
+			if (k == 1 && !aux1Used_)
 			{
 				togglePlayback();
 				omxDisp.displayMessage(omxFormGlobal.isPlaying ? "PLAY" : "PAUSE");
 			}
-			else if (k == 2 && !aux2Used_ && e.quickClicked())
+			else if (k == 2 && !aux2Used_)
 			{
 				resetPlayback();
 				omxDisp.displayMessage("RESET");

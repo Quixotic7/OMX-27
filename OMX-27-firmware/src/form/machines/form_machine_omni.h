@@ -358,7 +358,9 @@ namespace FormOmni
         {
             scaleMode_ = mode >= TRACKSCALE_COUNT ? TRACKSCALE_GLOBAL : mode;
             localRoot_ = root > 11 ? 0 : root;
-            localPattern_ = pattern < -1 ? -1 : pattern;
+            // Clamp BOTH ends: the bank-file tail is not covered by kOmniSaveVersion, so an
+            // out-of-range byte (newer build, torn write) must land on "off", not a bogus index.
+            localPattern_ = (pattern < -1 || pattern >= (int8_t)MusicScales::getNumScales()) ? -1 : pattern;
             recalcLocalScale();
         }
         void editScaleMode(int amt);   // cycles GLOBAL/CHROMATIC/LOCAL (pops the name)
@@ -368,6 +370,10 @@ namespace FormOmni
         // Every view delegates here (Seq/MI/Notes via the shell, plus the Mix machine menu) so
         // the grid, values, checkbox glyphs and checkerboard-muting stay identical everywhere.
         void drawScalePage5(uint8_t sel, bool editing);
+        // Track-aware ROOT/SCALE display values ("--" on a chromatic track, the track's own
+        // values when LOCAL, else the global scale). Shared by drawScalePage5 and the
+        // SCALE SNAP tool page so a display can never disagree with what the edits touch.
+        void scaleValueStrings(String &rootV, String &patV);
         // Effective scale for interval math / note palettes (never null; chromatic tracks
         // get the local instance calculated with pattern -1 = chromatic degrees).
         MusicScales *paletteScale()
@@ -375,9 +381,12 @@ namespace FormOmni
             return scaleMode_ == TRACKSCALE_GLOBAL ? omxFormGlobal.musicScale : &localScale_;
         }
         // Effective scale for the live keyboard (null = plain chromatic mapping, no lock/group).
+        // Gates on scaleIsChromatic(), not just the mode: a LOCAL track whose scale is dialed
+        // to "--" holds a never-calculated MusicScales — handing that to getNoteNumber with
+        // global LOCK/GROUP set filtered EVERY key to -1 (a completely dead keyboard).
         MusicScales *keyboardScale()
         {
-            if (scaleMode_ == TRACKSCALE_CHROMATIC) return nullptr;
+            if (scaleIsChromatic()) return nullptr;
             return paletteScale();
         }
         // True when this track plays chromatically (mode chromatic, or its scale is off).

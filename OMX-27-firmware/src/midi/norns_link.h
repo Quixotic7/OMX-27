@@ -51,7 +51,7 @@ public:
 	void requestChunks(uint16_t mask);
 
 	// Reply to a host LED-state query (NL_CMD_LED_STATE 0x54): dump all 27 keypad LEDs'
-	// current RGB (each channel 7-bit) in two SysEx parts (LEDs 0-13, then 14-26). Lets a
+	// current RGB (each channel 7-bit) in two SysEx parts (LEDs 0-12, then 13-26). Lets a
 	// host verify the RGB LED state the OLED mirror can't show.
 	void sendLedState();
 

@@ -141,6 +141,11 @@ namespace FormOmni
 
     void FormMachineOmni::editScaleRoot(int amt)
     {
+        // The scale page renders ROOT as "--" (dimmed) on a CHROMATIC track — the cell is
+        // inert. Without this guard the edit fell through and silently rewrote the GLOBAL
+        // scale while the display never changed.
+        if (scaleMode_ == TRACKSCALE_CHROMATIC)
+            return;
         if (scaleMode_ == TRACKSCALE_LOCAL)
         {
             uint8_t prev = localRoot_;
@@ -157,6 +162,8 @@ namespace FormOmni
 
     void FormMachineOmni::editScalePattern(int amt)
     {
+        if (scaleMode_ == TRACKSCALE_CHROMATIC)
+            return; // inert on a chromatic track (cell shows "--" dimmed) — never edit the global
         if (scaleMode_ == TRACKSCALE_LOCAL)
         {
             int8_t prev = localPattern_;
@@ -2704,16 +2711,19 @@ namespace FormOmni
             {
                 editScalePattern(amtSlow);
             }
+            // LOCK/GROUP: same predicate the renderer dims on (track-effective, not the raw
+            // global pattern) so a dimmed cell is inert and a live-looking cell always edits —
+            // identical from every view that shows this page.
             if (param == 3)
             {
-                if (scaleConfig.scalePattern >= 0)
+                if (!scaleIsChromatic())
                 {
                     scaleConfig.lockScale = constrain(scaleConfig.lockScale + amtSlow, 0, 1);
                 }
             }
             if (param == 4)
             {
-                if (scaleConfig.scalePattern >= 0)
+                if (!scaleIsChromatic())
                 {
                     scaleConfig.group16 = constrain(scaleConfig.group16 + amtSlow, 0, 1);
                 }
@@ -2752,27 +2762,32 @@ namespace FormOmni
     // MODE is the per-track scale mode; ROOT/SCALE are track-aware (LOCAL edits the track's own
     // scale, else the global one). Inactive cells are greyed: ROOT/SCALE when chromatic, LOCK/GROUP
     // whenever no scale is active.
+    void FormMachineOmni::scaleValueStrings(String &rootV, String &patV)
+    {
+        if (scaleMode_ == TRACKSCALE_CHROMATIC)
+        {
+            rootV = "--"; // chromatic track: no scale applies
+            patV = "--";
+        }
+        else if (scaleMode_ == TRACKSCALE_LOCAL)
+        {
+            rootV = MusicScales::getNoteName(localRoot_);
+            patV = localPattern_ < 0 ? String("--") : String((int)localPattern_);
+        }
+        else
+        {
+            rootV = MusicScales::getNoteName(scaleConfig.scaleRoot);
+            patV = scaleConfig.scalePattern < 0 ? String("--") : String((int)scaleConfig.scalePattern);
+        }
+    }
+
     void FormMachineOmni::drawScalePage5(uint8_t sel, bool editing)
     {
         static const char *kScaleModeShort[3] = {"GL", "CH", "LO"};
         const char *labels[5] = {"MODE", "ROOT", "SCALE", "LOCK", "GROUP"};
         String vals[5];
         vals[0] = kScaleModeShort[scaleMode_ < 3 ? scaleMode_ : 0];
-        if (scaleMode_ == TRACKSCALE_CHROMATIC)
-        {
-            vals[1] = "--"; // chromatic track: no scale applies
-            vals[2] = "--";
-        }
-        else if (scaleMode_ == TRACKSCALE_LOCAL)
-        {
-            vals[1] = MusicScales::getNoteName(localRoot_);
-            vals[2] = localPattern_ < 0 ? String("--") : String((int)localPattern_);
-        }
-        else
-        {
-            vals[1] = MusicScales::getNoteName(scaleConfig.scaleRoot);
-            vals[2] = scaleConfig.scalePattern < 0 ? String("--") : String((int)scaleConfig.scalePattern);
-        }
+        scaleValueStrings(vals[1], vals[2]);
         vals[3] = scaleConfig.lockScale ? "Ĉ" : "Ć";
         vals[4] = scaleConfig.group16 ? "Ĉ" : "Ć";
         const char *values[5] = {vals[0].c_str(), vals[1].c_str(), vals[2].c_str(), vals[3].c_str(), vals[4].c_str()};
