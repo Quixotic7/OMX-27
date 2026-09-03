@@ -647,6 +647,34 @@ static void drawPageIcon(int x, int y, bool filled, uint16_t color)
 	}
 }
 
+// Large page icons for the F1+encoder page-change popup: the overview's folded-corner
+// page glyphs at ~3x — filled = enabled, outline = disabled, underline = the active page.
+void OmxDisp::dispPageIconsLarge(uint8_t enabledPages, uint8_t activePage)
+{
+	display.fillRect(0, 0, 128, 32, BLACK);
+	const int y = 2;
+	for (uint8_t p = 0; p < 4; p++)
+	{
+		int x = 14 + p * 28;
+		if (enabledPages & (1 << p))
+		{
+			display.fillRect(x, y, 12, 3, WHITE);      // top (to the fold)
+			display.fillRect(x, y + 3, 15, 3, WHITE);  // folded diagonal band
+			display.fillRect(x, y + 6, 16, 18, WHITE); // body
+		}
+		else
+		{
+			display.drawLine(x, y, x + 9, y, WHITE);            // top edge (to fold)
+			display.drawLine(x + 9, y, x + 15, y + 6, WHITE);   // folded diagonal
+			display.drawLine(x + 15, y + 6, x + 15, y + 23, WHITE); // right
+			display.drawLine(x, y + 23, x + 15, y + 23, WHITE); // bottom
+			display.drawLine(x, y, x, y + 23, WHITE);           // left
+		}
+		if (p == activePage)
+			display.fillRect(x, y + 27, 16, 2, WHITE); // active underline
+	}
+}
+
 void OmxDisp::dispSeqTrackPage(const char *trackName, const bool *trackMuted, uint8_t selTrack,
 							   const char *rateStr, uint8_t playMode, uint16_t bpm, uint8_t enabledPages,
 							   uint8_t activePage, const uint8_t *stepState, int8_t playhead,
@@ -1230,16 +1258,16 @@ void OmxDisp::dispStepNoteKeyboard(int8_t notesAsKeys[6], const uint8_t *stepSta
 	if (!whiteNotes[15])
 		display.drawLine(112, wkHeight - 8, 112, wkHeight - 1, WHITE); // right wall
 
-	// Active page number in the right-hand gutter (the keyboard leaves ~15px free there).
+	// Active page number: a single TENFAT digit pinned to the top-right corner.
 	if (pageNum >= 0)
 	{
 		u8g2_display.setFontMode(1);
-		u8g2_display.setFont(FONT_LABELS);
+		u8g2_display.setFont(FONT_TENFAT);
 		u8g2_display.setForegroundColor(WHITE);
 		u8g2_display.setBackgroundColor(BLACK);
-		char pb[4];
-		snprintf(pb, sizeof(pb), "P%d", (int)pageNum);
-		u8g2centerText(pb, 113, 12, 15, 8);
+		char pb[3];
+		snprintf(pb, sizeof(pb), "%d", (int)pageNum);
+		u8g2centerText(pb, 116, 10, 12, 8);
 	}
 
 	// --- 16 step-marker cells beneath the keyboard (shared renderer) ---

@@ -1486,9 +1486,14 @@ void OmxModeForm::updateNotesLEDs()
 		uint8_t enabled = omni->getEnabledPages(), active = omni->activePage();
 		for (uint8_t p = 0; p < 4; p++)
 		{
-			uint32_t c = (p == active) ? (uint32_t)GREEN : ((enabled & (1 << p)) ? (uint32_t)BLUE : (uint32_t)VLOWWHITE);
+			uint32_t c;
+			if (p == active)
+				c = (enabled & (1 << p)) ? (uint32_t)GREEN : (uint32_t)0xFF4040; // disabled+selected: BRIGHT red
+			else
+				c = (enabled & (1 << p)) ? (uint32_t)BLUE : (uint32_t)VLOWWHITE;
 			strip.setPixelColor(3 + p, c);
 		}
+		paintF1ActionKeys(blink); // 8/9/10 = clear page / clear track / undo-redo
 		for (uint8_t i = 0; i < 16; i++)
 		{
 			uint32_t c = omni->stepHasNotes(i) ? (uint32_t)LTBLUE : (uint32_t)DKBLUE;
@@ -1739,6 +1744,28 @@ static bool toolHasScope(uint8_t tool)
 
 // Perform a tool's action button (shared by the top-row keys and the encoder click).
 // No popups — the step row / bars show the result (per the Tools UI spec).
+// Undo key LED (key 10): blue = restorable, dim blue = empty slot. FLASHES for ~2s right
+// after any destructive action (a snapshot was just taken) to say "you can undo this";
+// using undo ends the flash.
+void OmxModeForm::paintUndoKey(bool blink)
+{
+	bool undoReady = undoTrack_ >= 0 && undoPattern_ == (int8_t)activePattern_;
+	bool flashing = undoFlashMs_ != 0 && (uint32_t)(millis() - undoFlashMs_) < 2000;
+	uint32_t c = undoReady ? (uint32_t)BLUE : (uint32_t)DKBLUE;
+	if (flashing)
+		c = blink ? (uint32_t)BLUE : (uint32_t)LEDOFF;
+	strip.setPixelColor(10, c);
+}
+
+// F1 layer keys 8/9/10 (clear page / clear track / undo-redo) — lit so the shortcuts
+// are discoverable: orange / bright red / blue.
+void OmxModeForm::paintF1ActionKeys(bool blink)
+{
+	strip.setPixelColor(8, ORANGE); // clear the active page
+	strip.setPixelColor(9, RED);    // clear every page (whole track)
+	paintUndoKey(blink);
+}
+
 // F1 + keys 8/9/10 (Step/Notes/Tools — the F1 page layer's action keys): 8 = clear the
 // ACTIVE page's steps, 9 = clear every step on all pages, 10 = undo/redo (the same slot as
 // Tools key 10). Both clears snapshot the track first, so F1+10 immediately reverses them.
@@ -1809,6 +1836,7 @@ void OmxModeForm::toolSnapshotUndo()
 	undoTrack_ = (int8_t)selectedMachine_;
 	undoPattern_ = (int8_t)activePattern_;
 	undoNextIsRedo_ = false;
+	undoFlashMs_ = millis(); // flash the undo key briefly: "you can undo this"
 }
 
 // Tools key 10: swap the snapshot with the live track — pressing again swaps back (redo).
@@ -1820,6 +1848,7 @@ void OmxModeForm::toolUndo()
 		omxDisp.displayMessage("NO UNDO");
 		return;
 	}
+	undoFlashMs_ = 0; // using undo ends the "you can undo" flash
 	FormOmni::OmniSeq cur = machines_[undoTrack_]->getSeq();
 	machines_[undoTrack_]->setSeq(undoSeq_);
 	undoSeq_ = cur;
@@ -2146,9 +2175,9 @@ void OmxModeForm::updateToolsLEDs()
 	}
 	if (toolHasScope(toolIndex_))
 		strip.setPixelColor(9, toolScopeAll_ ? WHITE : LOWWHITE); // scope toggle: bright = track
-	// Key 10 = UNDO: lit while a snapshot is restorable (dies with a pattern switch).
-	bool undoReady = undoTrack_ >= 0 && undoPattern_ == (int8_t)activePattern_;
-	strip.setPixelColor(10, undoReady ? DKORANGE : LEDOFF);
+	// Key 10 = UNDO: same LED language as the F1 layer (blue; flashes after a destructive
+	// action; dim when the slot is empty).
+	paintUndoKey(omxLeds.getBlinkState());
 
 	// Step row: only actual triggers light (notes bright, ghosts dim, muted dark red);
 	// empty steps stay OFF so the pattern reads at a glance. Playhead = steady green.
@@ -2844,7 +2873,7 @@ void OmxModeForm::updateStepLEDs()
 			bool enabled = en & (1 << p);
 			uint32_t c;
 			if (p == sel)
-				c = enabled ? (uint32_t)GREEN : (uint32_t)RED;
+				c = enabled ? (uint32_t)GREEN : (uint32_t)0xFF4040; // disabled+selected: BRIGHT red
 			else if (enabled)
 				c = (uint32_t)BLUE;
 			else
@@ -2853,6 +2882,7 @@ void OmxModeForm::updateStepLEDs()
 				c = (uint32_t)YELLOW; // flashing playhead page
 			strip.setPixelColor(3 + p, c);
 		}
+		paintF1ActionKeys(blink); // 8/9/10 = clear page / clear track / undo-redo
 		paintStepRow(omni); // same step colours as the overview
 		return;
 	}
@@ -4130,6 +4160,9 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 	// so the red blink both appears and CLEARS even when nothing else dirties them.
 	if (recFullFlashMs_ != 0 && (uint32_t)(millis() - recFullFlashMs_) < 300)
 		omxLeds.setDirty();
+	// Same for the undo-key flash (~2s after a destructive action).
+	if (undoFlashMs_ != 0 && (uint32_t)(millis() - undoFlashMs_) < 2200)
+		omxLeds.setDirty();
 
 	// Solo/mute audibility: keep anySolo current and flush notes on any track that just
 	// became inaudible, so muting or soloing can never leave notes ringing (stuck).
@@ -4278,7 +4311,7 @@ void OmxModeForm::onEncoderChanged(Encoder::Update enc)
 		auto omni = getSelectedMachine();
 		int p = constrain((int)omni->activePage() + enc.dir(), 0, 3);
 		omni->setActivePage((uint8_t)p);
-		omxDisp.displayMessage("PAGE " + String(p + 1));
+		pagePopupMs_ = millis(); // show the large page icons instead of a text popup
 		stepF1Used_ = true; // the hold was "used": releasing F1 must not fire a quick-tap
 		notesF1Used_ = true;
 		omxDisp.setDirty();
@@ -5145,6 +5178,16 @@ void OmxModeForm::onDisplayUpdate()
 	// always repopulated. The old canShowDisplay() gate left it blank between the 60ms OLED
 	// flushes, which the screen-mirror then captured as blank frames (flicker). The physical OLED
 	// flush stays throttled in showDisplay(); this only refills the in-memory buffer.
+
+	// F1+encoder page change: a large version of the overview's page icons pops for a
+	// moment (while F1 is still held) instead of a text message.
+	if (omxFormGlobal.shortcutMode == FORMSHORTCUT_F1 && pagePopupMs_ != 0 &&
+		(uint32_t)(millis() - pagePopupMs_) < 900)
+	{
+		auto omni = getSelectedMachine();
+		omxDisp.dispPageIconsLarge(omni->getEnabledPages(), omni->activePage());
+		return;
+	}
 
 	// v2 shell: container-rendered views
 	switch (formView_)

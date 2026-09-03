@@ -306,6 +306,10 @@ private:
 	void viewHome(uint8_t view);
 	// F1 + keys 8/9/10 in Step/Notes/Tools: clear page / clear all pages / undo-redo.
 	bool handleF1PageActions(uint8_t k, OMXKeypadEvent e);
+	void paintUndoKey(bool blink);       // key-10 undo LED (blue / flash-after-destructive)
+	void paintF1ActionKeys(bool blink);  // F1 layer keys 8/9/10 LEDs
+	uint32_t undoFlashMs_ = 0;           // "you can undo" flash window start
+	uint32_t pagePopupMs_ = 0;           // F1+encoder page-icons popup window start
 	// Live-record overflow feedback (P4): rate-limit the REC FULL popup + AUX-LED flash.
 	uint32_t recFullWarnMs_ = 0;
 	uint32_t recFullFlashMs_ = 0;

@@ -108,6 +108,8 @@ public:
 	// playAbsStep is the absolute playing step (0-63), or -1 when stopped. Does NOT clear the buffer
 	// (draws over the already-rendered keyboard view).
 	void drawPageBars(const uint8_t *pageLens, uint8_t enabledMask, int8_t playAbsStep);
+	// Large page icons (F1+encoder page-change popup): the overview glyphs at ~3x.
+	void dispPageIconsLarge(uint8_t enabledPages, uint8_t activePage);
 
 	// FORM Patterns view: a big "Pn" (TENFAT) on the left, the switch-style name top-right, an
 	// optional tag under it (">Pq" queued / "CHn" chain), and a bottom progress bar (0-1) showing

@@ -111,10 +111,12 @@ Without AUX, the two leftmost playable keys are momentary shortcuts *within the 
 What they do is view-specific, but the pattern is consistent across the Seq/Notes/Tools views:
 
 - **Hold F1** — page tools: keys 3–6 show/select the pages (**double-tap** to solo one,
-  **hold two** for a loop range); **turn the encoder** to change the active page
-  (Mix/Step/Notes/Tools). Keys **8/9/10**: **clear the active page** · **clear every
-  page** · **undo/redo** (the same one-level slot as Tools key 10 — both clears are
-  undoable).
+  **hold two** for a loop range; a selected-but-disabled page glows bright red); **turn
+  the encoder** to change the active page — a large page-icon overlay pops
+  (Mix/Step/Notes/Tools). Keys **8/9/10** light orange/red/blue: **clear the active
+  page** · **clear every page** · **undo/redo** (the same one-level slot as Tools key
+  10 — both clears are undoable, and the undo key **flashes for a couple of seconds**
+  after any destructive action to say so).
 - **Hold F2** — **top row** = track select (tap a key 3–10 to jump tracks); in the Seq view
   the **low row** is the step **pick-up/drop tool** (see §8).
 - **Hold F3** — **rate & length**: set the track's step rate and the active page's length.
@@ -312,7 +314,7 @@ key — to return to the lane. Per-step **Accum** (Seq param page 2) makes indiv
 
 **NOTES** — a focused chord editor: pick a step, edit its up-to-6 notes as names or numbers,
 with the scale params, the full step params ("STEP LOCKS" group), and an ACTIONS page on
-the same encoder walk. The keyboard shows the **active page number** in its right gutter,
+the same encoder walk. The keyboard shows the **active page number** in its top-right corner,
 and stepping past the end of a page with the encoder **auto-advances** to the next page
 (clamped at page 1 step 1 and page 4 step 16). With **record armed**, the view becomes a
 live instrument: the note
