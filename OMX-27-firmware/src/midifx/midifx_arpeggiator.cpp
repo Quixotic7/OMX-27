@@ -241,6 +241,24 @@ namespace midifx
         }
     }
 
+    void MidiFXArpeggiator::setArpState(bool setOn)
+    {
+        if(setOn && arpMode_ == ARPMODE_OFF)
+        {
+            if (prevArpMode_ == ARPMODE_OFF)
+            {
+                prevArpMode_ = ARPMODE_ON;
+            }
+
+            changeArpMode(prevArpMode_);
+        }
+        else if(!setOn && arpMode_ != ARPMODE_OFF)
+        {
+            prevArpMode_ = arpMode_;
+            changeArpMode(ARPMODE_OFF);
+        }
+    }
+
     void MidiFXArpeggiator::toggleHold()
     {
         // Serial.println("Prev Arp Mode: " + String(prevArpMode_));
@@ -1210,14 +1228,25 @@ namespace midifx
     // Used with stoping sequencers
     void MidiFXArpeggiator::resync()
     {
-        playedNoteQueue.clear();
-        holdNoteQueue.clear();
-        sortedNoteQueue.clear();
-        tempNoteQueue.clear();
+        stopArp();
+        // playedNoteQueue.clear();
+        // holdNoteQueue.clear();
+        // sortedNoteQueue.clear();
+        // tempNoteQueue.clear();
 
-        resetArpSeq();
+        // resetArpSeq();
 
-        noteMaster.clear();
+        // noteMaster.clear();
+
+        // // End all fixed length notes
+        // auto it = fixedLengthNotes.begin();
+        // while (it != fixedLengthNotes.end())
+        // {
+        //     auto nt = it->noteCache.toMidiNoteGroup();
+        //     arpNoteOff(&nt);
+        // }
+
+        // fixedLengthNotes.clear();
 
         // for (uint8_t i = 0; i < 8; i++)
         // {
@@ -1916,7 +1945,11 @@ namespace midifx
         auto amtSlow = enc.accel(1);
         auto amtFast = enc.accel(5);
 
-        if (page == ARPPAGE_1) // Mode, Pattern, Reset mode, Chance
+        if (page == ARPPAGE_Chance)
+        {
+            chancePerc_ = constrain(chancePerc_ + amtFast, 0, 100);
+        }
+        else if (page == ARPPAGE_1) // Mode, Pattern, Reset mode, Chance
         {
             if (param == 0)
             {

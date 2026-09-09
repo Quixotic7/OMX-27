@@ -6,9 +6,6 @@
 #include "../../midifx/midifx_arpeggiator.h"
 #include "../../midifx/midifx_selector.h"
 
-#define NUM_MIDIFX_GROUPS 5
-#define NUM_MIDIFX_SLOTS 8
-
 // Holds a group of 4 midi fx slots.
 class SubModeMidiFxGroup : public SubmodeInterface
 {
@@ -49,6 +46,7 @@ public:
 	void enablePassthrough();
 	void selectPrevMFXSlot(bool silent = false);
 	void selectNextMFXSlot(bool silent = false);
+	void toggleSelectedFXBypass(); // AUX+21: pass-through toggle for the selected slot
 
 
 	uint8_t getArpOctaveRange();

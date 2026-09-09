@@ -13,7 +13,7 @@ void OmxLeds::initSetup()
 {
 	strip.begin();						 // INITIALIZE NeoPixel strip object (REQUIRED)
 	strip.show();						 // Turn OFF all pixels ASAP
-	strip.setBrightness(LED_BRIGHTNESS); // Set BRIGHTNESS to about 1/5 (max = 255)
+	strip.setBrightness(ledBrightness); // runtime brightness (defaults to LED_BRIGHTNESS)
 	for (int i = 0; i < LED_COUNT; i++)
 	{ // For each pixel...
 		strip.setPixelColor(i, HALFWHITE);
@@ -28,6 +28,13 @@ void OmxLeds::initSetup()
 	strip.show();
 
 	delay(100);
+
+	blinkAutoRefresh = true;
+}
+
+void OmxLeds::setBlinkAutoRefresh(bool autoRefresh)
+{
+	blinkAutoRefresh = autoRefresh;
 }
 
 void OmxLeds::updateBlinkStates()
@@ -46,13 +53,19 @@ void OmxLeds::updateBlinkStates()
 			blinkPatPos[i] = (blinkPatPos[i] + 1) % patMax;
 		}
 
-		setDirty();
+		if(blinkAutoRefresh)
+		{
+			setDirty();
+		}
 	}
 	if (slow_blink_msec >= slowBlinkInterval)
 	{
 		slowBlinkState = !slowBlinkState;
 		slow_blink_msec = 0;
-		setDirty();
+		if(blinkAutoRefresh)
+		{
+			setDirty();
+		}
 	}
 }
 
@@ -85,6 +98,19 @@ int OmxLeds::getKeyColor(MusicScales *scale, int pixel)
 	}
 }
 
+uint32_t OmxLeds::applyMidiKeyTint(int keyColor)
+{
+	if (colorConfig.midiBg_Hue == 0)
+		return keyColor;
+	if (keyColor == ROOTNOTECOLOR) // pale/bright root, same structure as the default 0xA2A2FF
+		return strip.gamma32(strip.ColorHSV(colorConfig.midiBg_Hue, 160, 255));
+	if (keyColor == INSCALECOLOR) // dim saturated in-scale, like the default 0x000090
+		return strip.gamma32(strip.ColorHSV(colorConfig.midiBg_Hue, 255, 144));
+	if (keyColor == MIDINOTEON) // pressed key: bright near-white, on theme
+		return strip.gamma32(strip.ColorHSV(colorConfig.midiBg_Hue, 96, 255));
+	return keyColor;
+}
+
 void OmxLeds::drawMidiLeds(MusicScales *scale)
 {
 	// updateBlinkStates();
@@ -107,18 +133,7 @@ void OmxLeds::drawMidiLeds(MusicScales *scale)
 		{
 			if (midiSettings.midiKeyState[q] == -1)
 			{
-				if (colorConfig.midiBg_Hue == 0)
-				{
-					strip.setPixelColor(q, LEDOFF);
-				}
-				else if (colorConfig.midiBg_Hue == 32)
-				{
-					strip.setPixelColor(q, LOWWHITE);
-				}
-				else
-				{
-					strip.setPixelColor(q, strip.ColorHSV(colorConfig.midiBg_Hue, colorConfig.midiBg_Sat, colorConfig.midiBg_Brightness));
-				}
+				strip.setPixelColor(q, LEDOFF);
 			}
 		}
 		strip.setPixelColor(0, RED);
@@ -144,23 +159,41 @@ void OmxLeds::drawMidiLeds(MusicScales *scale)
 			{
 				if (midiSettings.midiKeyState[q] == -1)
 				{
-					if (colorConfig.midiBg_Hue == 0)
-					{
-						strip.setPixelColor(q, getKeyColor(scale, q)); // set off or in scale
-					}
-					else if (colorConfig.midiBg_Hue == 32)
-					{
-						strip.setPixelColor(q, LOWWHITE);
-					}
-					else
-					{
-						strip.setPixelColor(q, strip.ColorHSV(colorConfig.midiBg_Hue, colorConfig.midiBg_Sat, colorConfig.midiBg_Brightness));
-					}
+					strip.setPixelColor(q, applyMidiKeyTint(getKeyColor(scale, q))); // set off or in scale
+				}
+				else
+				{
+					strip.setPixelColor(q, applyMidiKeyTint(MIDINOTEON));
 				}
 			}
 		}
 	}
 	dirtyPixels = true;
+}
+
+void OmxLeds::drawKeyboardScaleLEDs(MusicScales *scale, int rootColor, int inScaleColor, int offScaleColor)
+{
+	// clear not held leds
+	for (int q = 1; q < LED_COUNT; q++)
+	{
+		if (midiSettings.midiKeyState[q] == -1)
+		{
+			int keyColor = getKeyColor(scale, q);
+
+			int pixelColor = offScaleColor;
+
+			if(keyColor == INSCALECOLOR)
+			{
+				pixelColor = inScaleColor;
+			}
+			else if(keyColor == ROOTNOTECOLOR)
+			{
+				pixelColor = rootColor;
+			}
+
+			strip.setPixelColor(q, pixelColor);
+		}
+	}
 }
 
 bool OmxLeds::getBlinkState()
@@ -200,6 +233,15 @@ bool OmxLeds::getBlinkPattern(uint8_t numberOfBlinks)
 	return blink;
 }
 
+void OmxLeds::setAllLEDS(int color)
+{
+	for (int i = 0; i < LED_COUNT; i++)
+	{ // For each pixel...
+		strip.setPixelColor(i, color);
+	}
+	setDirty();
+}
+
 void OmxLeds::setAllLEDS(int R, int G, int B)
 {
 	for (int i = 0; i < LED_COUNT; i++)
@@ -236,6 +278,7 @@ void OmxLeds::drawOctaveKeys(uint8_t octaveDownKey, uint8_t octaveUpKey, int8_t 
 
 void OmxLeds::setDirty()
 {
+	// Serial.println("Dirty LEDS");
 	dirtyPixels = true;
 }
 

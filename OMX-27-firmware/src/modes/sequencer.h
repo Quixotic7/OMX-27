@@ -70,6 +70,10 @@ struct StepNote
 	}
 }; // {note, vel, len, TRIG_TYPE, {params0, params1, params2, params3}, prob, cond, STEP_TYPE}
 
+
+    // char foo[sizeof(StepNote)]
+
+
 struct Pattern
 {							   // ?? bytes
 	uint8_t len : 6;		   // 0 - 63, maps to 1 - 64

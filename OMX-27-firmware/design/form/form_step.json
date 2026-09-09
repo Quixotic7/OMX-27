@@ -1,0 +1,338 @@
+{
+  "format": "omx27-led-design",
+  "version": 1,
+  "device": "OMX-27",
+  "name": "FORM — Step modes (detail)",
+  "ledCount": 27,
+  "convention": "key 0 = AUX; keys 1-10 black; keys 11-26 white. '#000000' = off. Detail frames for non-Note Step edit modes: the value palette that appears on the top row (keys 1-10) while a step is held. See FORM_REDESIGN.md 4.2.",
+  "keyMap": [
+    {
+      "key": 0,
+      "role": "aux",
+      "note": null,
+      "name": "AUX"
+    },
+    {
+      "key": 1,
+      "role": "black",
+      "note": 61,
+      "name": "C#4"
+    },
+    {
+      "key": 2,
+      "role": "black",
+      "note": 63,
+      "name": "D#4"
+    },
+    {
+      "key": 3,
+      "role": "black",
+      "note": 66,
+      "name": "F#4"
+    },
+    {
+      "key": 4,
+      "role": "black",
+      "note": 68,
+      "name": "G#4"
+    },
+    {
+      "key": 5,
+      "role": "black",
+      "note": 70,
+      "name": "A#4"
+    },
+    {
+      "key": 6,
+      "role": "black",
+      "note": 73,
+      "name": "C#5"
+    },
+    {
+      "key": 7,
+      "role": "black",
+      "note": 75,
+      "name": "D#5"
+    },
+    {
+      "key": 8,
+      "role": "black",
+      "note": 78,
+      "name": "F#5"
+    },
+    {
+      "key": 9,
+      "role": "black",
+      "note": 80,
+      "name": "G#5"
+    },
+    {
+      "key": 10,
+      "role": "black",
+      "note": 82,
+      "name": "A#5"
+    },
+    {
+      "key": 11,
+      "role": "white",
+      "note": 59,
+      "name": "B3"
+    },
+    {
+      "key": 12,
+      "role": "white",
+      "note": 60,
+      "name": "C4"
+    },
+    {
+      "key": 13,
+      "role": "white",
+      "note": 62,
+      "name": "D4"
+    },
+    {
+      "key": 14,
+      "role": "white",
+      "note": 64,
+      "name": "E4"
+    },
+    {
+      "key": 15,
+      "role": "white",
+      "note": 65,
+      "name": "F4"
+    },
+    {
+      "key": 16,
+      "role": "white",
+      "note": 67,
+      "name": "G4"
+    },
+    {
+      "key": 17,
+      "role": "white",
+      "note": 69,
+      "name": "A4"
+    },
+    {
+      "key": 18,
+      "role": "white",
+      "note": 71,
+      "name": "B4"
+    },
+    {
+      "key": 19,
+      "role": "white",
+      "note": 72,
+      "name": "C5"
+    },
+    {
+      "key": 20,
+      "role": "white",
+      "note": 74,
+      "name": "D5"
+    },
+    {
+      "key": 21,
+      "role": "white",
+      "note": 76,
+      "name": "E5"
+    },
+    {
+      "key": 22,
+      "role": "white",
+      "note": 77,
+      "name": "F5"
+    },
+    {
+      "key": 23,
+      "role": "white",
+      "note": 79,
+      "name": "G5"
+    },
+    {
+      "key": 24,
+      "role": "white",
+      "note": 81,
+      "name": "A5"
+    },
+    {
+      "key": 25,
+      "role": "white",
+      "note": 83,
+      "name": "B5"
+    },
+    {
+      "key": 26,
+      "role": "white",
+      "note": 84,
+      "name": "C6"
+    }
+  ],
+  "notes": "While a step is held in a given Step mode, the top row keys 1-10 become that mode's value palette. Math = conditional trig (Fill/!Fill + A:B ratio). Velocity (and Length/Repeat/Chance) map 10 keys across the value range as a bar. The held step flashes WHITE on the low row.",
+  "states": [
+    {
+      "state": 1,
+      "name": "Step — Math (conditional trig), hold step",
+      "notes": "Math mode, holding step 4 (key15, WHITE). Top row palette: key1=Fill (ORANGE), key2=!Fill (ROSE), keys3-6 = ratio A (1-4), keys7-10 = ratio B (1-4). Selected here: A=1 (key3 bright GREEN) and B=4 (key10 bright CYAN) => the step fires 1 of every 4 loops (1:4). Unselected ratio keys are dim.",
+      "leds": [
+        "#000000",
+        "#ff8000",
+        "#ff0080",
+        "#00ff00",
+        "#264d00",
+        "#264d00",
+        "#264d00",
+        "#004c4d",
+        "#004c4d",
+        "#004c4d",
+        "#00ffff",
+        "#a8a8ff",
+        "#00004d",
+        "#a8a8ff",
+        "#00004d",
+        "#ffffff",
+        "#00004d",
+        "#a8a8ff",
+        "#00004d",
+        "#a8a8ff",
+        "#00004d",
+        "#a8a8ff",
+        "#00004d",
+        "#00004d",
+        "#a8a8ff",
+        "#00004d",
+        "#a8a8ff"
+      ],
+      "keyNotes": {
+        "1": "Fill",
+        "2": "!Fill (not-fill)",
+        "3": "Ratio A = 1 (selected)",
+        "6": "Ratio A = 4",
+        "7": "Ratio B = 1",
+        "10": "Ratio B = 4 (selected) -> 1:4",
+        "15": "Held step (WHITE)"
+      },
+      "pots": [
+        {
+          "pot": 1,
+          "label": "K1",
+          "note": "Pot bank CC21",
+          "value": 100
+        },
+        {
+          "pot": 2,
+          "label": "K2",
+          "note": "Pot bank CC22",
+          "value": 64
+        },
+        {
+          "pot": 3,
+          "label": "K3",
+          "note": "Pot bank CC23",
+          "value": 40
+        },
+        {
+          "pot": 4,
+          "label": "K4",
+          "note": "Pot bank CC24",
+          "value": 80
+        },
+        {
+          "pot": 5,
+          "label": "K5",
+          "note": "Pot bank CC7",
+          "value": 120
+        }
+      ],
+      "encoder": {
+        "note": "Optional fine-tune",
+        "press": ""
+      },
+      "screen": {
+        "note": "Conditional trig",
+        "text": "MATH step4\nTrig 1:4"
+      }
+    },
+    {
+      "state": 2,
+      "name": "Step — Velocity, hold step",
+      "notes": "Velocity mode, holding step 4 (key15, WHITE). Top row 1-10 = a value bar: 10 linear levels, key10=127, key1~=12. Filled to the current level (keys 1-6 dim, key7 bright=current), keys 8-10 empty. For an exact value use the menu param + encoder while holding. Step Length / Chance / Repeat use the same held-step + keys (coarse) or menu+encoder (fine) model.",
+      "leds": [
+        "#000000",
+        "#4c4d00",
+        "#4c4d00",
+        "#4c4d00",
+        "#4c4d00",
+        "#4c4d00",
+        "#4c4d00",
+        "#ffff00",
+        "#202020",
+        "#202020",
+        "#202020",
+        "#a8a8ff",
+        "#00004d",
+        "#a8a8ff",
+        "#00004d",
+        "#ffffff",
+        "#00004d",
+        "#a8a8ff",
+        "#00004d",
+        "#a8a8ff",
+        "#00004d",
+        "#a8a8ff",
+        "#00004d",
+        "#00004d",
+        "#a8a8ff",
+        "#00004d",
+        "#a8a8ff"
+      ],
+      "keyNotes": {
+        "1": "Lowest velocity",
+        "7": "Current velocity level (bright)",
+        "10": "Highest velocity",
+        "15": "Held step (WHITE)"
+      },
+      "pots": [
+        {
+          "pot": 1,
+          "label": "K1",
+          "note": "Pot bank CC21",
+          "value": 100
+        },
+        {
+          "pot": 2,
+          "label": "K2",
+          "note": "Pot bank CC22",
+          "value": 64
+        },
+        {
+          "pot": 3,
+          "label": "K3",
+          "note": "Pot bank CC23",
+          "value": 40
+        },
+        {
+          "pot": 4,
+          "label": "K4",
+          "note": "Pot bank CC24",
+          "value": 80
+        },
+        {
+          "pot": 5,
+          "label": "K5",
+          "note": "Pot bank CC7",
+          "value": 120
+        }
+      ],
+      "encoder": {
+        "note": "Optional fine-tune of velocity",
+        "press": ""
+      },
+      "screen": {
+        "note": "Velocity",
+        "text": "VEL step4\n= 92"
+      }
+    }
+  ]
+}

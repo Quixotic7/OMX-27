@@ -63,7 +63,31 @@ namespace MM
 			HWMIDI.setHandleControlChange(handleControlChange);
 			HWMIDI.setHandleSystemExclusive(OnSysExHW);
 		#else
-			HWMIDI.begin();
+			// Teensy (3.x/4.x): usbMIDI is auto-initialised by the core (no begin()/
+			// turnThruOff), but its input handlers still need registering - otherwise
+			// USB MIDI input is read but never dispatched, so norns' screen-mirror
+			// SysEx (NL_CMD_MIRROR_EN etc.) never reaches OnSysEx and mirroring never
+			// turns on. Register the same handlers the RP2040 path uses.
+			HWMIDI.begin(MIDI_CHANNEL_OMNI);
+			HWMIDI.turnThruOff();
+
+			usbMIDI.setHandleNoteOn(handleNoteOn);
+			usbMIDI.setHandleNoteOff(handleNoteOff);
+			usbMIDI.setHandleClock(handleClock);
+			usbMIDI.setHandleStart(handleStart);
+			usbMIDI.setHandleStop(handleStop);
+			usbMIDI.setHandleContinue(handleContinue);
+			usbMIDI.setHandleControlChange(handleControlChange);
+			usbMIDI.setHandleSystemExclusive(OnSysEx);
+
+			HWMIDI.setHandleNoteOn(handleNoteOn);
+			HWMIDI.setHandleNoteOff(handleNoteOff);
+			HWMIDI.setHandleClock(handleClock);
+			HWMIDI.setHandleStart(handleStart);
+			HWMIDI.setHandleStop(handleStop);
+			HWMIDI.setHandleContinue(handleContinue);
+			HWMIDI.setHandleControlChange(handleControlChange);
+			HWMIDI.setHandleSystemExclusive(OnSysExHW);
 		#endif
 	}
 	// #### Inbound MIDI callbacks
@@ -90,7 +114,7 @@ namespace MM
 		{
 			cvNoteUtil.cvNoteOn(note);
 		}
-		omxScreensaver.resetCounter();
+		omxScreensaver.userActivity();
 		activeOmxMode->inMidiNoteOn(channel, note, velocity);
 	}
 
@@ -267,36 +291,86 @@ namespace MM
 		HWMIDI.sendSysEx(length, sysexData, hasBeginEnd);
 	}
 
+	// USB-only SysEx. Used for the norns link (screen mirror / takeover) so we
+	// don't flood the 31250-baud TRS DIN port with framebuffer data.
+	//
+	// Written directly to TinyUSB rather than via the MIDI library: the library
+	// ignores tud_midi_stream_write's return value, so when the 128-byte TX FIFO
+	// is short on room the TAIL of the message (incl. F7) is silently dropped --
+	// which is exactly what was corrupting the norns screen stream. Here we keep
+	// writing the remainder as the FIFO drains (TinyUSB's task runs from an IRQ
+	// on RP2040), bounded by a short timeout so we can never stall the sequencer.
+	void sendSysExUSB(uint32_t length, const uint8_t *sysexData, bool hasBeginEnd)
+	{
+#if BOARDTYPE == OMX2040
+		uint8_t msg[160];
+		uint32_t n = 0;
+		if (!hasBeginEnd)
+			msg[n++] = 0xF0;
+		for (uint32_t i = 0; i < length && n < sizeof(msg) - 1; i++)
+			msg[n++] = sysexData[i];
+		if (!hasBeginEnd)
+			msg[n++] = 0xF7;
+
+		uint32_t sent = 0;
+		uint32_t start = micros();
+		while (sent < n)
+		{
+			sent += tud_midi_stream_write(0, msg + sent, n - sent);
+			if (sent < n)
+			{
+				if ((uint32_t)(micros() - start) > 6000) // give up; norns will REQ a resend
+					break;
+				tud_task(); // help drain the FIFO while we wait
+			}
+		}
+#else
+		usbMIDI.sendSysEx(length, sysexData, hasBeginEnd);
+		usbMIDI.send_now(); // flush now so norns receives chunks promptly (the RP2040 path drains its own FIFO)
+#endif
+	}
+
+	// usbMIDI is a FortySevenEffects MidiInterface on RP2040 (has sendClock/Start/...),
+	// but the Teensy core's usb_midi_class only has sendRealTime(type). Guard per platform.
 	void sendClock()
 	{
-		// usbMIDI.sendRealTime(midi::Clock);
 		if (sequencer.clockSource == 0){ // internal clock
+#if BOARDTYPE == OMX2040
 			usbMIDI.sendClock();
+#else
+			usbMIDI.sendRealTime(midi::Clock);
+#endif
 			HWMIDI.sendClock();
 		}
 	}
 
 	void startTransport()
 	{
-		// usbMIDI.sendRealTime(midi::Start);
-		// Serial.println("Start received");
+#if BOARDTYPE == OMX2040
 		usbMIDI.sendStart();
+#else
+		usbMIDI.sendRealTime(midi::Start);
+#endif
 		HWMIDI.sendStart();
 	}
 
 	void continueTransport()
 	{
-		// usbMIDI.sendRealTime(midi::Continue);
-		// Serial.println("Continue received");
+#if BOARDTYPE == OMX2040
 		usbMIDI.sendContinue();
+#else
+		usbMIDI.sendRealTime(midi::Continue);
+#endif
 		HWMIDI.sendContinue();
 	}
 
 	void stopTransport()
 	{
-		// usbMIDI.sendRealTime(midi::Stop);
-		// Serial.println("Stop received");
+#if BOARDTYPE == OMX2040
 		usbMIDI.sendStop();
+#else
+		usbMIDI.sendRealTime(midi::Stop);
+#endif
 		HWMIDI.sendStop();
 	}
 
@@ -304,7 +378,19 @@ namespace MM
 
 	bool usbMidiRead()
 	{
+#if BOARDTYPE == OMX2040
+		// The Arduino MIDI library parses ONE byte per read(), and returns false
+		// for every byte that doesn't complete a message — so a caller doing
+		// `while (usbMidiRead())` would drain large SysEx (REMOTE-mode frames)
+		// at ~one byte per main-loop pass. Parse everything buffered instead.
+		while (usb_midi.available() > 0)
+		{
+			usbMIDI.read();
+		}
+		return false; // fully drained
+#else
 		return usbMIDI.read();
+#endif
 	}
 
 	bool midiRead()

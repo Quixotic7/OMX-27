@@ -19,11 +19,22 @@
 
 // #include <cstdarg>
 
+// Floating-point map(). The RP2040 / arduino-pico core only provides the integer
+// long map(long,...), which truncates fractional interpolation to 0/1 (e.g. a 0..1
+// output range collapses to just 0 or 1). Teensy 4's core had a float map() overload;
+// this helper restores that exact behavior on every platform. Use it instead of map()
+// whenever any argument or the result is fractional.
+static inline float mapFloat(float x, float inMin, float inMax, float outMin, float outMax)
+{
+	return (x - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+}
+
 /* * firmware metadata  */
-// OMX_VERSION = 1.15.0
+// OMX_VERSION = v1.15.4
 const int MAJOR_VERSION = 1;
 const int MINOR_VERSION = 15;
-const int POINT_VERSION = 0;
+const int POINT_VERSION = 4;
+extern const char* VERSION_STRING;
 
 // 1.13.2 - Adds CV Trigger modes for legato and regtrig
 // 1.13.3 - Bugfix for CV Trigger modes
@@ -31,6 +42,10 @@ const int POINT_VERSION = 0;
 // 1.14.0 - finish RP2040 port
 
 const int DEVICE_ID = 2;
+extern uint8_t deviceID; // runtime, editable in CONFIG mode (defaults to DEVICE_ID)
+extern uint8_t ledBrightness;          // runtime LED brightness (defaults to LED_BRIGHTNESS)
+extern bool screensaverEnabled;        // CONFIG: screensaver on/off
+extern uint16_t screensaverTimeoutSec; // CONFIG: seconds of inactivity before screensaver
 
 // DAC
 extern Adafruit_MCP4725 dac;
@@ -40,11 +55,14 @@ enum OMXMode
 	MODE_MIDI = 0,
 	MODE_DRUM,
 	MODE_CHORDS,
+	MODE_FORM,
 	MODE_S1,
 	MODE_S2,
 	MODE_GRIDS,
 	MODE_EUCLID,
 	MODE_OM,
+	MODE_REMOTE,
+	MODE_CONFIG,
 
 	NUM_OMX_MODES
 };
@@ -66,6 +84,9 @@ enum MIDIFXTYPE
 };
 
 extern const OMXMode DEFAULT_MODE;
+
+#define NUM_MIDIFX_GROUPS 5
+#define NUM_MIDIFX_SLOTS 8
 
 enum FUNCKEYMODE
 {
@@ -273,7 +294,7 @@ extern SequencerConfig seqConfig;
 
 struct ColorConfig
 {
-	uint32_t screensaverColor = 0xFF0000;
+	uint32_t screensaverColor = 0; // HSV hue 0-65535 (>65528 = LEDs off); 0 = red
 	uint32_t stepColor = 0x000000;
 	uint32_t muteColor = 0x000000;
 	uint16_t midiBg_Hue = 0;
@@ -373,6 +394,32 @@ struct MidiNoteGroup
 	uint32_t noteonMicros = 0;
 	bool unknownLength = false;
 	bool noteOff = false; // Set true if note off, corresponding note on should have stepLength of 0
+
+	// Keeping commented out to save on storage
+	// void Print()
+	// {
+	// 	Serial.print("channel: ");
+	// 	Serial.print(channel);
+	// 	Serial.print(" noteNumber: ");
+	// 	Serial.print(noteNumber);
+	// 	Serial.print(" prevNoteNumber: ");
+	// 	Serial.print(prevNoteNumber);
+	// 	Serial.print(" velocity: ");
+	// 	Serial.print(velocity);
+	// 	Serial.print(" stepLength: ");
+	// 	Serial.print(stepLength);
+	// 	Serial.print(" sendMidi: ");
+	// 	Serial.print(sendMidi);
+	// 	Serial.print(" sendCV: ");
+	// 	Serial.print(sendCV);
+	// 	Serial.print(" noteonMicros: ");
+	// 	Serial.print(noteonMicros);
+	// 	Serial.print(" unknownLength: ");
+	// 	Serial.print(unknownLength);
+	// 	Serial.print(" noteOff: ");
+	// 	Serial.print(noteOff);
+	// 	Serial.print("\n");
+	// }
 };
 
 #define NUM_DISP_PARAMS 5
@@ -393,6 +440,8 @@ extern const char *mfxPassthroughEditMsg;
 extern const char *exitMsg;
 extern const char *paramOffMsg;
 extern const char *paramOnMsg;
+extern const char *bool2lightswitchMsg[];
+extern const char *bool2Msg[];
 
 extern const char *modes[];
 extern const char *macromodes[];

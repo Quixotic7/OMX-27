@@ -1,6 +1,11 @@
 
 #include "../globals.h"
 #include "../midi/sysex.h"
+#include "norns_link.h"
+
+// Defined in OMX-27-firmware.ino — injects a synthetic key/encoder/pot event (SysEx remote control).
+extern void omxInjectInput(const uint8_t *d, unsigned n);
+extern void omxRemoteSysex(const uint8_t *d, unsigned n);
 
 // #include "../midi/midi.h"
 // #include "../config.h"
@@ -11,7 +16,7 @@ const uint8_t CONFIG_DEVICE_EDIT = 0x0D;
 
 void SysEx::processIncomingSysex(const byte *sysexData, unsigned size)
 {
-	Serial.println("Sysex received");
+	// Serial.println("Sysex received");
 	if (size < 3)
 	{
 		// 		Serial.println("That's an empty sysex");
@@ -40,6 +45,52 @@ void SysEx::processIncomingSysex(const byte *sysexData, unsigned size)
 		// 0D - c0nfig Device edit - new config just for device opts
 		// 			Serial.println("Got an c0nfig Device Edit");
 		this->updateDeviceSettingsAndStore(sysexData, size);
+		break;
+	case NL_CMD_INPUT:
+		// 51 - remote-control input injection: F0 7D 00 00 51 <sub> <args...> F7
+		omxInjectInput(sysexData, size);
+		break;
+	case NL_CMD_LED:
+	case NL_CMD_LED_BATCH:
+	case NL_CMD_LED_SHOW:
+	case NL_CMD_DRAW:
+	case NL_CMD_DRAW_UPD:
+		// 59-5D - REMOTE mode: host sets LEDs / draws the screen
+		omxRemoteSysex(sysexData, size);
+		break;
+	case NL_CMD_MIRROR_EN:
+		// 58 - norns screen-mirror enable/disable: F0 7D 00 00 58 <0|1> F7
+		if (size > 5)
+		{
+			nornsLink.setMirrorEnabled(sysexData[5] != 0);
+		}
+		break;
+	case NL_CMD_LED_STATE:
+		// 54 - host LED-state query: F0 7D 00 00 54 F7 -> device replies with two 0x54 parts.
+		// The query is EXACTLY 6 bytes; the replies reuse the same opcode (>=45 bytes), so a
+		// MIDI-thru/echo loop would bounce each reply back as a new query and storm the port
+		// without this size check.
+		if (size == 6)
+		{
+			nornsLink.sendLedState();
+		}
+		break;
+	case NL_CMD_REQ:
+		// 5E - norns missed some screen chunks, resend: F0 7D 00 00 5E <m0> <m1> <m2> F7
+		if (size > 7)
+		{
+			uint16_t mask = (uint16_t)(sysexData[5] & 0x7F) |
+							(uint16_t)((sysexData[6] & 0x7F) << 7) |
+							(uint16_t)((sysexData[7] & 0x03) << 14);
+			nornsLink.requestChunks(mask);
+		}
+		break;
+	case NL_CMD_PACE:
+		// 5F - gap between screen chunk messages: F0 7D 00 00 5F <ms> F7
+		if (size > 5)
+		{
+			nornsLink.setPaceMs(sysexData[5]);
+		}
 		break;
 	default:
 		break;
@@ -117,7 +168,7 @@ void SysEx::sendCurrentState()
 
 	sysexData[3] = 0x0F; // ConFig;
 
-	sysexData[4] = DEVICE_ID;	  // Device 01, ie, dev board
+	sysexData[4] = deviceID;	  // runtime device id (editable in CONFIG mode)
 	sysexData[5] = MAJOR_VERSION; // major version
 	sysexData[6] = MINOR_VERSION; // minor version
 	sysexData[7] = POINT_VERSION; // point version

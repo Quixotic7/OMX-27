@@ -21,10 +21,15 @@ public:
 
 	void initSetup();
 
+	void setBlinkAutoRefresh(bool autoRefresh);
 	void updateBlinkStates();
 
 	int getKeyColor(MusicScales *scale, int pixel);
+	// Re-hues the root/in-scale colors when colorConfig.midiBg_Hue > 0
+	uint32_t applyMidiKeyTint(int keyColor);
 	void drawMidiLeds(MusicScales *scale);
+	void drawKeyboardScaleLEDs(MusicScales *scale, int rootColor, int inScaleColor, int offScaleColor);
+
 
 	// clears dirty, transmits pixel data if dirty.
 	void showLeds();
@@ -35,7 +40,9 @@ public:
 	// Blinks for numberOfBlinks then a delay
 	bool getBlinkPattern(uint8_t numberOfBlinks);
 
-	// void setPixelColor(uint16_t n, uint8_t r, uint8_t g, uint8_t b);
+    void setAllLEDS(int color);
+
+    // void setPixelColor(uint16_t n, uint8_t r, uint8_t g, uint8_t b);
 
 	void setAllLEDS(int R, int G, int B);
 
@@ -61,6 +68,9 @@ private:
 	unsigned long blinkInterval = clockConfig.clockbpm * 2;
 	bool blinkState = false;
 	bool slowBlinkState = false;
+
+	bool blinkAutoRefresh = true;
+
 
 	bool dirtyPixels = false;
 

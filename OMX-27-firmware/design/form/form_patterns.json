@@ -1,0 +1,72 @@
+{
+  "format": "omx27-led-design",
+  "version": 1,
+  "device": "OMX-27",
+  "name": "FORM — Patterns view",
+  "ledCount": 27,
+  "convention": "key 0 = AUX; keys 1-10 black; keys 11-26 white. '#000000' = off. The Patterns view (AUX + 17): 16 whole-sequencer snapshots on the low row. See FORM_REDESIGN.md 4.5.",
+  "keyMap": [
+    { "key": 0,  "role": "aux",   "note": null, "name": "AUX" },
+    { "key": 1,  "role": "black", "note": 61, "name": "C#4" },
+    { "key": 2,  "role": "black", "note": 63, "name": "D#4" },
+    { "key": 3,  "role": "black", "note": 66, "name": "F#4" },
+    { "key": 4,  "role": "black", "note": 68, "name": "G#4" },
+    { "key": 5,  "role": "black", "note": 70, "name": "A#4" },
+    { "key": 6,  "role": "black", "note": 73, "name": "C#5" },
+    { "key": 7,  "role": "black", "note": 75, "name": "D#5" },
+    { "key": 8,  "role": "black", "note": 78, "name": "F#5" },
+    { "key": 9,  "role": "black", "note": 80, "name": "G#5" },
+    { "key": 10, "role": "black", "note": 82, "name": "A#5" },
+    { "key": 11, "role": "white", "note": 59, "name": "B3" },
+    { "key": 12, "role": "white", "note": 60, "name": "C4" },
+    { "key": 13, "role": "white", "note": 62, "name": "D4" },
+    { "key": 14, "role": "white", "note": 64, "name": "E4" },
+    { "key": 15, "role": "white", "note": 65, "name": "F4" },
+    { "key": 16, "role": "white", "note": 67, "name": "G4" },
+    { "key": 17, "role": "white", "note": 69, "name": "A4" },
+    { "key": 18, "role": "white", "note": 71, "name": "B4" },
+    { "key": 19, "role": "white", "note": 72, "name": "C5" },
+    { "key": 20, "role": "white", "note": 74, "name": "D5" },
+    { "key": 21, "role": "white", "note": 76, "name": "E5" },
+    { "key": 22, "role": "white", "note": 77, "name": "F5" },
+    { "key": 23, "role": "white", "note": 79, "name": "G5" },
+    { "key": 24, "role": "white", "note": 81, "name": "A5" },
+    { "key": 25, "role": "white", "note": 83, "name": "B5" },
+    { "key": 26, "role": "white", "note": 84, "name": "C6" }
+  ],
+  "notes": "A pattern = a snapshot of all 8 tracks + their settings. 16 patterns per project on the low row (keys 11-26). Current pattern = WHITE; filled = dim teal; queued-to-switch = bright CYAN blinking; empty = off. Tap a slot to switch. Top row keys 3-6 = switch STYLE (3 Finish Loop, 4 Next Bar, 5 Instant, 6 Chained; active bright). F1/F2 (1,2) = copy/paste pattern; clear = hold a slot.",
+  "states": [
+    {
+      "state": 1,
+      "name": "Patterns — 16 slots + switch style",
+      "notes": "Low row 11-26 = the 16 pattern slots. P1 (key11, WHITE) is playing; P2/P3/P5 have content (dim teal); P4 (key14, bright CYAN, blinking) is QUEUED; P6-16 empty. Top row: key1=copy, key2=paste; keys 3-6 = switch style (3 Finish Loop = active/bright, 4 Next Bar, 5 Instant, 6 Chained). Style governs when a tapped pattern takes over.",
+      "leds": [
+        "#000000",
+        "#004c4d", "#264d00", "#00ffff", "#004c4d", "#004c4d", "#004c4d", "#000000", "#000000", "#000000", "#000000",
+        "#ffffff", "#004c4d", "#004c4d", "#00ffff", "#004c4d", "#000000", "#000000", "#000000",
+        "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"
+      ],
+      "keyNotes": {
+        "1": "F1 = copy pattern",
+        "2": "F2 = paste pattern",
+        "3": "Switch style: Finish Loop (active)",
+        "4": "Switch style: Next Bar",
+        "5": "Switch style: Instant",
+        "6": "Switch style: Chained",
+        "11": "Pattern 1 — playing (WHITE)",
+        "12": "Pattern 2 — has content",
+        "14": "Pattern 4 — QUEUED to switch (blinking CYAN)",
+        "16": "Pattern 6 — empty"
+      },
+      "pots": [
+        { "pot": 1, "label": "K1", "note": "Pot bank CC21", "value": 100 },
+        { "pot": 2, "label": "K2", "note": "Pot bank CC22", "value": 64 },
+        { "pot": 3, "label": "K3", "note": "Pot bank CC23", "value": 40 },
+        { "pot": 4, "label": "K4", "note": "Pot bank CC24", "value": 80 },
+        { "pot": 5, "label": "K5", "note": "Pot bank CC7", "value": 120 }
+      ],
+      "encoder": { "note": "Turn = scroll patterns; press = switch", "press": "Switch to selected pattern" },
+      "screen": { "note": "Patterns", "text": "PATTERNS\nP1 > P4 (queued)" }
+    }
+  ]
+}

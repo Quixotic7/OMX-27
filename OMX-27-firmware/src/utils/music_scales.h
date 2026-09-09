@@ -1,5 +1,8 @@
 #pragma once
 
+extern const int ROOTNOTECOLOR;
+extern const int INSCALECOLOR;
+
 class MusicScales
 {
 public:
@@ -10,8 +13,8 @@ public:
 	// const char* noteNames[];
 	// const int scalePatterns[][7];
 
-	void calculateScaleIfModified(uint8_t scaleRoot, uint8_t scalePattern);
-	void calculateScale(uint8_t scaleRoot, uint8_t scalePattern);
+	void calculateScaleIfModified(uint8_t scaleRoot, int8_t scalePattern);
+	void calculateScale(uint8_t scaleRoot, int8_t scalePattern);
 	static uint8_t getNumScales();
 	// int scaleLength;
 
@@ -28,6 +31,14 @@ public:
 	int8_t getNoteByDegree(uint8_t degree, int8_t octave);
 	static uint8_t getDegreeFromNote(uint8_t noteNumber, int8_t rootNote, int8_t scalePatIndex);
 
+	// Uses scale pattern from the noteNumber to offset the note by an interval
+	// So the noteNumber becomes the scale root note
+	int8_t offsetNoteByInterval(int8_t noteNumber, int8_t interval);
+
+	// Offsets by interval, locking to current scale and root note
+	int8_t offsetNoteByIntervalInScale(int8_t noteNumber, int8_t interval);
+
+
 	// Returns a color for the note
 	int getScaleColor(uint8_t noteIndex);
 
@@ -35,8 +46,8 @@ public:
 
 	static const char *getNoteName(uint8_t noteIndex, bool removeSpaces = false);
 	static const char *getFullNoteName(uint8_t noteNumber);
-	static const char *getScaleName(uint8_t scaleIndex);
-	static const int8_t *getScalePattern(uint8_t patIndex);
+	static const char *getScaleName(int8_t scaleIndex);
+	static const int8_t *getScalePattern(int8_t patIndex);
 	int getScaleLength();
 
 private:

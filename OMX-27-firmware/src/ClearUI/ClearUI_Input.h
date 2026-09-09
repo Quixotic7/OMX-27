@@ -27,6 +27,10 @@ public:
 
 	Update update();
 
+	// Build a synthetic Update (for SysEx remote-control injection). Encoder is a friend of
+	// Update, so this static member can reach its private constructor.
+	static Update makeUpdate(int16_t dir, int16_t speedup) { return Update(dir, speedup); }
+
 private:
 	const uint32_t pinA;
 	const uint32_t pinB;

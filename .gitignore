@@ -4,3 +4,6 @@
 OMX-27-firmware/build
 /Firmware-Hexes
 .DS_Store
+.DS_Store
+__pycache__/
+*.pyc

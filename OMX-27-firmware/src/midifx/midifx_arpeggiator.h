@@ -80,6 +80,7 @@ namespace midifx
 
 		void loopUpdate() override;
 		void onClockTick() override;
+		// Called by sequencer when sequencer is stopped
 		void resync() override;
 
 		bool usesKeys() override;
@@ -97,6 +98,7 @@ namespace midifx
 
 		// Toggles between off and previous mode
 		void toggleArp();
+		void setArpState(bool setOn);
 		void toggleHold();
 		void nextArpPattern();
 		void nextOctRange();

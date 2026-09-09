@@ -2,7 +2,27 @@
 #include "consts/consts.h"
 
 const OMXMode DEFAULT_MODE = MODE_MIDI;
-const uint8_t EEPROM_VERSION = 38;
+// v39 - merge of FormSequencer (FORM mode + shared improvements) into the q7-2026 line.
+// Both branches independently used v38 for divergent layouts; bumped to 39 so existing
+// saves re-initialize cleanly instead of being misread against the merged layout.
+// v43/44 - FORM save format v9: the per-track scale (mode/root/pattern) moved into OmniSeq
+// (per-pattern, all boards) and a note-entry pref byte now leads the FORM FRAM block, so
+// FORM's region layout changed. FORM sits last in the stream, but bump the version anyway so
+// old saves take the clean one-time re-init path instead of blitting a mismatched layout.
+// (v42/43 was the FORM-moved-to-tail reorder.)
+#if BOARDTYPE == TEENSY32
+// Teensy 3.1 reduced FORM to 4 tracks, which shrinks FORM's slice of the sequential save
+// stream and shifts every later mode's offset. A distinct version forces a one-time storage
+// re-init so old 8-track saves aren't misread. Keep this one ahead of the shared version so a
+// future base bump still re-inits the T3.1.
+const uint8_t EEPROM_VERSION = 44;
+#else
+const uint8_t EEPROM_VERSION = 43;
+#endif
+
+const char* VERSION_STRING = "ALPHA";
+
+uint8_t deviceID = DEVICE_ID; // runtime device id, editable in CONFIG mode
 
 // v30 - adds storage to header for velocity
 // v31 - adds storage for drums
@@ -28,6 +48,10 @@ const int CC_OM2 = 28; // Mother mode - enc turn
 #else
 	const int LED_BRIGHTNESS = 50; // Teensy boards
 #endif
+
+uint8_t ledBrightness = LED_BRIGHTNESS;      // runtime, editable in CONFIG mode
+bool screensaverEnabled = true;              // CONFIG: screensaver on/off
+uint16_t screensaverTimeoutSec = 60 * 3;     // CONFIG: 3 min default
 
 // DONT CHANGE ANYTHING BELOW HERE
 const int LED_COUNT = 27;
@@ -86,8 +110,10 @@ const char *mfxPassthroughEditMsg = "MFX Quickedit";
 const char *exitMsg = "Exit";
 const char *paramOffMsg = "OFF";
 const char *paramOnMsg = "ON";
+const char *bool2lightswitchMsg[] = {"OFF", "ON"};
+const char *bool2Msg[] = {"TRUE", "FALS"};
 
-const char *modes[] = {"MI", "DRUM", "CH", "S1", "S2", "GR", "EL", "OM"};
+const char *modes[] = {"MI", "DRUM", "CH", "FORM", "S1", "S2", "GR", "EL", "OM", "RMT", "CFG"};
 const char *macromodes[] = {"Off", "M8", "NRN", "DEL"};
 const int nummacromodes = 3;
 
@@ -125,11 +151,14 @@ const int notes[] = {0,
 					 61, 63, 66, 68, 70, 73, 75, 78, 80, 82,
 					 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84};
 
+// I'm not sure this is actually used? Just burning up memory.
 const int steps[] = {0,
 					 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
 					 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26};
 
-const int midiKeyMap[] = {12, 1, 13, 2, 14, 15, 3, 16, 4, 17, 5, 18, 19, 6, 20, 7, 21, 22, 8, 23, 9, 24, 10, 25, 26};
+// Maps note numbers starting at B to key numbers
+// If using octaves, lowest midi note 0 is a C, so add 1. 
+const int midiKeyMap[] = {11, 12, 1, 13, 2, 14, 15, 3, 16, 4, 17, 5, 18, 19, 6, 20, 7, 21, 22, 8, 23, 9, 24, 10, 25, 26};
 
 Adafruit_MCP4725 dac;
 MidiConfig midiSettings;

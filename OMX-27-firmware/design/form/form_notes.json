@@ -1,0 +1,99 @@
+{
+  "format": "omx27-led-design",
+  "version": 1,
+  "device": "OMX-27",
+  "name": "FORM — Notes view (detail)",
+  "ledCount": 27,
+  "convention": "key 0 = AUX; keys 1-10 black; keys 11-26 white. '#000000' = off. Detailed frames for the reworked Notes view of the FORM v2 redesign: an in-editor step navigator. See FORM_REDESIGN.md 4.5.",
+  "keyMap": [
+    { "key": 0,  "role": "aux",   "note": null, "name": "AUX" },
+    { "key": 1,  "role": "black", "note": 61, "name": "C#4" },
+    { "key": 2,  "role": "black", "note": 63, "name": "D#4" },
+    { "key": 3,  "role": "black", "note": 66, "name": "F#4" },
+    { "key": 4,  "role": "black", "note": 68, "name": "G#4" },
+    { "key": 5,  "role": "black", "note": 70, "name": "A#4" },
+    { "key": 6,  "role": "black", "note": 73, "name": "C#5" },
+    { "key": 7,  "role": "black", "note": 75, "name": "D#5" },
+    { "key": 8,  "role": "black", "note": 78, "name": "F#5" },
+    { "key": 9,  "role": "black", "note": 80, "name": "G#5" },
+    { "key": 10, "role": "black", "note": 82, "name": "A#5" },
+    { "key": 11, "role": "white", "note": 59, "name": "B3" },
+    { "key": 12, "role": "white", "note": 60, "name": "C4" },
+    { "key": 13, "role": "white", "note": 62, "name": "D4" },
+    { "key": 14, "role": "white", "note": 64, "name": "E4" },
+    { "key": 15, "role": "white", "note": 65, "name": "F4" },
+    { "key": 16, "role": "white", "note": 67, "name": "G4" },
+    { "key": 17, "role": "white", "note": 69, "name": "A4" },
+    { "key": 18, "role": "white", "note": 71, "name": "B4" },
+    { "key": 19, "role": "white", "note": 72, "name": "C5" },
+    { "key": 20, "role": "white", "note": 74, "name": "D5" },
+    { "key": 21, "role": "white", "note": 76, "name": "E5" },
+    { "key": 22, "role": "white", "note": 77, "name": "F5" },
+    { "key": 23, "role": "white", "note": 79, "name": "G5" },
+    { "key": 24, "role": "white", "note": 81, "name": "A5" },
+    { "key": 25, "role": "white", "note": 83, "name": "B5" },
+    { "key": 26, "role": "white", "note": 84, "name": "C6" }
+  ],
+  "notes": "Notes view = chord/note entry with in-editor step navigation. Keyboard starts at F4 (key15): playable piano = keys 3-10 (sharps) + 15-26 (naturals), F4-C6. F1(1)=copy step, F2(2)=paste step. Keys 11=prev step, 12=next step (one per click), 13=unused, 14=clear. Hold F1+F2 (F3) = jump-to-step overlay on the low row (state 2). Live MIDI audition on key-hold when stopped. No persistent cursor; new step's notes flash then settle; OLED shows a 5-segment CC meter (top pixel row), a 16-box step strip + page number.",
+  "states": [
+    {
+      "state": 1,
+      "name": "Notes — editing",
+      "notes": "Resting editor. Piano F4-C6 on keys 3-10 (sharps) + 15-26 (naturals); C-major example so sharps (3-10) are off, roots C5(19)/C6(26) periwinkle, other naturals dim blue. Current step's chord (C5-E5-G5) lit LTYELLOW on 19/21/23. F1(1)=copy step (DKCYAN), F2(2)=paste step (DKGREEN). Key11=prev step, Key12=next step (DKBLUE), Key13=unused, Key14=clear (DKRED). Stopped: hold a piano key to audition (sends MIDI).",
+      "leds": [
+        "#000000",
+        "#004c4d", "#264d00", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+        "#00004d", "#00004d", "#000000", "#800000", "#000090", "#000090", "#000090", "#000090",
+        "#ffff80", "#000090", "#ffff80", "#000090", "#ffff80", "#000090", "#000090", "#a2a2ff"
+      ],
+      "keyNotes": {
+        "1": "Copy step (F1)",
+        "2": "Paste step (F2)",
+        "11": "Prev step",
+        "12": "Next step",
+        "14": "Clear step",
+        "15": "F4 — keyboard start",
+        "19": "C5 — chord note / root",
+        "21": "E5 — chord note",
+        "23": "G5 — chord note",
+        "26": "C6 — root"
+      },
+      "pots": [
+        { "pot": 1, "label": "K1", "note": "Pot bank CC21", "value": 100 },
+        { "pot": 2, "label": "K2", "note": "Pot bank CC22", "value": 64 },
+        { "pot": 3, "label": "K3", "note": "Pot bank CC23", "value": 40 },
+        { "pot": 4, "label": "K4", "note": "Pot bank CC24", "value": 80 },
+        { "pot": 5, "label": "K5", "note": "Pot bank CC7", "value": 120 }
+      ],
+      "encoder": { "note": "Turn = change step; step flashes briefly on change", "press": "Toggle select/edit" },
+      "screen": { "note": "16 step-boxes (filled=current) + page number over the keyboard render", "text": "▣▢▢▢▢▢▢▢▢▢▢▢▢▢▢▢ p1\nNOTES C5 E5 G5" }
+    },
+    {
+      "state": 2,
+      "name": "Notes — F3 jump-to-step (hold F1+F2)",
+      "notes": "Holding F1+F2 (keys 1&2 = copy/paste, held together) turns the low row 11-26 into a 16-step jump selector for the current page. Steps with notes = LTBLUE, empty = DKBLUE, and the current step FLASHES white (key15 here). Tap a step key to jump straight there; release to return to the keyboard. The keyboard (3-10) is hidden while held.",
+      "leds": [
+        "#000000",
+        "#004c4d", "#264d00", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#ffffff", "#00004d", "#a8a8ff", "#00004d",
+        "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#a8a8ff", "#00004d", "#00004d", "#a8a8ff"
+      ],
+      "keyNotes": {
+        "1": "F1 = copy (held for F3)",
+        "2": "F2 = paste (held for F3)",
+        "11": "Jump to step 1 (has notes = LTBLUE)",
+        "15": "Current step — flashing white",
+        "12": "Jump to step 2 (empty = DKBLUE)"
+      },
+      "pots": [
+        { "pot": 1, "label": "K1", "note": "Pot bank CC21", "value": 100 },
+        { "pot": 2, "label": "K2", "note": "Pot bank CC22", "value": 64 },
+        { "pot": 3, "label": "K3", "note": "Pot bank CC23", "value": 40 },
+        { "pot": 4, "label": "K4", "note": "Pot bank CC24", "value": 80 },
+        { "pot": 5, "label": "K5", "note": "Pot bank CC7", "value": 120 }
+      ],
+      "encoder": { "note": "(hold-mode)", "press": "" },
+      "screen": { "note": "Jump to step", "text": "JUMP TO STEP\n▣▢▢▢▢... p1" }
+    }
+  ]
+}

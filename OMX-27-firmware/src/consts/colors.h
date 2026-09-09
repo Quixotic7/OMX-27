@@ -25,6 +25,7 @@ const auto MEDYELLOW = 0xBFBF40;
 
 // hsl(xxx, 100%, 75%)
 const auto LTCYAN = 0x80FFFF;
+const auto LTBLUE = 0xA8A8FF;
 const auto LTPURPLE = 0xBF80FF;
 const auto SALMON = 0xFF8080;
 const auto PINK = 0xFF80D4;

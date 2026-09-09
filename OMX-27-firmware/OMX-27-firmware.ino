@@ -1,6 +1,6 @@
 // OMX-27 MIDI KEYBOARD / SEQUENCER
 
-//	v1.14.1
+//	v1.15.4 — Solid pass of QOL improvements and bugfixes for Form Sequencer
 //	Last update: April 2026
 //
 //	Original concept and initial code by Steven Noreyko
@@ -23,6 +23,8 @@
 #include "src/midi/midi.h"
 #include "src/consts/colors.h"
 #include "src/ClearUI/ClearUI.h"
+// sequencer.h declares the `sequencer` object (clockSource + timing config) which
+// is used globally even when the old S1/S2 sequencer MODE is compiled out.
 #include "src/modes/sequencer.h"
 #include "src/midi/noteoffs.h"
 #include "src/hardware/storage.h"
@@ -33,14 +35,22 @@
 #include "src/hardware/omx_disp.h"
 #include "src/modes/omx_mode_midi_keyboard.h"
 #include "src/modes/omx_mode_drum.h"
+#ifdef OMXMODESEQ
 #include "src/modes/omx_mode_sequencer.h"
+#endif
+#ifdef OMXMODEGRIDS
 #include "src/modes/omx_mode_grids.h"
+#endif
 #include "src/modes/omx_mode_euclidean.h"
 #include "src/modes/omx_mode_chords.h"
+#include "src/form/omx_mode_form.h"
+#include "src/modes/omx_mode_config.h"
+#include "src/modes/omx_mode_remote.h"
 #include "src/modes/omx_screensaver.h"
 #include "src/utils/music_scales.h"
 #include "src/hardware/omx_leds.h"
 #include "src/midi/MIDIClockStats.h"
+#include "src/midi/norns_link.h"
 
 // Allows code to compile with smallest code LTO
 
@@ -60,14 +70,111 @@ extern "C"
 
 OmxModeMidiKeyboard omxModeMidi;
 OmxModeDrum omxModeDrum;
+#ifdef OMXMODESEQ
 OmxModeSequencer omxModeSeq;
+#endif
 #ifdef OMXMODEGRIDS
 OmxModeGrids omxModeGrids;
 #endif
 OmxModeEuclidean omxModeEuclid;
 OmxModeChords omxModeChords;
+OmxModeForm omxModeForm;
+OmxModeConfig omxModeConfig;
+OmxModeRemote omxModeRemote;
 
 OmxModeInterface *activeOmxMode;
+
+// SysEx remote-control injection (NL_CMD_INPUT 0x51). Called synchronously from the SysEx
+// handler at the end of loop(), after all physical input has been processed this frame — safe,
+// no reentrancy. sysexData[4]=0x51, [5]=subcmd, [6..]=args. Mirrors the physical dispatch in
+// loop() (incl. midiSettings.keyState[] bookkeeping) so modes behave identically to real input.
+//   0x00 KEY:  [6]=key(0-26) [7]=down [8]=held [9]=quickClicked [10]=clicks
+//   0x01 ENC:  [6]=dir(0=CCW,1=none,2=CW) [7]=count [8]=speedup
+//   0x02 EBTN: [6]=action(0=down,1=up,2=upLong)
+//   0x03 POT:  [6]=pot(0-4) [7]=value(0-127)
+extern OmxScreensaver omxScreensaver; // defined below
+void saveToStorage(void);   // defined below
+
+// Host->OMX REMOTE-mode data (LEDs / screen). Ignored unless REMOTE is active.
+void omxRemoteSysex(const uint8_t *d, unsigned n)
+{
+	if (sysSettings.omxMode == MODE_REMOTE)
+		omxModeRemote.onSysex(d, n);
+}
+
+void omxInjectInput(const uint8_t *d, unsigned n)
+{
+	if (activeOmxMode == nullptr || n < 6)
+		return;
+	// Injected input counts as user activity: without this the screensaver blanks the
+	// OLED mid-QA while injected events keep silently mutating mode state underneath.
+	omxScreensaver.userActivity();
+	sysSettings.screenSaverMode = false;
+	switch (d[5])
+	{
+	case 0x00: // KEY
+		if (n >= 11 && d[6] <= 26)
+		{
+			uint8_t key = d[6];
+			bool down = d[7] != 0, held = d[8] != 0, quick = d[9] != 0;
+			if (down)
+				midiSettings.keyState[key] = true;
+			OMXKeypadEvent e(key, d[10], held, down, quick);
+			activeOmxMode->onKeyUpdate(e);
+			if (!down)
+				midiSettings.keyState[key] = false;
+			if (held)
+				activeOmxMode->onKeyHeldUpdate(e);
+		}
+		break;
+	case 0x01: // ENCODER turn
+		if (n >= 8)
+		{
+			int16_t dir = (d[6] == 0) ? -1 : (d[6] == 2 ? 1 : 0);
+			int16_t speedup = (n >= 9) ? (int16_t)d[8] : 0;
+			for (uint8_t i = 0; i < d[7]; i++)
+				activeOmxMode->onEncoderChanged(Encoder::makeUpdate(dir, speedup));
+		}
+		break;
+	case 0x02: // ENCODER button
+		if (n >= 7)
+		{
+			if (d[6] == 0)
+				activeOmxMode->onEncoderButtonDown();
+			else if (d[6] == 1)
+				activeOmxMode->onEncoderButtonUp();
+			else if (d[6] == 2)
+				activeOmxMode->onEncoderButtonUpLong();
+		}
+		break;
+	case 0x05: // MODE — switch the active OMX mode (QA: injection can't reach the
+	           // hardware-only enc-DownLong mode-select path)
+		if (n >= 7 && d[6] < NUM_OMX_MODES)
+		{
+			changeOmxMode((OMXMode)d[6]);
+			omxDisp.setDirty();
+			omxLeds.setDirty();
+		}
+		break;
+	case 0x04: // SAVE — persist state exactly like the enc-edit + AUX gesture
+	{
+		omxDisp.displayMessage("Saving...");
+		saveToStorage();
+		omxDisp.displayMessage("Saved State");
+		break;
+	}
+	case 0x03: // POT
+		if (n >= 8 && d[6] < 5)
+		{
+			uint8_t k = d[6], val = d[7] & 0x7F;
+			int prev = potSettings.analogValues[k];
+			potSettings.analogValues[k] = val;
+			potSettings.hiResPotVal[k] = (uint16_t)val << 7;
+			activeOmxMode->onPotChanged(k, prev, val, abs((int)val - prev));
+		}
+		break;
+	}
+}
 
 OmxScreensaver omxScreensaver;
 
@@ -205,13 +312,20 @@ void changeOmxMode(OMXMode newOmxmode)
 	case MODE_CHORDS:
 		activeOmxMode = &omxModeChords;
 		break;
+	case MODE_FORM:
+		activeOmxMode = &omxModeForm;
+		break;
 	case MODE_S1:
+#ifdef OMXMODESEQ
 		omxModeSeq.setSeq1Mode();
 		activeOmxMode = &omxModeSeq;
+#endif
 		break;
 	case MODE_S2:
+#ifdef OMXMODESEQ
 		omxModeSeq.setSeq2Mode();
 		activeOmxMode = &omxModeSeq;
+#endif
 		break;
 	case MODE_OM:
 		omxModeMidi.setOrganelleMode();
@@ -224,6 +338,12 @@ void changeOmxMode(OMXMode newOmxmode)
 		break;
 	case MODE_EUCLID:
 		activeOmxMode = &omxModeEuclid;
+		break;
+	case MODE_CONFIG:
+		activeOmxMode = &omxModeConfig;
+		break;
+	case MODE_REMOTE:
+		activeOmxMode = &omxModeRemote;
 		break;
 	default:
 		omxModeMidi.setMidiMode();
@@ -279,6 +399,7 @@ void readPotentimeters()
 
 		if (potSettings.analog[k]->hasChanged())
 		{
+			nornsLink.markActivity();
 			// do stuff
 			if (sysSettings.screenSaverMode)
 			{
@@ -305,7 +426,9 @@ void saveHeader()
 	storage->write(EEPROM_HEADER_ADDRESS + 1, (uint8_t)sysSettings.omxMode);
 
 	// 1 byte for the active pattern
+#ifdef OMXMODESEQ
 	storage->write(EEPROM_HEADER_ADDRESS + 2, (uint8_t)sequencer.playingPattern);
+	#endif
 
 	// 1 byte for Midi channel
 	uint8_t unMidiChannel = (uint8_t)(sysSettings.midiChannel - 1);
@@ -346,7 +469,25 @@ void saveHeader()
 
 	storage->write(EEPROM_HEADER_ADDRESS + 38, potSettings.potbank);
 
-	// 38 bytes
+	// CONFIG-mode global settings (offsets 40-50; the 40-63 range is a free gap
+	// between the header and EEPROM_PATTERN_ADDRESS at 64).
+	uint16_t bpm = (uint16_t)clockConfig.clockbpm;
+	storage->write(EEPROM_HEADER_ADDRESS + 40, (uint8_t)(bpm & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 41, (uint8_t)((bpm >> 8) & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 42, (uint8_t)sequencer.clockSource);
+	storage->write(EEPROM_HEADER_ADDRESS + 43, (uint8_t)clockConfig.send_always);
+	storage->write(EEPROM_HEADER_ADDRESS + 44, (uint8_t)midiSettings.midiSoftThru);
+	storage->write(EEPROM_HEADER_ADDRESS + 45, (uint8_t)midiSettings.midiInToCV);
+	storage->write(EEPROM_HEADER_ADDRESS + 46, deviceID);
+	storage->write(EEPROM_HEADER_ADDRESS + 47, ledBrightness);
+	storage->write(EEPROM_HEADER_ADDRESS + 48, (uint8_t)screensaverEnabled);
+	storage->write(EEPROM_HEADER_ADDRESS + 49, (uint8_t)(screensaverTimeoutSec & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 50, (uint8_t)((screensaverTimeoutSec >> 8) & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 51, (uint8_t)(colorConfig.midiBg_Hue & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 52, (uint8_t)((colorConfig.midiBg_Hue >> 8) & 0xFF));
+	uint16_t ssHue = (uint16_t)min(colorConfig.screensaverColor, (uint32_t)65024);
+	storage->write(EEPROM_HEADER_ADDRESS + 53, (uint8_t)(ssHue & 0xFF));
+	storage->write(EEPROM_HEADER_ADDRESS + 54, (uint8_t)((ssHue >> 8) & 0xFF));
 }
 
 // returns true if the header contained initialized data
@@ -354,6 +495,14 @@ void saveHeader()
 bool loadHeader(void)
 {
 	uint8_t version = storage->read(EEPROM_HEADER_ADDRESS + 0);
+	// A transient read glitch here (e.g. FRAM/I2C not settled right after a reboot)
+	// used to look like "uninitialized" and trigger a full reinit + re-save, wiping
+	// every saved setting AND the FORM pattern bank. Re-read before believing it.
+	if (version == 0xFF || version != EEPROM_VERSION)
+	{
+		delay(10);
+		version = storage->read(EEPROM_HEADER_ADDRESS + 0);
+	}
 
 	char buf[64];
 	snprintf(buf, sizeof(buf), "EEPROM Header Version is %d\n", version);
@@ -377,8 +526,10 @@ bool loadHeader(void)
 
 	sysSettings.omxMode = (OMXMode)storage->read(EEPROM_HEADER_ADDRESS + 1);
 
+#ifdef OMXMODESEQ
 	sequencer.playingPattern = storage->read(EEPROM_HEADER_ADDRESS + 2);
 	sysSettings.playingPattern = sequencer.playingPattern;
+#endif
 
 	uint8_t unMidiChannel = storage->read(EEPROM_HEADER_ADDRESS + 3);
 	sysSettings.midiChannel = unMidiChannel + 1;
@@ -420,6 +571,28 @@ bool loadHeader(void)
 
 	potSettings.potbank = constrain(storage->read(EEPROM_HEADER_ADDRESS + 38), 0, NUM_CC_BANKS-1);
 
+	// CONFIG-mode global settings
+	uint16_t bpm = (uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 40) | ((uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 41) << 8);
+	clockConfig.clockbpm = constrain((int)bpm, 40, 300);
+	omxUtil.resetClocks(); // apply the loaded tempo
+	sequencer.clockSource = (bool)storage->read(EEPROM_HEADER_ADDRESS + 42);
+	clockConfig.send_always = (bool)storage->read(EEPROM_HEADER_ADDRESS + 43);
+	midiSettings.midiSoftThru = (bool)storage->read(EEPROM_HEADER_ADDRESS + 44);
+	midiSettings.midiInToCV = (bool)storage->read(EEPROM_HEADER_ADDRESS + 45);
+	deviceID = constrain((int)storage->read(EEPROM_HEADER_ADDRESS + 46), 0, 127);
+	ledBrightness = constrain((int)storage->read(EEPROM_HEADER_ADDRESS + 47), 5, 255);
+	strip.setBrightness(ledBrightness);
+	screensaverEnabled = (bool)storage->read(EEPROM_HEADER_ADDRESS + 48);
+	uint16_t ssTimeout = (uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 49) | ((uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 50) << 8);
+	screensaverTimeoutSec = constrain((int)ssTimeout, 5, 3600);
+	// LED hues (0xFFFF = written by an older save that lacked these bytes -> keep defaults)
+	uint16_t keyBgHue = (uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 51) | ((uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 52) << 8);
+	if (keyBgHue != 0xFFFF)
+		colorConfig.midiBg_Hue = keyBgHue;
+	uint16_t ssHue = (uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 53) | ((uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 54) << 8);
+	if (ssHue != 0xFFFF)
+		colorConfig.screensaverColor = ssHue;
+
 	// digitalWrite(BLUELED, HIGH);
 	return true;
 }
@@ -428,8 +601,12 @@ void savePatterns(void)
 {
 	bool isEeprom = storage->isEeprom();
 
-	int patternSize = serializedPatternSize(isEeprom);
 	int nLocalAddress = EEPROM_PATTERN_ADDRESS;
+
+	int patternSize = 0;
+
+#ifdef OMXMODESEQ
+	patternSize = serializedPatternSize(isEeprom);
 
 	// Serial.println((String)"Seq patternSize: " + patternSize);
 	int seqPatternNum = isEeprom ? NUM_SEQ_PATTERNS_EEPROM : NUM_SEQ_PATTERNS;
@@ -444,12 +621,17 @@ void savePatterns(void)
 
 		nLocalAddress += patternSize;
 	}
-
-	if (isEeprom)
+#endif
+	if(isEeprom)
 	{
 		return;
 	}
 	// Serial.println((String)"nLocalAddress: " + nLocalAddress); // 5784
+
+	// FORM is saved LAST — see the tail of this function. The other modes + MidiFX below
+	// therefore keep stable storage offsets, so a change in FORM's (large, evolving) save
+	// size can no longer shift or corrupt them. EEPROM_VERSION is bumped for the one-time
+	// re-init that retires the old FORM-first layout.
 
 #ifdef OMXMODEGRIDS
 	// Serial.println("Saving Grids");
@@ -495,6 +677,15 @@ void savePatterns(void)
 	}
 	// Serial.println((String)"nLocalAddress: " + nLocalAddress); // 11585
 
+#ifndef OMXMODESEQ
+	// FORM saved LAST: its footprint is the largest and the most likely to change, so
+	// anchoring it at the tail keeps every mode + MidiFX above at fixed offsets.
+	Serial.println("Saving FORM");
+	Serial.println((String)"nLocalAddress: " + nLocalAddress);
+	nLocalAddress = omxModeForm.saveToDisk(nLocalAddress, storage);
+	Serial.println((String)"nLocalAddress: " + nLocalAddress);
+#endif
+
 	// Starting 11545
 	// MidiFX with nothing 11585
 	// 1 MidiFX full ARPS 11913
@@ -516,11 +707,14 @@ void loadPatterns(void)
 {
 	bool isEeprom = storage->isEeprom();
 
-	int patternSize = serializedPatternSize(isEeprom);
+	int patternSize = 0;
 	int nLocalAddress = EEPROM_PATTERN_ADDRESS;
 
-	// Serial.print("Seq patterns - nLocalAddress: ");
-	// Serial.println(nLocalAddress);
+#ifdef OMXMODESEQ
+	patternSize = serializedPatternSize(isEeprom);
+
+	Serial.print("Seq patterns - nLocalAddress: ");
+	Serial.println(nLocalAddress);
 
 	int seqPatternNum = isEeprom ? NUM_SEQ_PATTERNS_EEPROM : NUM_SEQ_PATTERNS;
 
@@ -537,14 +731,17 @@ void loadPatterns(void)
 
 		nLocalAddress += patternSize;
 	}
+#endif
 
 	if (isEeprom)
 	{
 		return;
 	}
 
-	// Serial.print("Grids patterns - nLocalAddress: ");
-	// Serial.println(nLocalAddress);
+	// FORM is loaded LAST to mirror savePatterns() — see the tail of this function.
+
+	Serial.print("Grids patterns - nLocalAddress: ");
+	Serial.println(nLocalAddress);
 	// 332 - eeprom size
 	// 332 * 8 = 2656
 
@@ -595,6 +792,14 @@ void loadPatterns(void)
 		// Serial.println((String)"nLocalAddress: " + nLocalAddress);
 	}
 	// Serial.println((String) "nLocalAddress: " + nLocalAddress); // 5988
+
+#ifndef OMXMODESEQ
+	// FORM loaded LAST to match savePatterns()'s tail placement.
+	Serial.print("Loading FORM");
+	Serial.println((String) "nLocalAddress: " + nLocalAddress);
+	nLocalAddress = omxModeForm.loadFromDisk(nLocalAddress, storage);
+	Serial.println((String) "nLocalAddress: " + nLocalAddress);
+#endif
 
 	// with 8 note chords, 10929
 
@@ -672,7 +877,12 @@ void loop()
 
 	if (passed > 0) // This should always be true
 	{
-		if (sequencer.playing || omxUtil.areClocksRunning())
+		bool seqPlaying = false;
+
+#ifdef OMXMODESEQ
+		seqPlaying = sequencer.playing;
+#endif
+		if (seqPlaying || omxUtil.areClocksRunning())
 		{
 			omxScreensaver.resetCounter(); // screenSaverCounter = 0;
 		}
@@ -686,6 +896,19 @@ void loop()
 	// ############### SLEEP MODE ###############
 	//
 	//	Serial.println(screenSaverCounter);
+	// Keep the OLED awake (don't blank) while the norns screen mirror is active,
+	// and force a periodic repaint so a static screen still streams a frame
+	// (initial frame after enable + steady self-heal of any dropped frames).
+	if (nornsLink.mirrorEnabled())
+	{
+		omxScreensaver.resetCounter();
+		static uint32_t lastMirrorPush = 0;
+		if ((uint32_t)(millis() - lastMirrorPush) > 500)
+		{
+			lastMirrorPush = millis();
+			omxDisp.setDirty();
+		}
+	}
 	omxScreensaver.updateScreenSaverState();
 	sysSettings.screenSaverMode = omxScreensaver.shouldShowScreenSaver();
 
@@ -702,7 +925,9 @@ void loop()
 		changeOmxMode(sysSettings.omxMode);
 		omxModeChangedThisFrame = true;
 
+#ifdef OMXMODESEQ
 		sequencer.playingPattern = sysSettings.playingPattern;
+#endif
 		omxDisp.setDirty();
 		omxLeds.setAllLEDS(0, 0, 0);
 		omxLeds.setDirty();
@@ -716,7 +941,8 @@ void loop()
 	if (u.active())
 	{
 		auto amt = u.accel(1);		   // where 5 is the acceleration factor if you want it, 0 if you don't)
-		omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+		omxScreensaver.userActivity(); // screenSaverCounter = 0;
+		nornsLink.markActivity();
 									   //    	Serial.println(u.dir() < 0 ? "ccw " : "cw ");
 									   //    	Serial.println(amt);
 
@@ -725,7 +951,17 @@ void loop()
 		{
 			// set mode
 			//			int modesize = NUM_OMX_MODES;
-			sysSettings.newmode = (OMXMode)constrain(sysSettings.newmode + amt, 0, NUM_OMX_MODES - 1);
+			int newMode = constrain((int)sysSettings.newmode + amt, 0, NUM_OMX_MODES - 1);
+#ifndef OMXMODESEQ
+			// The S1/S2 sequencers are compiled out (kept behind OMXMODESEQ), so skip
+			// their slots in the mode rotation instead of landing on a dead no-op.
+			int skipDir = (amt < 0) ? -1 : 1;
+			while ((newMode == MODE_S1 || newMode == MODE_S2) && newMode > 0 && newMode < (NUM_OMX_MODES - 1))
+			{
+				newMode += skipDir;
+			}
+#endif
+			sysSettings.newmode = (OMXMode)newMode;
 			// omxDisp.dispMode();
 			// omxDisp.bumpDisplayTimer();
 			omxDisp.setDirty();
@@ -745,14 +981,17 @@ void loop()
 	{
 	// SHORT PRESS
 	case Button::Down:				   // Serial.println("Button down");
-		omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+		omxScreensaver.userActivity(); // screenSaverCounter = 0;
+		nornsLink.markActivity();
 
 		// what page are we on?
 		if (sysSettings.newmode != sysSettings.omxMode && encoderConfig.enc_edit)
 		{
 			changeOmxMode(sysSettings.newmode);
 			omxModeChangedThisFrame = true;
+#ifdef OMXMODESEQ
 			seqStop();
+#endif
 			omxLeds.setAllLEDS(0, 0, 0);
 			encoderConfig.enc_edit = false;
 			// omxDisp.dispMode();
@@ -814,11 +1053,15 @@ void loop()
 
 		if (e.down())
 		{
-			omxScreensaver.resetCounter(); // screenSaverCounter = 0;
+			omxScreensaver.userActivity(); // screenSaverCounter = 0;
+			nornsLink.markActivity();
 			midiSettings.keyState[thisKey] = true;
 		}
 
-		if (e.down() && thisKey == 0 && encoderConfig.enc_edit)
+		// !e.held(): only a fresh AUX press saves — an AUX that was already held
+		// when enc_edit opened (e.g. the REMOTE-mode AUX+enc exit chord) gets
+		// re-delivered as a held event and must not trigger the blocking save.
+		if (e.down() && !e.held() && thisKey == 0 && encoderConfig.enc_edit)
 		{
 			// temp - save whenever the 0 key is pressed in encoder edit mode
 			omxDisp.displayMessage("Saving...");
@@ -856,6 +1099,13 @@ void loop()
 
 	} // END KEYS WHILE
 
+	// Drain USB MIDI before the display/LED push: display.display() stalls the
+	// loop for several ms and the TinyUSB RX FIFO is only 128 bytes — going into
+	// the stall full makes the host back up (REMOTE mode is the heavy case).
+	while (MM::usbMidiRead())
+	{
+	}
+
 	if (!sysSettings.screenSaverMode)
 	{
 		omxLeds.updateBlinkStates();
@@ -878,6 +1128,10 @@ void loop()
 	// DISPLAY at end of loop
 	omxDisp.showDisplay();
 	omxLeds.showLeds();
+
+	// Pace the norns screen-mirror page sends (one page per loop iteration) so
+	// the 4 SysEx pages of a frame don't overflow the USB TX FIFO in one burst.
+	nornsLink.pump();
 
 	while (MM::usbMidiRead())
 	{
@@ -951,7 +1205,9 @@ void setup()
 	dac.begin(DAC_ADDR, &Wire1);
 
 	// Initialize WebUSB for connection notification, etc
- 	usb_web.setLandingPage(&landingPage);
+	// TEMP: landing page disabled so the browser doesn't auto-open the web editor on
+	// reconnect. Re-enable by uncommenting the setLandingPage line below.
+ 	// usb_web.setLandingPage(&landingPage);
 	usb_web.begin();
 
 #else
@@ -1053,13 +1309,16 @@ void setup()
 	globalScale.calculateScale(scaleConfig.scaleRoot, scaleConfig.scalePattern);
 	omxModeMidi.SetScale(&globalScale);
 	omxModeDrum.SetScale(&globalScale);
+#ifdef OMXMODESEQ
 	omxModeSeq.SetScale(&globalScale);
-
+#endif
 #ifdef OMXMODEGRIDS
 	omxModeGrids.SetScale(&globalScale);
 #endif
 	omxModeEuclid.SetScale(&globalScale);
 	omxModeChords.SetScale(&globalScale);
+	omxModeForm.SetScale(&globalScale);
+	omxModeConfig.SetScale(&globalScale);
 
 	// Keypad
 	//	customKeypad.begin();
@@ -1088,7 +1347,11 @@ void setup()
 
 		// Failed to load due to initialized EEPROM or version mismatch
 		// defaults
+		// sysSettings.omxMode = DEFAULT_MODE;
+
+#ifdef OMXMODESEQ
 		sequencer.playingPattern = 0;
+		#endif
 		sysSettings.playingPattern = 0;
 		sysSettings.midiChannel = 1;
 		pots[0][0] = CC1;
@@ -1097,10 +1360,16 @@ void setup()
 		pots[0][3] = CC4;
 		pots[0][4] = CC5;
 
+#ifdef OMXMODESEQ
 		omxModeSeq.initPatterns();
+		#endif
 
 		changeOmxMode(DEFAULT_MODE);
 		// initPatterns();
+		// The FORM pattern bank lives in LittleFS and survives an FRAM wipe — pull it
+		// back BEFORE the reinit save below, so saveToStorage() re-persists the real
+		// bank instead of overwriting the flash file with empty defaults.
+		omxModeForm.restoreBankFromFS();
 		saveToStorage();
 	}
 

@@ -4,7 +4,7 @@
 class ParamManager
 {
 public:
-	static const int kMaxPages = 10;
+	static const int kMaxPages = 12;
 
 	// If true page will loop back to first after going past last page
 	// If false, page will not increment
@@ -38,11 +38,18 @@ public:
 	uint8_t getNumPages();
 	uint8_t getNumOfParamsForPage(uint8_t pageIndex);
 
+	bool isPageAndParam(int8_t pageIndex, int8_t paramIndex);
+
 private:
 	struct PageConfig
 	{
 		uint8_t numberOfParams : 6;
-		bool enabled;
+		uint8_t enabled : 1;
+
+		PageConfig()
+		{
+			enabled = true;
+		}
 	};
 
 	int8_t selectedPage = 0;

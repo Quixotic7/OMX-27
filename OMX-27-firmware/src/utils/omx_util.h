@@ -3,6 +3,7 @@
 #include "../utils/music_scales.h"
 #include "../modes/omx_mode_interface.h"
 #include "../modes/submodes/submode_clearstorage.h"
+#include "../modes/submodes/submode_potconfig.h"
 
 enum GlobalParams
 {
@@ -67,6 +68,10 @@ public:
 
 	void allOff();
 
+	int8_t getNoteNumber(uint8_t keyNum, MusicScales *scale);
+	int8_t noteNumberToKeyNumber(int8_t noteNumber);
+
+
 	MidiNoteGroup midiNoteOn2(MusicScales *scale, int notenum, int velocity, int channel);
 	MidiNoteGroup midiNoteOff2(int notenum, int channel);
 
@@ -83,7 +88,7 @@ public:
 	void setupPageLegend(MusicScales *musicScale, uint8_t index, uint8_t paramType);
 
 	SubModeClearStorage subModeClearStorage;
-
+	SubModePotConfig subModePotConfig;
 private:
 	// int potbank = 0;
 	// int analogValues[5] = {0,0,0,0,0};		// default values

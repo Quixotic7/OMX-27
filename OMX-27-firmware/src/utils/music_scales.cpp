@@ -9,8 +9,8 @@
 const uint8_t rainbowSaturation = 127;
 const uint8_t scaleBrightness = 200;
 
-const auto ROOTNOTECOLOR = 0xA2A2FF;
-const auto INSCALECOLOR = 0x000090;
+const int ROOTNOTECOLOR = 0xA2A2FF;
+const int INSCALECOLOR = 0x000090;
 
 String tempFullNoteName;
 
@@ -173,7 +173,7 @@ const char *noteNamesNoFormat[] = {
 	"B",
 };
 
-void MusicScales::calculateScaleIfModified(uint8_t scaleRoot, uint8_t scalePattern)
+void MusicScales::calculateScaleIfModified(uint8_t scaleRoot, int8_t scalePattern)
 {
 	if (scaleRoot == rootNote && scalePattern == scaleIndex)
 		return;
@@ -181,8 +181,26 @@ void MusicScales::calculateScaleIfModified(uint8_t scaleRoot, uint8_t scalePatte
 	calculateScale(scaleRoot, scalePattern);
 }
 
-void MusicScales::calculateScale(uint8_t scaleRoot, uint8_t scalePattern)
+void MusicScales::calculateScale(uint8_t scaleRoot, int8_t scalePattern)
 {
+	if (scalePattern < 0 || scalePattern >= getNumScales())
+	{
+		rootNote = scaleRoot;
+		scaleIndex = scalePattern;
+
+		// disabled
+		for (int n = 0; n < 12; n++)
+		{
+			scaleOffsets[n] = -1;
+			scaleDegrees[n] = -1;
+			scaleColors[n] = LEDOFF;
+		}
+
+		calculateRemap();
+
+		return;
+	}
+
 	if (scaleRoot != rootNote && scalePattern != scaleIndex)
 	{
 		scaleRemapCalculated_ = false;
@@ -298,6 +316,11 @@ bool MusicScales::isNoteInScale(int8_t noteNum)
 	if (!scaleCalculated || noteNum < 0 || noteNum > 127)
 	{
 		return false;
+	}
+
+	if(scaleIndex < 0)
+	{
+		return true;
 	}
 
 	int noteIndex = noteNum % 12;
@@ -434,6 +457,114 @@ int MusicScales::getGroup16Note(uint8_t keyNum, int8_t octave)
 	}
 
 	// adjnote = constrain(adjnote, -1, 127);
+
+	return adjnote;
+}
+
+int8_t MusicScales::offsetNoteByInterval(int8_t noteNumber, int8_t interval)
+{
+	if (interval == 0)
+	{
+		return noteNumber;
+	}
+
+	int adjnote;
+
+	if (scaleIndex < 0)
+	{
+		// Chromatically offset in semitones
+		adjnote = noteNumber + interval;
+		// Serial.println("Chromatic note: " + String(adjnote));
+	}
+	else
+	{
+		auto scalePattern = getScalePattern(scaleIndex);
+
+		uint8_t len = max(scaleLength, 1);
+
+		int oct = abs(interval) / len;
+
+		if (interval > 0)
+		{
+			int pos = interval % len;
+
+			adjnote = noteNumber + (12 * oct) + scalePattern[pos];
+		}
+		else
+		{
+			int pos = interval % len;
+			if (pos == 0)
+			{
+				adjnote = noteNumber - (12 * oct);
+			}
+			else
+			{
+				pos = (len - pos) % len;
+				adjnote = noteNumber - (12 * (oct + 1)) + scalePattern[pos];
+			}
+		}
+	}
+
+	if (adjnote > 127 || adjnote < 0)
+		adjnote = -1;
+
+	return adjnote;
+}
+
+int8_t MusicScales::offsetNoteByIntervalInScale(int8_t noteNumber, int8_t interval)
+{
+	if (interval == 0)
+	{
+		return noteNumber;
+	}
+
+	int16_t adjnote = -1;
+
+	if (scaleIndex < 0)
+	{
+		// Chromatically offset in semitones
+		adjnote = noteNumber + interval;
+		// Serial.println("Chromatic note: " + String(adjnote));
+	}
+	else
+	{
+		int8_t intervalCounter = 0;
+		if(interval > 0)
+		{
+			for(uint8_t i = noteNumber + 1; i < 128; i++)
+			{
+				if(isNoteInScale(i))
+				{
+					intervalCounter++;
+
+					if(intervalCounter == interval)
+					{
+						adjnote = i;
+						break;
+					}
+				}
+			}
+		}
+		else
+		{
+			for(int8_t i = noteNumber - 1; i >= 0; i--)
+			{
+				if(isNoteInScale(i))
+				{
+					intervalCounter--;
+
+					if(intervalCounter == interval)
+					{
+						adjnote = i;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	if (adjnote > 127 || adjnote < 0)
+		adjnote = -1;
 
 	return adjnote;
 }
@@ -583,10 +714,10 @@ const char *MusicScales::getFullNoteName(uint8_t noteNumber)
 	return tempFullNoteName.c_str();
 }
 
-const char *MusicScales::getScaleName(uint8_t scaleIndex)
+const char *MusicScales::getScaleName(int8_t scaleIndex)
 {
 	if (scaleIndex < 0 || scaleIndex >= getNumScales())
-		return "off";
+		return "OFF";
 	return scaleNames[scaleIndex];
 }
 
@@ -595,7 +726,9 @@ int MusicScales::getScaleLength()
 	return scaleLength;
 }
 
-const int8_t *MusicScales::getScalePattern(uint8_t patIndex)
+const int8_t *MusicScales::getScalePattern(int8_t patIndex)
 {
+	if (patIndex < 0 || patIndex >= getNumScales())
+		return nullptr;
 	return scalePatterns[patIndex];
 }
