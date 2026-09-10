@@ -35,6 +35,15 @@ namespace
 
 namespace MM
 {
+	void setUsbMidiName(const char *name)
+	{
+		#if BOARDTYPE == OMX2040
+			usb_midi.setStringDescriptor(name);
+		#else
+			(void)name;
+		#endif
+	}
+
 	void begin()
 	{
 		#if BOARDTYPE == OMX2040

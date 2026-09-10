@@ -91,6 +91,9 @@ extern const OMXMode DEFAULT_MODE;
 // Uncomment to build the legacy M8 macro (mute/solo + control page) in macro slot 1
 // instead of the Launchpad Pro emulation (MidiMacroM8V2). See design/m8v2/M8V2-PLAN.md.
 // #define OMX_M8_MACRO_LEGACY
+// Experiment for hosts that pick their Launchpad by USB name (e.g. the M8 iOS app):
+// enumerate as a Novation Launchpad Pro MK3 instead of omx-27-v3 (RP2040 only).
+// #define OMX_M8_USB_AS_LAUNCHPAD
 
 enum FUNCKEYMODE
 {

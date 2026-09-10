@@ -1180,6 +1180,13 @@ void setup()
 
 #elif BOARDTYPE == OMX2040
 // 	Serial.println("RP2040");
+#ifdef OMX_M8_USB_AS_LAUNCHPAD
+	// Look like a real Launchpad Pro MK3 to hosts that match on USB names (M8 iOS app experiment).
+	strcpy(mfgstr, "Focusrite - Novation");
+	strcpy(prodstr, "Launchpad Pro MK3");
+	TinyUSBDevice.setID(0x1235, 0x0123); // Novation VID / LPP MK3 PID
+	MM::setUsbMidiName("LPProMK3 MIDI");
+#endif
 	TinyUSBDevice.setManufacturerDescriptor(mfgstr);
 	TinyUSBDevice.setProductDescriptor(prodstr);
 

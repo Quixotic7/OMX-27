@@ -22,8 +22,13 @@ namespace midimacro
 		0x00, 0x01, 0x00, 0x00	// version
 	};
 
+	// Handshake diagnostics shown on the display while unlinked: identities sent / inquiries received.
+	static uint16_t s_identitySent = 0;
+	static uint16_t s_inquiryRx = 0;
+
 	static void sendIdentityReply()
 	{
+		s_identitySent++;
 		MM::sendSysExUSB(sizeof(kIdentityReply), kIdentityReply, false); // USB only: the M8 (or iOS app) is on USB, and TRS would eat 17 bytes/s while unlinked
 	}
 
@@ -31,6 +36,7 @@ namespace midimacro
 	{
 		(void)data;
 		(void)length;
+		s_inquiryRx++;
 
 #ifndef OMX_M8_MACRO_LEGACY
 		// Slot 1 is the M8 macro. Reply even when the macro isn't entered, and from any
@@ -705,7 +711,10 @@ namespace midimacro
 		else
 			snprintf(dispLabel_, sizeof(dispLabel_), "M8 %s R%d %s", viewName, (int)row_, modeName);
 
-		snprintf(dispStatus_, sizeof(dispStatus_), "LPP %s", linked_ ? "LINK" : "WAIT");
+		if (linked_)
+			snprintf(dispStatus_, sizeof(dispStatus_), "LPP LINK");
+		else // sent/received counters help debug a host that never asks or never answers
+			snprintf(dispStatus_, sizeof(dispStatus_), "WAIT S%u R%u", (unsigned)(s_identitySent % 100), (unsigned)(s_inquiryRx % 100));
 
 		omxDisp.dispGenericModeLabelDoubleLine(dispLabel_, dispStatus_, params_.getNumPages(), params_.getSelPage());
 	}

@@ -411,6 +411,10 @@ Potentiometers always send CCs on the `M-CH` channel.
 
 If you need the previous mute/solo control macro, define `OMX_M8_MACRO_LEGACY` in `config.h` at build time. The new Launchpad Pro emulation will be replaced with the original macro, and `macromodes[]` list will remain unchanged.
 
+##### Troubleshooting the handshake
+
+While unlinked the second display line reads `WAIT S<n> R<n>`: `S` counts identity replies the OMX has sent (one on entry, then one per second), `R` counts Device Inquiry requests received from the host. `R` staying at 0 means the M8 never asked; the OMX still sends its identity unprompted, so if the line never changes to `LPP LINK` the host is ignoring it. To isolate the OMX, connect it to a computer and run `tools/virtual_m8.py`, which plays the M8's side of the handshake. If a host picks its Launchpad by USB name (the M8 iOS app may), build the Pico firmware with `OMX_M8_USB_AS_LAUNCHPAD` in `config.h`: the OMX then enumerates as a Novation Launchpad Pro MK3.
+
 ##### Known Limitations
 
 - **Option key**: no Launchpad Pro equivalent; currently a lit placeholder that does nothing. A future `NAV` parameter or Control Map note may be assigned.

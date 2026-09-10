@@ -24,6 +24,7 @@ namespace MM
 	void sendControlChangeHW(int control, int value, int channel);
 	void sendSysEx(uint32_t length, const uint8_t *sysexData, bool hasBeginEnd);
 	void sendSysExUSB(uint32_t length, const uint8_t *sysexData, bool hasBeginEnd); // USB only (skips slow TRS DIN)
+	void setUsbMidiName(const char *name); // RP2040 only: USB MIDI interface/port string; call before begin()
 
 	// handlers/callbacks?
 	// void handleProgramChange(byte program, byte channel);
