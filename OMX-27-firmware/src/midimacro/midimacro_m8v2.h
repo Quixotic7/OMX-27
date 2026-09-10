@@ -75,6 +75,14 @@ namespace midimacro
 		void scrollRow(int8_t dir);
 		void setPadMode(PadMode newMode);
 
+		// Sends an LPP button. Grid pads (11-88, cols 1-8) are always Note On/Off; the ring
+		// (top/bottom rows, side columns, 101-108, 1-8) goes out as CC when ringAsCC_ is set,
+		// which is what a real Launchpad Pro MK3 does in programmer mode.
+		void sendLpp(uint8_t n, bool on);
+		void sendLppTap(uint8_t n) { sendLpp(n, true); sendLpp(n, false); }
+		static bool isRingButton(uint8_t n);
+		void releaseLatchedTracks();
+
 		// Draws one grid/scene key from the palette cache: static/flash/pulse per ledMode_,
 		// offColor when the cached index is 0 (or the note is out of range).
 		void drawPaletteKey(uint8_t key, uint8_t note, uint32_t offColor);
@@ -83,6 +91,8 @@ namespace midimacro
 		PadMode padMode_ = PAD_CLIP;
 		bool muteLatch_ = false;
 		bool soloLatch_ = false;
+		bool ringAsCC_ = true;        // ring buttons as CC (LPP MK3 programmer mode) or notes
+		uint8_t latchedTracks_ = 0;   // bit i = track button 101+i held by the OMX-side latch
 		uint8_t row_ = 8; // 1..8, which grid row keys 11-18 show (11-7 in Note view)
 
 		bool linked_ = false;

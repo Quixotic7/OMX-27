@@ -1180,16 +1180,6 @@ void setup()
 
 #elif BOARDTYPE == OMX2040
 // 	Serial.println("RP2040");
-#ifdef OMX_M8_USB_AS_LAUNCHPAD
-	// Look like a real Launchpad Pro MK3 to hosts that match on USB names (M8 iOS app experiment).
-	strcpy(mfgstr, "Focusrite - Novation");
-	strcpy(prodstr, "Launchpad Pro MK3");
-	TinyUSBDevice.setID(0x1235, 0x0123); // Novation VID / LPP MK3 PID
-	MM::setUsbMidiName("LPProMK3 MIDI");
-#endif
-	TinyUSBDevice.setManufacturerDescriptor(mfgstr);
-	TinyUSBDevice.setProductDescriptor(prodstr);
-
 	pinMode(REDLED, OUTPUT);	// RED LED
 	pinMode(BLUELED, OUTPUT);	// BLUE LED
 	digitalWrite(REDLED, LOW); 	// digitalWrite(REDLED, LOW);
@@ -1205,6 +1195,30 @@ void setup()
 	digitalWrite(RXLED, LOW);
 	Wire1.setSDA(I2C_SDA);		// i2c1 SDA
 	Wire1.setSCL(I2C_SCL);		// i2c1 SCL
+
+	// USB identity depends on the SAVED macro, so storage comes up before the USB
+	// descriptors are set. If the M8 macro was saved as the selected MCRO, enumerate as a
+	// Novation Launchpad Pro MK3: the M8 iOS app only talks to a port with that name.
+	// Otherwise stay omx-27-v3. Changing MCRO takes effect after a save + reboot.
+	storage = Storage::initStorage();
+	{
+		uint8_t ver = storage->read(EEPROM_HEADER_ADDRESS + 0);
+		if (ver != EEPROM_VERSION)
+		{
+			delay(10); // FRAM/I2C may not be settled right after a reboot (see loadHeader)
+			ver = storage->read(EEPROM_HEADER_ADDRESS + 0);
+		}
+		bool bootAsLaunchpad = (ver == EEPROM_VERSION) && (storage->read(EEPROM_HEADER_ADDRESS + 30) == 1);
+		if (bootAsLaunchpad)
+		{
+			strcpy(mfgstr, "Focusrite - Novation");
+			strcpy(prodstr, "Launchpad Pro MK3");
+			TinyUSBDevice.setID(0x1235, 0x0123); // Novation VID / LPP MK3 PID
+			MM::setUsbMidiName("LPProMK3 MIDI"); // CoreMIDI shows "Launchpad Pro MK3 LPProMK3 MIDI"
+		}
+	}
+	TinyUSBDevice.setManufacturerDescriptor(mfgstr);
+	TinyUSBDevice.setProductDescriptor(prodstr);
 
 // 	Serial1.setRX(RXLED);
 // 	Serial1.setTX(TXLED);
@@ -1229,8 +1243,9 @@ void setup()
 	// ENCODER BUTTON pin
 	pinMode(buttonPin, INPUT_PULLUP);
 
-	// Storage - FIX?
-	storage = Storage::initStorage();
+	// Storage - FIX? (the RP2040 path already brought it up before USB, see above)
+	if (storage == nullptr)
+		storage = Storage::initStorage();
 	sysEx = new SysEx(storage, &sysSettings);
 	// Serial.println( "initStorage" );
 

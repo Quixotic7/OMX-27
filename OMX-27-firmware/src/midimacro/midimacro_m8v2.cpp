@@ -72,7 +72,7 @@ namespace midimacro
 	MidiMacroM8V2::MidiMacroM8V2()
 	{
 		params_.addPage(1); // Main
-		params_.addPage(2); // Latch (MUTE, SOLO)
+		params_.addPage(3); // Latch (MUTE, SOLO) + RING (CC/NOTE)
 		encoderSelect_ = false;
 
 		for (uint8_t i = 0; i < kNumLppNotes; i++)
@@ -108,16 +108,16 @@ namespace midimacro
 
 		// Always land back in Session/CLIP and release any modifier that might still be
 		// held from a previous session (e.g. macro switched away while Mute was down).
-		MM::sendNoteOff(2, 0, 1);
-		MM::sendNoteOff(3, 0, 1);
+		sendLpp(2, false);
+		sendLpp(3, false);
 		padMode_ = PAD_CLIP;
 		view_ = VIEW_SESSION;
+		latchedTracks_ = 0;
 
 		sendIdentity();
 
 		// Ask the M8 for Session view (LPP Session button = note 93).
-		MM::sendNoteOn(93, 127, 1);
-		MM::sendNoteOff(93, 0, 1);
+		sendLppTap(93);
 
 		omxLeds.setDirty();
 		omxDisp.setDirty();
@@ -126,11 +126,12 @@ namespace midimacro
 	void MidiMacroM8V2::onDisabled()
 	{
 		releaseAllKeys();
+		releaseLatchedTracks();
 
 		// Release the Mute/Solo modifiers regardless of which pad mode was active -
 		// harmless if they weren't held.
-		MM::sendNoteOff(2, 0, 1);
-		MM::sendNoteOff(3, 0, 1);
+		sendLpp(2, false);
+		sendLpp(3, false);
 
 		for (uint8_t i = 0; i < kNumLppNotes; i++)
 		{
@@ -148,10 +149,40 @@ namespace midimacro
 		{
 			if (keyNoteSent_[i] != 0)
 			{
-				MM::sendNoteOff(keyNoteSent_[i], 0, 1);
+				sendLpp(keyNoteSent_[i], false);
 				keyNoteSent_[i] = 0;
 			}
 		}
+	}
+
+	bool MidiMacroM8V2::isRingButton(uint8_t n)
+	{
+		if (n >= 11 && n <= 88)
+		{
+			uint8_t col = n % 10;
+			return (col == 0 || col == 9);
+		}
+		return true; // 1-8, 10/20/..90, 91-99, 101-108
+	}
+
+	void MidiMacroM8V2::sendLpp(uint8_t n, bool on)
+	{
+		if (ringAsCC_ && isRingButton(n))
+			MM::sendControlChange(n, on ? 127 : 0, 1);
+		else if (on)
+			MM::sendNoteOn(n, 127, 1);
+		else
+			MM::sendNoteOff(n, 0, 1);
+	}
+
+	void MidiMacroM8V2::releaseLatchedTracks()
+	{
+		for (uint8_t i = 0; i < 8; i++)
+		{
+			if (latchedTracks_ & (1 << i))
+				sendLpp((uint8_t)(101 + i), false);
+		}
+		latchedTracks_ = 0;
 	}
 
 	void MidiMacroM8V2::loopUpdate()
@@ -393,18 +424,19 @@ namespace midimacro
 			return;
 		}
 
-		// Leaving MUTE/SOLO releases its modifier, whether latch or momentary.
+		// Leaving MUTE/SOLO releases its modifier and any OMX-side latched tracks.
+		releaseLatchedTracks();
 		if (padMode_ == PAD_MUTE)
-			MM::sendNoteOff(2, 0, 1);
+			sendLpp(2, false);
 		else if (padMode_ == PAD_SOLO)
-			MM::sendNoteOff(3, 0, 1);
+			sendLpp(3, false);
 
 		padMode_ = newMode;
 
 		if (padMode_ == PAD_MUTE)
-			MM::sendNoteOn(2, 127, 1);
+			sendLpp(2, true);
 		else if (padMode_ == PAD_SOLO)
-			MM::sendNoteOn(3, 127, 1);
+			sendLpp(3, true);
 
 		omxLeds.setDirty();
 		omxDisp.setDirty();
@@ -434,7 +466,7 @@ namespace midimacro
 
 			if (keyNoteSent_[thisKey] != 0)
 			{
-				MM::sendNoteOff(keyNoteSent_[thisKey], 0, 1);
+				sendLpp(keyNoteSent_[thisKey], false);
 				keyNoteSent_[thisKey] = 0;
 				omxLeds.setDirty();
 			}
@@ -456,25 +488,21 @@ namespace midimacro
 			{
 			case 1:
 				// Down (tap)
-				MM::sendNoteOn(70, 127, 1);
-				MM::sendNoteOff(70, 0, 1);
+				sendLppTap(70);
 				return;
 			case 2:
 				// Up (tap)
-				MM::sendNoteOn(80, 127, 1);
-				MM::sendNoteOff(80, 0, 1);
+				sendLppTap(80);
 				return;
 			case 3:
-				MM::sendNoteOn(93, 127, 1);
-				MM::sendNoteOff(93, 0, 1);
+				sendLppTap(93);
 				view_ = VIEW_SESSION;
 				omxDisp.displayMessageTimed("SESSION", 5);
 				omxLeds.setDirty();
 				omxDisp.setDirty();
 				return;
 			case 4:
-				MM::sendNoteOn(94, 127, 1);
-				MM::sendNoteOff(94, 0, 1);
+				sendLppTap(94);
 				view_ = VIEW_NOTE;
 				if (row_ > 7)
 					row_ = 7; // Note view shows row_ and row_+1
@@ -484,8 +512,7 @@ namespace midimacro
 				return;
 			case 5:
 				// Seq view - the M8 switches, the OMX stays in its current layout.
-				MM::sendNoteOn(97, 127, 1);
-				MM::sendNoteOff(97, 0, 1);
+				sendLppTap(97);
 				omxDisp.displayMessageTimed("SEQ", 5);
 				return;
 			default:
@@ -521,9 +548,31 @@ namespace midimacro
 		}
 
 		uint8_t note = lppNoteForKey(thisKey);
+
+		// MUTE/SOLO latch: the OMX keeps the track button held until it is pressed again,
+		// so the M8 sees a long press instead of a tap. Not recorded in keyNoteSent_, so
+		// the key release does not end it.
+		bool latchOn = (padMode_ == PAD_MUTE && muteLatch_) || (padMode_ == PAD_SOLO && soloLatch_);
+		if (latchOn && view_ == VIEW_SESSION && thisKey >= 11 && thisKey <= 18)
+		{
+			uint8_t bit = (uint8_t)(1 << (thisKey - 11));
+			if (latchedTracks_ & bit)
+			{
+				sendLpp(note, false);
+				latchedTracks_ &= (uint8_t)~bit;
+			}
+			else
+			{
+				sendLpp(note, true);
+				latchedTracks_ |= bit;
+			}
+			omxLeds.setDirty();
+			return;
+		}
+
 		if (note != 0)
 		{
-			MM::sendNoteOn(note, 127, 1);
+			sendLpp(note, true);
 			keyNoteSent_[thisKey] = note;
 			omxLeds.setDirty();
 		}
@@ -619,6 +668,8 @@ namespace midimacro
 								   ? (uint8_t)(101 + (k - 11))
 								   : (uint8_t)(row_ * 10 + (k - 10));
 				drawPaletteKey(k, note, LEDOFF);
+				if (padMode_ != PAD_CLIP && ledColor_[note] == 0 && (latchedTracks_ & (1 << (k - 11))))
+					strip.setPixelColor(k, padMode_ == PAD_MUTE ? RED : YELLOW); // latched, no colour from the M8
 			}
 		}
 		else // VIEW_NOTE
@@ -678,6 +729,13 @@ namespace midimacro
 				soloLatch_ = !soloLatch_;
 				omxDisp.displayMessageTimed(soloLatch_ ? "Solo: Latch" : "Solo: Moment", 5);
 			}
+			else if (param == 2)
+			{
+				releaseAllKeys(); // never leave a note held while the message type changes
+				releaseLatchedTracks();
+				ringAsCC_ = !ringAsCC_;
+				omxDisp.displayMessageTimed(ringAsCC_ ? "Ring: CC" : "Ring: Note", 5);
+			}
 			omxLeds.setDirty();
 		}
 
@@ -694,6 +752,7 @@ namespace midimacro
 		{
 			omxDisp.setLegend(0, "MUTE", !muteLatch_, muteLatch_ ? "LATCH" : "MOMENT");
 			omxDisp.setLegend(1, "SOLO", !soloLatch_, soloLatch_ ? "LATCH" : "MOMENT");
+			omxDisp.setLegend(2, "RING", !ringAsCC_, ringAsCC_ ? "CC" : "NOTE");
 			omxDisp.dispGenericMode2(params_.getNumPages(), params_.getSelPage(), params_.getSelParam(), encoderSelect_);
 			return;
 		}

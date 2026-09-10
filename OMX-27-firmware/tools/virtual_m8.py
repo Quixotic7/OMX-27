@@ -13,7 +13,7 @@ Requirements:
     pip3 install mido python-rtmidi
 
 The script will:
-1. Auto-detect the OMX-27 MIDI port (looks for "omx-27-v3" first, then "omx-27")
+1. Auto-detect the OMX-27 MIDI port ("omx-27-v3", then "omx-27", then "Launchpad Pro MK3")
 2. Send Device Inquiry Request (F0 7E 7F 06 01 F7) like a real M8
 3. Wait for Launchpad identity response from the OMX
 4. Send initial LED state using Note On messages with palette indices
@@ -175,35 +175,21 @@ def list_ports():
 
 
 def find_omx_ports():
-    """Auto-detect OMX-27 MIDI ports (omx-27-v3 or omx-27)"""
-    input_port = None
-    output_port = None
+    """Auto-detect OMX-27 MIDI ports.
 
-    # Try omx-27-v3 first (V3 firmware)
-    for name in mido.get_input_names():
-        if 'omx-27-v3' in name.lower():
-            input_port = name
-            break
+    Matches, in order: "omx-27-v3" (Pico), "omx-27" (Teensy), then "launchpad pro mk3"
+    (an OMX booted with the M8 macro saved as MCRO enumerates under that name).
+    """
+    patterns = ('omx-27-v3', 'omx-27', 'launchpad pro mk3')
 
-    # Fall back to omx-27 (Teensy)
-    if not input_port:
-        for name in mido.get_input_names():
-            if 'omx-27' in name.lower():
-                input_port = name
-                break
+    def pick(names):
+        for pat in patterns:
+            for name in names:
+                if pat in name.lower():
+                    return name
+        return None
 
-    for name in mido.get_output_names():
-        if 'omx-27-v3' in name.lower():
-            output_port = name
-            break
-
-    if not output_port:
-        for name in mido.get_output_names():
-            if 'omx-27' in name.lower():
-                output_port = name
-                break
-
-    return input_port, output_port
+    return pick(mido.get_input_names()), pick(mido.get_output_names())
 
 
 # =============================================================================

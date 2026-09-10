@@ -411,9 +411,17 @@ Potentiometers always send CCs on the `M-CH` channel.
 
 If you need the previous mute/solo control macro, define `OMX_M8_MACRO_LEGACY` in `config.h` at build time. The new Launchpad Pro emulation will be replaced with the original macro, and `macromodes[]` list will remain unchanged.
 
+##### Ring buttons: CC or Note
+
+A real Launchpad Pro MK3 sends the buttons around the grid (arrows, Shift, Edit, Play, track buttons, Mute, Solo, scene launch) as CC messages and only the 8x8 pads as notes. The OMX does the same by default. If some of those buttons do nothing on your M8, switch the `RING` parameter on page 2 to `NOTE` and try again; grid pads are always notes.
+
+##### Latching mutes and solos
+
+With `MUTE` or `SOLO` set to `LATCH` on page 2, pressing a track key in Mute/Solo mode holds that track button down on the Launchpad side until you press the key again. Leaving the mode releases every latched track. In `MOMENT` the track button is only held while the key is down.
+
 ##### Troubleshooting the handshake
 
-While unlinked the second display line reads `WAIT S<n> R<n>`: `S` counts identity replies the OMX has sent (one on entry, then one per second), `R` counts Device Inquiry requests received from the host. `R` staying at 0 means the M8 never asked; the OMX still sends its identity unprompted, so if the line never changes to `LPP LINK` the host is ignoring it. To isolate the OMX, connect it to a computer and run `tools/virtual_m8.py`, which plays the M8's side of the handshake. If a host picks its Launchpad by USB name (the M8 iOS app may), build the Pico firmware with `OMX_M8_USB_AS_LAUNCHPAD` in `config.h`: the OMX then enumerates as a Novation Launchpad Pro MK3.
+While unlinked the second display line reads `WAIT S<n> R<n>`: `S` counts identity replies the OMX has sent (one on entry, then one per second), `R` counts Device Inquiry requests received from the host. `R` staying at 0 means the M8 never asked; the OMX still sends its identity unprompted, so if the line never changes to `LPP LINK` the host is ignoring it. To isolate the OMX, connect it to a computer and run `tools/virtual_m8.py`, which plays the M8's side of the handshake. The M8 iOS app only talks to a MIDI port named like a Launchpad, so the OMX (RP2040 build) enumerates as a Novation Launchpad Pro MK3 whenever the M8 macro is the *saved* `MCRO` selection, and as `omx-27-v3` otherwise. After changing `MCRO`, save (CONFIG mode Save, or AUX in mode select) and power-cycle the OMX for the USB name to change.
 
 ##### Known Limitations
 

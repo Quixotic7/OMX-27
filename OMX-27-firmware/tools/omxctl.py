@@ -5,19 +5,19 @@ import rtmidi, time, sys
 from PIL import Image
 
 HDR = [0x7D, 0x00, 0x00]
-PORT_MATCH = "omx-27"
+PORT_MATCH = ("omx-27", "launchpad pro mk3")  # the latter = OMX booted with the M8 macro saved as MCRO
 
 def _open_out():
     o = rtmidi.MidiOut()
     for i, p in enumerate(o.get_ports()):
-        if PORT_MATCH in p.lower():
+        if any(m in p.lower() for m in PORT_MATCH):
             o.open_port(i); return o
     raise RuntimeError("omx out port not found: " + str(o.get_ports()))
 
 def _open_in():
     inp = rtmidi.MidiIn()
     for i, p in enumerate(inp.get_ports()):
-        if PORT_MATCH in p.lower():
+        if any(m in p.lower() for m in PORT_MATCH):
             inp.open_port(i); inp.ignore_types(sysex=False, timing=True, active_sense=True); return inp
     raise RuntimeError("omx in port not found")
 

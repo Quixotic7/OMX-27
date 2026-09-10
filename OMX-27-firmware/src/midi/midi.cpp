@@ -39,6 +39,7 @@ namespace MM
 	{
 		#if BOARDTYPE == OMX2040
 			usb_midi.setStringDescriptor(name);
+			usb_midi.setCableName(1, name); // jack string: CoreMIDI names the endpoint "<product> <cable>", e.g. "Launchpad Pro MK3 LPProMK3 MIDI"
 		#else
 			(void)name;
 		#endif
