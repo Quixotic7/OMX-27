@@ -56,3 +56,37 @@ pairing check (stuck-note detection).
   - `03` POT `[pot(0-4)] [value(0-127)]`
 
 See `src/midi/norns_link.*`, `src/midi/sysex.cpp`, and `omxInjectInput()` in the .ino.
+
+### `virtual_m8.py` — fake M8 for the M8 macro mode
+
+Simulates a Dirtywave M8 talking to an OMX-27 running the M8 Launchpad Pro emulation mode.
+Useful for testing the OMX-27's Launchpad emulation without a real M8 hardware.
+
+**Usage:**
+```bash
+python3 virtual_m8.py --list         # List available MIDI ports
+python3 virtual_m8.py                # Auto-detect OMX-27 and connect
+python3 virtual_m8.py --flash-demo   # Send flash/pulse effects on channels 2-3
+python3 virtual_m8.py --stress       # Stress-test: send all 80 LEDs every 500ms
+python3 virtual_m8.py -v             # Verbose (show SysEx hex dumps)
+```
+
+**What it does:**
+1. Sends M8 Device Inquiry handshake (`F0 7E 7F 06 01 F7`)
+2. Waits for Launchpad Pro MK3 identity response from the OMX-27
+3. Sends initial LED state using Note On messages with palette indices (velocity)
+4. Echoes grid pad presses with brightness feedback (velocity 3 while held, 1 when released)
+5. Cycles row 8 rainbow palette on Up/Down button presses
+6. Logs all MIDI traffic (notes, CCs, SysEx) with human-readable labels
+
+**LED feedback:**
+- Grid pads (11–88): light up at velocity 3 when pressed, dim to 1 on release
+- Scene buttons (19, 29, ..., 89): white (velocity 3)
+- Row 8 (81–88): rainbow of indices (5, 9, 13, 21, 37, 45, 53, 57)
+- Navigation (Up 80 / Down 70 / Track< 91 / Track> 92): magenta (45)
+- Play (20): green (21); Edit (10): red (5)
+- Mute (2): orange (9); Solo (3): yellow (13)
+- Track buttons (101–108): dim (1)
+
+Use `--flash-demo` to additionally send notes on MIDI channels 2 and 3 (for testing pulse/flash modes).
+Use `--stress` to continuously rotate LED colours through all 80 pads every 500ms (tests FIFO handling).

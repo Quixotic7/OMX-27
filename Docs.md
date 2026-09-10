@@ -340,48 +340,82 @@ Macro modes are supported in the MI and DRUM modes.
 
 #### M8 Macro Mode
 
-From MI Mode, be sure `M8` is selected from the `MCRO` parameter and then double click the AUX button to enter Macro Mode.
+The M8 macro mode emulates a Launchpad Pro control surface, allowing the M8 (hardware or iOS app over USB) to drive the OMX-27 in Launchpad Pro mode while maintaining full MIDI keyboard and pot control.
 
-`M-CH` should be set to the same value as the Control Map Channel in the M8 MIDI settings screen. Default is set to channel 10.  
+##### M8 Setup
 
-Double click the AUX button again to exit Macro Mode.
+In your M8's MIDI settings, set `CTRL SURFACE` to `LAUNCHPAD PRO`. Set the control map channel `M-CH` on the OMX-27 to match the M8's setting (default channel 10). Connect the M8 hardware or iOS app via USB to the OMX-27.
 
-The M8 macro mode has two pages, which change what the Keys do.
+From any OMX mode (MI, DRUM, FORM, CHORDS), select `M8` from the `MCRO` parameter and double-click the AUX button to enter the macro.
 
-* Mute Solo Page:
+##### Handshake
 
-The bottom row of keys correspond to mutes (orange) and solos (red). The top "black keys" are as follows:  
+On entry, the display shows `LPP WAIT`. The OMX sends a Launchpad Pro identity and waits for the M8 to respond. Once the M8 answers with its first LED message, the display changes to `LPP LINK` and the macro is ready.
+
+##### Session View (Clip Launch)
+
+This is the default layout. Keys and their MIDI messages:
 
 ```
-Orange - release all mutes  
-Lime - go to mixer screen  
-Cyan - snapshot load/paste *   
-Magenta - snapshot save/enter selection mode *  
-Red - release all solos  
-Yellow - waveform display  
-Blue - play  
+Key 1/2        Scroll grid rows down/up
+Key 3          Pad mode: CLIP (bright magenta when active)
+Key 4          Pad mode: MUTE; press again while active to toggle latch/momentary (red)
+Key 5          Pad mode: SOLO; press again while active to toggle latch/momentary (yellow)
+Key 8/21/22/23 Navigation: Up/Left/Down/Right
+Key 9          Option key (placeholder, no function yet)
+Key 10         Edit
+Key 11-18      Grid pads, columns 1-8 of the selected row (colours mirrored from M8)
+Key 19         Row launch button (colours mirrored from M8 scene button)
+Key 24         Shift
+Key 26         Play (green when M8 reports Play lit)
 ```
-<img src="images/omx27_m8macro.png" alt="omx27_m8_macro_mode" width="1045" height="425" />
 
-When M8 is selected from the `MCRO` parameter - potentiometers send on the `M-CH` MIDI channel in both regular keyboard mode and in the macro mode. However, notes played on keys send on the currently selected `CH` MIDI channel.
+Entering MUTE or SOLO holds down the Launchpad Mute (note 2) or Solo (note 3) button for as long as that pad mode is active, and keys 11-18 become the Launchpad track buttons 1-8 (notes 101-108) so the M8 can mute/solo the corresponding tracks. All of this is sent on MIDI channel 1, like a real Launchpad; `M-CH` is only used for the pots. The latch/momentary toggle on keys 4 and 5 is read on the M8 side and does not change what the OMX sends.
 
-**Notes:**
-* M8 must be on the Mixer view for snapshots.  
-* Snapshot Load uses the M8 key combo [SHIFT]+[OPTION]. On any view with a grid (song, chain, phrase, table, etc.) this key enters selection mode.  
-* Snapshot Save uses the M8 key combo [SHIFT]+[EDIT]. On any view with a grid this key pastes the copied contents from selection mode.  
+##### AUX Shortcuts
 
-* Control Page:
+Hold AUX to access view and navigation shortcuts. The AUX shortcut layer does not send grid pads:
 
-This page lets you navigate the M8 using the keys on the device instead of the keys on the M8.
+```
+AUX + Key 3    Switch M8 to Session view
+AUX + Key 4    Switch M8 to Note view
+AUX + Key 5    Switch M8 to Sequencer view
+AUX + Key 1/2  Launchpad Down/Up (octave shift in Note view)
+```
 
-Top Key 1 and Bottoms Keys 1-3: These correspond to the directional arrow keys. 
+##### Note View (Keyboard)
 
-Top Key 4: Option Key
-Top Key 5: Edit Key
-Bottom Key 6: Shift Key
-Bottom Key 7: Play Key
+When the M8 is in Note view (keyboard mode), the layout provides two octaves of keys:
 
-The right half of the Keyboard is a 1-octave midi keyboard that sends notes on the same midi channel as when not in macro mode. 
+```
+Key 11-18      First octave, columns 1-8
+Key 19-26      Second octave, columns 1-8
+Key 1/2        Scroll the two-row window down/up
+Key 6          Shift (black key)
+Key 7          Play
+Key 8          Up
+Key 10         Edit
+```
+
+Keys 3, 4, 5 are dark in Note view. The M8 decides note layout and colours; the OMX mirrors them.
+
+##### Parameter Pages
+
+**Page 1** displays the current view and mode (e.g. `M8  SESS  R8  CLIP`).
+
+**Page 1** also scrolls the grid rows when the encoder is turned. **Page 2** provides latch settings for MUTE and SOLO modes. Pressing the encoder toggles between selecting a parameter and editing it.
+
+Potentiometers always send CCs on the `M-CH` channel.
+
+##### Legacy M8 Macro
+
+If you need the previous mute/solo control macro, define `OMX_M8_MACRO_LEGACY` in `config.h` at build time. The new Launchpad Pro emulation will be replaced with the original macro, and `macromodes[]` list will remain unchanged.
+
+##### Known Limitations
+
+- **Option key**: no Launchpad Pro equivalent; currently a lit placeholder that does nothing. A future `NAV` parameter or Control Map note may be assigned.
+- **Mute/Solo semantics**: the modifier-hold behaviour on the M8 is not yet verified on hardware.
+- **Note view layout**: the note grid layout (isomorphic vs. chromatic rows) is not yet verified on the real M8. 
 
 #### Norns Macro Mode
 

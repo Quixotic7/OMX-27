@@ -2,6 +2,7 @@
 #include "../globals.h"
 #include "../midi/sysex.h"
 #include "norns_link.h"
+#include "../midimacro/midimacro_m8v2.h"
 
 // Defined in OMX-27-firmware.ino — injects a synthetic key/encoder/pot event (SysEx remote control).
 extern void omxInjectInput(const uint8_t *d, unsigned n);
@@ -22,6 +23,15 @@ void SysEx::processIncomingSysex(const byte *sysexData, unsigned size)
 		// 		Serial.println("That's an empty sysex");
 		return;
 	}
+	// Universal Device Inquiry: F0 7E <devID> 06 01 F7 (devID is usually 0x7F).
+	// The M8 sends this repeatedly until answered, so it must be handled before the
+	// 7D gate below and regardless of the active OMX mode / whether a macro is entered.
+	if (size >= 5 && sysexData[1] == 0x7E && sysexData[3] == 0x06 && sysexData[4] == 0x01)
+	{
+		midimacro::onDeviceInquiry(sysexData, size);
+		return;
+	}
+
 	// F0 7D 00 00
 	if (!(sysexData[1] == 0x7d && sysexData[2] == 0x00 && sysexData[3] == 0x00))
 	{

@@ -158,6 +158,8 @@ void OmxModeMidiKeyboard::loopUpdate(Micros elapsedTime)
 	// 	}
 	// }
 
+	auxMacroManager_.loopUpdate();
+
 	for (uint8_t i = 0; i < NUM_MIDIFX_GROUPS; i++)
 	{
 		// Lets them do things in background
@@ -715,6 +717,11 @@ void OmxModeMidiKeyboard::onDisplayUpdate()
 // incoming midi note on
 void OmxModeMidiKeyboard::inMidiNoteOn(byte channel, byte note, byte velocity)
 {
+	// Macros get first refusal - the M8V2 macro mirrors LPP LED notes and must not
+	// have them painted onto the keys below.
+	if (auxMacroManager_.inMidiNoteOn(channel, note, velocity))
+		return;
+
 	if (organelleMotherMode)
 		return;
 
@@ -773,6 +780,9 @@ void OmxModeMidiKeyboard::inMidiNoteOn(byte channel, byte note, byte velocity)
 
 void OmxModeMidiKeyboard::inMidiNoteOff(byte channel, byte note, byte velocity)
 {
+	if (auxMacroManager_.inMidiNoteOff(channel, note, velocity))
+		return;
+
 	if (organelleMotherMode)
 		return;
 

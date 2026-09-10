@@ -9,7 +9,7 @@
 
 // These are static and shared between different modes
 midimacro::MidiMacroNorns nornsMarco_;
-midimacro::MidiMacroM8 m8Macro_;
+midimacro::MidiMacroM8Type m8Macro_;
 midimacro::MidiMacroDeluge delugeMacro_;
 
 AuxMacroManager::AuxMacroManager()
@@ -100,6 +100,40 @@ bool AuxMacroManager::inMidiControlChange(byte channel, byte control, byte value
     }
 
     return false;
+}
+
+bool AuxMacroManager::inMidiNoteOn(byte channel, byte note, byte velocity)
+{
+    auto activeMacro = getActiveMacro();
+
+    if (activeMacro != nullptr)
+    {
+        return activeMacro->inMidiNoteOn(channel, note, velocity);
+    }
+
+    return false;
+}
+
+bool AuxMacroManager::inMidiNoteOff(byte channel, byte note, byte velocity)
+{
+    auto activeMacro = getActiveMacro();
+
+    if (activeMacro != nullptr)
+    {
+        return activeMacro->inMidiNoteOff(channel, note, velocity);
+    }
+
+    return false;
+}
+
+void AuxMacroManager::loopUpdate()
+{
+    auto activeMacro = getActiveMacro();
+
+    if (activeMacro != nullptr)
+    {
+        activeMacro->loopUpdate();
+    }
 }
 
 void AuxMacroManager::doMacroNoteOn(uint8_t keyIndex)

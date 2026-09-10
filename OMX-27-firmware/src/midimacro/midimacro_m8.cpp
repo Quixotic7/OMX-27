@@ -1,4 +1,7 @@
 #include "midimacro_m8.h"
+
+#ifdef OMX_M8_MACRO_LEGACY
+
 #include "../globals.h"
 #include "../utils/omx_util.h"
 #include "../hardware/omx_disp.h"
@@ -465,3 +468,5 @@ namespace midimacro
 		}
 	}
 }
+
+#endif // OMX_M8_MACRO_LEGACY

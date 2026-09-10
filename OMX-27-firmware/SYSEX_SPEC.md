@@ -100,3 +100,43 @@ mirror can't show — useful for automated UI/QA). Works in any mode.
 
 Host helper: `tools/omxctl.py` `leds()` / `led_name()` / `leds_ascii()`, and the
 `python omxctl.py leds` CLI.
+
+## Universal Device Inquiry (`F0 7E <id> 06 01 F7`)
+
+When the M8 macro is the selected MCRO (slot 1), the OMX-27 replies to Launchpad Pro device inquiries by sending the Launchpad Pro MK3 identity, regardless of which OMX mode is active:
+
+- M8 or host -> OMX: `F0 7E 7F 06 01 F7` (inquiry, any device ID).
+- OMX -> M8: `F0 7E 00 06 02 00 20 29 23 01 00 00 00 01 00 00 F7` (Launchpad Pro MK3 identity).
+
+The identity is sent proactively on entering the macro and repeated every ~1 second until the M8 sends its first LED message (Note On). This handles the case where the M8 sent its inquiry before the macro was entered.
+
+This message is processed before the manufacturer-specific `F0 7D 00 00` gate, so it works independently of the OMX mode.
+
+## Launchpad Pro emulation (M8 macro)
+
+When the M8 macro is active, the OMX-27 emulates a Launchpad Pro MK3 control surface. All MIDI uses channel 1 (unless otherwise noted).
+
+### Note messages (pads and buttons)
+
+The M8 sends and receives Note On/Off on channel 1. OMX key presses are mapped to Launchpad Pro note numbers:
+
+```
+Grid pads:    note = row * 10 + col  (row 1-8, col 1-8; e.g. col 5 of row 3 = 35)
+Row launch:   note = row * 10 + 9    (e.g. row 1 = 19)
+Navigation:   Up 80, Down 70, Left 91, Right 92
+Buttons:      Shift 90, Edit 10, Play 20, Track 1-8 (101-108), Solo 3, Mute 2, SShot 1
+```
+
+Key 9 (Option) has no Launchpad Pro equivalent and does not send notes.
+
+### LED feedback (from M8)
+
+The M8 sends LED colours as Note On messages on channels 1-3, with velocity indicating a Launchpad Pro palette index (0-127):
+
+- Channel 1: static colour
+- Channel 2: flashing colour
+- Channel 3: pulsing colour
+
+CCs with the same note numbers are also accepted (for ring LEDs or compatibility).
+
+The OMX-27 applies the 128-colour Launchpad Pro palette to render colours on the 27-key LED strip.

@@ -1,8 +1,10 @@
 #pragma once
 #include "midimacro_interface.h"
+#include "midimacro_m8v2.h"
 
 namespace midimacro
 {
+#ifdef OMX_M8_MACRO_LEGACY
 	class MidiMacroM8 : public MidiMacroInterface
 	{
 	public:
@@ -43,4 +45,12 @@ namespace midimacro
 		uint8_t keyShift_ = 16;
 		uint8_t keyPlay_ = 17;
 	};
+#endif // OMX_M8_MACRO_LEGACY
+
+	// Selects which class fills macro slot 1. Owners declare MidiMacroM8Type.
+#ifdef OMX_M8_MACRO_LEGACY
+	using MidiMacroM8Type = MidiMacroM8;
+#else
+	using MidiMacroM8Type = MidiMacroM8V2;
+#endif
 }

@@ -1,15 +1,29 @@
 # M8V2 Macro Mode – Launchpad Pro emulation for the Dirtywave M8
 
-Branch: `Q7-2026-M8LaunchpadMode`. Firmware version already bumped to 1.15.2 in the working tree.
+Branch: `Q7-2026-M8LaunchpadMode` (q7-2026-3 merged in at `57e7cb9`). Firmware 1.15.x.
+
+## 0. What the q7-2026-3 merge changed (delta from the first plan)
+
+| First plan assumed | Merged tree | Effect |
+|---|---|---|
+| Macros instantiated per mode, `getActiveMacro()` switch in MI/DRUM/CH | `AuxMacroManager` (`src/utils/aux_macro_manager.*`) owns **one static instance** of each macro and the `getActiveMacro()` switch; MI and FORM use it. DRUM and CHORDS still carry their own instances and their own switch. | Registration is 3 places (manager, drum, chords), not a new global. |
+| Add a new "M8V2" entry to `macromodes[]` | **Decision: replace M8 in place.** Slot 1 ("M8") becomes the new class; the old class stays in the tree behind `#ifdef OMX_M8_MACRO_LEGACY`. | No EEPROM, CONFIG-mode, FORM param or Docs list changes. `nummacromodes` stays 3. |
+| USB MIDI callbacks not registered on Teensy | Registered for both targets in `MM::begin()` | Concern gone. |
+| `handleControlChange()` calls `stopTransport()` on every CC | Removed | Concern gone. |
+| `usbMidiRead()` parses one byte per loop | RP2040 drains the whole TinyUSB FIFO per call | LED bursts from the M8 (80+ notes on connect) are handled in one loop pass. |
+| No SysEx dispatcher | `sysex.cpp` is an opcode dispatcher with the NornsLink / REMOTE commands, still gated on `F0 7D 00 00` | Add the universal-inquiry hook **before** the 7D gate. |
+| No QA tooling | `OMX-27-firmware/tools/` has `omxctl.py` (inject keys/enc, capture OLED, read LED state), `midimon.py`, `analyze.py`; `SYSEX_SPEC.md` documents the protocol | Hardware QA can be scripted end to end; add `virtual_m8.py` next to them. |
+| FORM mode did not exist | FORM uses the manager, forwards CCs to the macro, ignores incoming notes, and can disable macro pot capture via `setMacrosConsumePots` | Macro is reachable from MI, DRUM, CH and FORM. Note routing must go through the manager so FORM gets it for free. |
+| MI mode `inMidiNoteOn` lights keys from incoming notes | Still true (`omx_mode_midi_keyboard.cpp:716`) | Must intercept before it. |
+| RAM budget unknown | Teensy 3.2 after manager integration: RAM 54.5 %, flash 72 % (comment in `aux_macro_manager.h`) | Fine for this class; keep the palette in flash. |
 
 ## 1. What the M8 expects (protocol recap)
 
-Sources: `schwung-m8/src/ui.js` (Ableton Move, tested against real M8), `m8cs.lua` (norns), Grahack/M8_LPP_recap, M8 changelog (LPP MK3 support since 4.0.0, Note/Seq/Beat-repeat views since 6.0.0).
+Sources: `schwung-m8/src/ui.js` (Ableton Move, tested against real M8), `m8cs.lua` (norns), Grahack/M8_LPP_recap, M8 changelog (LPP MK3 support since 4.0.0; Note/Seq/Beat-repeat views since 6.0.0).
 
 ### Handshake
 - M8 sends a Universal Device Inquiry: `F0 7E 7F 06 01 F7` (repeats until answered).
-- We answer as a Launchpad Pro MK3: `F0 7E 00 06 02 00 20 29 23 01 00 00 <4 version bytes> F7`.
-  m8cs.lua answers with the Mini MK3 family (`13 01`) and schwung answers with zeros; the M8 only seems to check the Novation ID (`00 20 29`), so `23 01` (Pro MK3) is the safe choice.
+- We answer as a Launchpad Pro MK3: `F0 7E 00 06 02 00 20 29 23 01 00 00 <4 version bytes> F7`. m8cs answers with the Mini MK3 family (`13 01`), schwung with zeros; the M8 only seems to check the Novation ID (`00 20 29`), so `23 01` (Pro MK3) is the safe choice.
 - schwung also sends the identity proactively on start and every ~1 s until the M8 sends any LED message. We do the same, because the M8 may have sent its inquiry before the macro was entered.
 - Any other SysEx from the M8 (e.g. programmer-mode select `F0 00 20 29 02 0E 0E 01 F7`) is ignored.
 
@@ -33,30 +47,30 @@ Shift  T<   T>   Sess  Note  -   -   Seq  Prj  Logo
 Confirmed by both schwung's control map and m8cs' outer-ring table. There is no LPP button for the M8's **Option** key (see §4a).
 
 ### LEDs we receive
-- Note On, `velocity = LPP palette index (0..127)`, channel 1 = static, channel 2 = flash, channel 3 = pulse (M8_LPP_recap, m8cs, schwung).
-- Ring buttons (track buttons, scene buttons, Play, Mute, Solo…) also arrive as notes (schwung maps them that way). Accept CCs with the same number too, to be safe.
-- We need a 128-entry LPP palette → RGB table (Launchpad MK3 programmer reference palette). ~384 bytes, put in flash.
+- Note On, `velocity = LPP palette index (0..127)`, channel 1 = static, channel 2 = flash, channel 3 = pulse.
+- Ring buttons (track, scene, Play, Mute, Solo…) also arrive as notes (schwung maps them that way). Accept CCs with the same number too, to be safe.
+- 128-entry LPP palette → RGB table (Launchpad MK3 programmer reference palette), ~384 bytes in flash.
 
-### Legacy Control Map (still used for the nav cluster)
-Notes on the macro channel `M-CH` (M8 "Control Map"): 0 Play, 1 Shift, 2 Edit, 3 Option, 4 Left, 5 Right, 6 Up, 7 Down. This is exactly what the existing `MidiMacroM8` control page sends.
+### Legacy Control Map (not used for now)
+Notes on the macro channel `M-CH`: 0 Play, 1 Shift, 2 Edit, 3 Option, 4 Left, 5 Right, 6 Up, 7 Down (what the old `MidiMacroM8` sends). **Decision (2026-09-09): the nav cluster uses the LPP buttons only.** Option is pencilled in as a no-op key; a later `NAV` param may bring the Control Map back for it.
 
 ## 2. Layout (from `OMX M8V2 layout.json`)
 
 ### Session (clip launch) view – default
 | Key | Function | LED |
 |---|---|---|
-| 0 | AUX: hold = shortcut layer, double-click = exit macro (host mode handles this) | PURPLE |
+| 0 | AUX: hold = shortcut layer, double-click = exit macro (manager handles this) | PURPLE |
 | 1 / 2 | Scroll row down / up (which of the 8 grid rows keys 11-18 show) | dim purple, brighter when more rows in that direction |
 | 3 | Pad mode: CLIP | MAGENTA (bright when active) |
 | 4 | Pad mode: MUTE; press again while active toggles latch/momentary | RED |
 | 5 | Pad mode: SOLO; same latch/momentary toggle | YELLOW |
-| 8 / 21 / 22 / 23 | Up / Left / Down / Right (Control Map 6/4/7/5 on M-CH) | dim purple |
-| 9 | Option (Control Map 3) | WHITE |
-| 10 | Edit (Control Map 2) | RBLUE |
+| 8 / 21 / 22 / 23 | Up / Left / Down / Right → LPP Up 80 / Track< 91 / Down 70 / Track> 92 | dim purple |
+| 9 | Option – **pencilled in, no-op for now** (no LPP equivalent; lit so the key exists in the layout) | WHITE |
+| 10 | Edit → LPP Edit/Rec 10 | RBLUE |
 | 11-18 | Grid pads col 1-8 of the selected row (CLIP), or track 1-8 with Mute/Solo held (MUTE/SOLO) | colour mirrored from the M8 |
 | 19 | Row launch for the selected row (`row*10+9`) | colour mirrored from the M8 scene button |
-| 24 | Shift (Control Map 1) | GREEN |
-| 26 | Play (Control Map 0) | WHITE, green when M8 reports Play lit |
+| 24 | Shift → LPP Shift 90 | GREEN |
+| 26 | Play → LPP Play 20 | WHITE, green when M8 reports Play lit |
 | 6, 7, 20, 25 | unassigned in the design – proposals: 20 = Track < (91), 25 = Track > (92), 6 = Snapshot recall (1), 7 = Snapshot store (Shift+1) | |
 
 ### AUX shortcut layer (AUX held)
@@ -67,75 +81,74 @@ Notes on the macro channel `M-CH` (M8 "Control Map"): 0 Play, 1 Shift, 2 Edit, 3
 | 5 (proposal) | Seq view (97) |
 | 1 / 2 (proposal) | LPP Up/Down (80/70) – octave shift in Note view |
 
-Keys pressed while AUX is held never send pads.
+Keys pressed while AUX is held never send pads. AUX-held detection: the manager passes every key event to the macro while active, so the macro tracks key 0 down/up itself (`auxHeld_`), the same way the Deluge macro does with `auxDown_`.
 
 ### Note view (M8 "keyboard view")
-The M8 decides the note layout on the 8x8 grid; we only forward pads and mirror LEDs (root / in-scale colours come from the M8).
+The M8 decides the note layout on the 8x8 grid; we forward pads and mirror LEDs (root / in-scale colours come from the M8).
 - Keys 11-18 = grid row `row_` cols 1-8, keys 19-26 = row `row_+1`. Two grid rows = 16 white keys.
 - Keys 1 / 2 keep scrolling rows (window of 2 rows over 8). Keys 8/9/10/21-24/26 keep the nav cluster so Play/Shift/Edit stay reachable. Keys 3/4/5 are dark (pad modes are Session-only).
 - Alternative if the M8 layout turns out to be chromatic-per-row: map black keys 1-8 to a third row. Decide after seeing real LED feedback.
 
 ## 3. Code changes
 
-### New files
-- `src/midimacro/midimacro_m8v2.h / .cpp` – class `MidiMacroM8V2 : MidiMacroInterface`.
-- `src/midimacro/lpp_palette.h` – `const uint8_t lppPalette[128][3] PROGMEM`.
+### Replace-in-place with a legacy switch
+- `src/config.h` (near the other feature defines) : `// #define OMX_M8_MACRO_LEGACY` – define to build the old mute/solo + control-page macro.
+- `src/midimacro/midimacro_m8.h/.cpp`: wrap the existing class in `#ifdef OMX_M8_MACRO_LEGACY … #endif`; rename nothing, so the legacy build is byte-for-byte the current one.
+- New `src/midimacro/midimacro_m8v2.h/.cpp`: `class MidiMacroM8V2`. Header exposes it under `#ifndef OMX_M8_MACRO_LEGACY`.
+- A small alias header (or a block in `midimacro_m8.h`) selects the type: `#ifdef OMX_M8_MACRO_LEGACY using MidiMacroM8Type = MidiMacroM8; #else using MidiMacroM8Type = MidiMacroM8V2; #endif`. The three owners declare `MidiMacroM8Type m8Macro_` so nothing else changes:
+  - `src/utils/aux_macro_manager.cpp` (static instance + `getActiveMacro()` case 1) – covers MI and FORM.
+  - `src/modes/omx_mode_drum.h/.cpp` and `omx_mode_chords.h/.cpp` (own instances, own switch).
+- `macromodes[]` stays `{"Off","M8","NRN","DEL"}`; `getName()` returns `"M8"` in both builds. Docs describe the new behaviour and mention the legacy define.
 
 ### Interface additions (`midimacro_interface.h`)
 - `virtual bool inMidiNoteOn(byte ch, byte note, byte vel) { return false; }`
 - `virtual bool inMidiNoteOff(byte ch, byte note, byte vel) { return false; }`
 - `virtual bool inSysEx(const uint8_t *data, unsigned len) { return false; }`
-  Return true = consumed. Existing macros keep default behaviour.
+  Return true = consumed. Existing macros keep the defaults.
 
-### Registration
-- `config.cpp`: `macromodes[] = {"Off","M8","NRN","DEL","M8V2"}`, `nummacromodes = 4`. Add an enum (`MACRO_OFF, MACRO_M8, MACRO_NORNS, MACRO_DELUGE, MACRO_M8V2`) to replace the magic numbers. The macro id is stored as one byte at `EEPROM_HEADER_ADDRESS + 30`, so value 4 persists with no storage format change.
-- `getActiveMacro()` in `omx_mode_midi_keyboard.cpp`, `omx_mode_drum.cpp`, `omx_mode_chords.cpp`: add `case MACRO_M8V2`.
-- Instantiate **one global** `MidiMacroM8V2` (the drum mode already carries a TODO to make macros global). One instance keeps the LED cache and link state shared across MI/DRUM/CH and avoids three copies of the state. Each mode still calls `setDoNoteOn/Off` and `setScale` on enable.
-
-### Inbound MIDI routing (the part that does not exist yet)
-- `midi.cpp handleNoteOn/Off` → `activeOmxMode->inMidiNoteOn`. In MI mode that handler **lights keys from incoming notes** (`inMidiNoteOn` at `omx_mode_midi_keyboard.cpp:1290`), which would fight the LED mirror. In all three modes, forward to the configured macro first (via `getActiveMacro()`, even when the macro is not active, so the LED cache is warm on entry); if consumed, return.
-- `sysex.cpp processIncomingSysex` currently drops anything that is not `F0 7D 00 00`. Add an early hook: if `data[1]==0x7E && data[3]==0x06 && data[4]==0x01` (device inquiry) hand it to the configured macro (`inSysEx`). Reply regardless of whether the macro is active, as long as M8V2 is the selected macro.
-- `midi.cpp handleControlChange` calls `stopTransport()` on **every** incoming CC. If the M8 ever sends ring LEDs as CCs, each LED update would stop the OMX transport. Route CCs to the macro first and skip the transport/bank-select logic when consumed.
-- **Teensy builds**: `MM::begin()` registers the USB MIDI callbacks (`setHandleNoteOn`, `setHandleSystemExclusive`, …) only under `BOARDTYPE == OMX2040`. Verify the Teensy 3.2 / 4.0 path and add the `usbMIDI.setHandle*` registrations there, otherwise the handshake never fires on Teensy.
-- SysEx size: the inquiry is 6 bytes, well under the MIDI library's 128-byte default.
+### Inbound routing
+- `AuxMacroManager`: add `bool inMidiNoteOn/Off(...)` mirroring the existing `inMidiControlChange` (forward to `getActiveMacro()` even when not active, so the LED cache is warm on entry; return consumed).
+- `OmxModeMidiKeyboard::inMidiNoteOn/Off`: call the manager first and return if consumed, **before** the key-lighting code. `OmxModeForm::inMidiNoteOn/Off`: same call (currently no-ops). DRUM: same via its own `getActiveMacro()`. CHORDS has no note-in handlers; add the forwarders.
+- `sysex.cpp processIncomingSysex`: before the `F0 7D 00 00` gate, `if (size >= 5 && d[1]==0x7E && d[3]==0x06 && d[4]==0x01)` → `activeOmxMode->inSysEx(...)`? The mode interface has no SysEx hook and adding one to every mode is noise. Simpler: a free function `midimacro::onDeviceInquiry()` in `midimacro_m8v2.cpp` that replies when `midiMacroConfig.midiMacro == 1` (the M8 slot), independent of which OMX mode is active. Also handle an incoming 7E inquiry from any *other* device the same way; only the M8 asks in practice. Document under a new `## Universal Device Inquiry (0x7E)` heading in `SYSEX_SPEC.md`.
+- `handleControlChange` already forwards to the mode, which forwards to the manager; extend `MidiMacroM8V2::inMidiControlChange` to treat CC number = LPP note for ring LEDs.
+- MIDI thru: incoming M8 LED notes would be echoed to TRS if `midiSoftThru` is on; acceptable (it's user-selected), note in docs.
 
 ### `MidiMacroM8V2` internals
 State:
 ```
 enum View { VIEW_SESSION, VIEW_NOTE };  enum PadMode { PAD_CLIP, PAD_MUTE, PAD_SOLO };
 View view_; PadMode padMode_; bool muteLatch_, soloLatch_; uint8_t row_ = 8;
-bool linked_; uint32_t lastIdentityMs_;
-uint8_t ledColor_[110]; uint8_t ledMode_[110];   // by LPP note, mode 0 static / 1 flash / 2 pulse
-uint8_t keyNoteSent_[27];                        // LPP note currently held per OMX key (0 = none)
-bool auxHeld_;
+bool linked_; uint32_t lastIdentityMs_; bool auxHeld_;
+uint8_t ledColor_[110]; uint8_t ledMode_[110];   // by LPP note; mode 0 static / 1 flash / 2 pulse
+uint8_t keyNoteSent_[27];                        // LPP note held per OMX key (0 = none)
 ```
 Behaviour:
 - `onEnabled`: send identity, `linked_=false`, send Session (93), redraw. `loopUpdate`: resend identity every 1000 ms until `linked_`.
-- `inSysEx`: on inquiry → send identity immediately.
-- `inMidiNoteOn/Off` (channels 1-3): update `ledColor_/ledMode_`, `linked_ = true`, `omxLeds.setDirty()`; consume. Notes on other channels are not consumed.
-- Key down: resolve to an LPP note (or Control Map note on M-CH), send, remember in `keyNoteSent_[key]`. Key up: send off for `keyNoteSent_[key]`, not for a recomputed note, so scrolling while a pad is held cannot leave a stuck note.
-- MUTE/SOLO pad modes: momentary = send Mute(2)/Solo(3) note-on while the mode is active and release it when leaving the mode; latch = the same but the modifier stays down until the mode key is pressed again. Track keys 11-18 send 101-108 while the modifier is held. **Needs hardware confirmation** that the M8 treats Mute/Solo as a held modifier (see §4b).
-- `onDisabled`: release every held note (`keyNoteSent_`, Mute/Solo modifiers, nav keys), clear LEDs.
-- `drawLEDs`: keys 11-18 (+19-26 in Note view) from the palette; flash → use `omxLeds.getBlinkState()`, pulse → alternate full/half brightness on the slow blink; key 19 from scene note `row_*10+9`; static colours for the rest per the table above; AUX purple; mode key of the active pad mode bright, others dim; key 26 green when LED cache for note 20 is non-zero.
-- Display: `dispGenericModeLabel` style, e.g. `M8V2  SESS  R8  CLIP` and a status line `LPP: waiting…` / `linked`. Encoder turn = scroll row; press = toggle param select. Param page 2: `NAV` (M8 map / LPP), `MUTE` latch, `SOLO` latch, `BRT` LED brightness scale.
-- Pots: unchanged from M8 v1 (`omxUtil.sendPots` on M-CH).
+- `onDeviceInquiry` (from sysex.cpp): reply immediately, regardless of enabled state, whenever slot 1 is selected.
+- `inMidiNoteOn/Off` (channels 1-3): update `ledColor_/ledMode_`, `linked_=true`, `omxLeds.setDirty()`; consume. Other channels: not consumed.
+- Key down: resolve to an LPP note (ch 1), send, remember in `keyNoteSent_`. Key 9 (Option) resolves to nothing: lit, consumed, sends nothing. Key up: send off for what was sent, never a recomputed note, so scrolling while a pad is held cannot leave a stuck note.
+- MUTE/SOLO pad modes: momentary = hold Mute(2)/Solo(3) while the mode is active and release on leaving; latch = the modifier stays down until the mode key is pressed again. Track keys 11-18 send 101-108 while the modifier is held. **Needs hardware confirmation** (§4b).
+- `onDisabled`: release every held note (`keyNoteSent_`, Mute/Solo modifiers), clear LEDs.
+- `drawLEDs`: keys 11-18 (+19-26 in Note view) from the palette; flash → `omxLeds.getBlinkState()`, pulse → alternate full/half on the slow blink; key 19 from scene note `row_*10+9`; static colours per the tables; AUX purple; active pad-mode key bright; key 26 green when note 20's cached colour is non-zero. Respect `ledBrightness` (global strip brightness already applies).
+- Display: `dispGenericModeLabel` style, e.g. `M8  SESS  R8  CLIP`, status `LPP: waiting…` / `linked`. Encoder turn = scroll row; press = toggle param select. Param page 2: `MUTE` latch, `SOLO` latch (a `NAV` param is deferred).
+- Pots: unchanged from the old macro (`omxUtil.sendPots` on M-CH); FORM's `setMacrosConsumePots(false)` still applies.
 
 ### Docs
-- `Docs.md`: new "M8V2 Macro Mode" subsection under MIDI Macro Modes: M8 setup (MIDI Settings → CTRL SURFACE = Launchpad Pro, Control Map channel = `M-CH`), the two layouts, AUX shortcuts, the latch toggle. Note that it works over USB to the iOS app.
+- `Docs.md` "M8 Macro Mode" section rewritten: M8 setup (MIDI Settings → CTRL SURFACE = Launchpad Pro, Control Map channel = `M-CH`), the two layouts, AUX shortcuts, latch toggle, iOS over USB, and a one-liner on `OMX_M8_MACRO_LEGACY`.
+- `SYSEX_SPEC.md`: Universal Device Inquiry reply.
+- `OMX-27-firmware/tools/README.md`: `virtual_m8.py` usage.
 
 ## 4. Open questions / decisions to confirm on hardware
-a. **Option key**: there is no LPP equivalent, so the plan keeps the whole nav cluster on the legacy Control Map (M-CH). Requires the M8's Control Map channel to match `M-CH`, same as today. A `NAV=LPP` param can offer the LPP buttons instead (Up 80, Down 70, Left 91, Right 92, Edit 10, Shift 90, Play 20, Option → Clear 60).
+a. **Option key**: no LPP equivalent. Decision: nav cluster is LPP-only (Up 80, Down 70, Left 91, Right 92, Edit 10, Shift 90, Play 20); Option is a lit no-op placeholder until we pick a behaviour (Control Map note 3 on M-CH, or LPP Clear 60).
 b. **Mute / Solo semantics** on the LPP (held modifier + track button vs. toggled mode). Verify with LED feedback on notes 2/3 and 101-108.
 c. **Note view grid layout** on the M8 (isomorphic vs chromatic rows) – decides whether black keys should map to a third row.
-d. Whether ring LEDs arrive as notes, CCs, or both. The receiver accepts both.
-e. Identity family bytes: `23 01` (Pro MK3) vs `13 01` (Mini MK3, used by m8cs). Start with `23 01`; fall back if the M8 ignores it.
-f. Teensy 3.2 flash headroom: Deluge macro comments show ~61 % used; palette + class should add well under 8 KB. Check after phase 1.
+d. Ring LEDs as notes, CCs, or both. The receiver accepts both.
+e. Identity family bytes: `23 01` (Pro MK3) vs `13 01` (Mini MK3, used by m8cs). Start with `23 01`.
+f. Teensy 3.2 flash: 72 % used after the manager work; palette + class should add well under 8 KB and the legacy class drops out. Check after phase 1 on all three targets.
 
 ## 5. Phases
-1. **Skeleton + handshake**: class, registration in config and three modes, interface hooks, sysex/note routing, identity reply + retry, status on the display. Verify with `schwung-m8/tools/virtual_m8.py` pointed at the OMX USB port (it sends the inquiry and initial LEDs), then with the real M8/iOS app.
-2. **Session view**: pads, row scroll, row launch, LED mirror with palette, flash/pulse, stuck-note protection.
-3. **Nav cluster + AUX layer + pad modes**: Control Map keys, AUX+3/4 view switch, Mute/Solo with latch toggle, release-all on exit.
+1. **Skeleton + handshake**: legacy define, new class wired into the manager/drum/chords, interface hooks, note + SysEx routing, identity reply + retry, status on the display. Verify with `virtual_m8.py` (copied into `tools/`, port match changed to `omx-27-v3`) then the real M8 / iOS app. Build all three targets.
+2. **Session view**: pads, row scroll, row launch, LED mirror with palette, flash/pulse, stuck-note protection. QA with `omxctl.py leds` + `midimon.py`.
+3. **Nav cluster + AUX layer + pad modes**: LPP nav keys (Option placeholder), AUX+3/4 view switch, Mute/Solo with latch toggle, release-all on exit.
 4. **Note view**.
-5. **Polish**: param page (NAV / latch / brightness), unassigned keys, Docs.md, Teensy build check, RAM/flash report.
-
-Testing aids: `virtual_m8.py` (needs `pip install mido python-rtmidi`; adapt the port name matching from "Move" to "OMX"), and the existing OMX SysEx remote-control harness for driving keys and mirroring the OLED during QA.
+5. **Polish**: param page (latch), unassigned keys, Docs.md, SYSEX_SPEC.md, tools README, flash/RAM report.

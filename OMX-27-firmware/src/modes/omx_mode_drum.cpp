@@ -206,6 +206,12 @@ void OmxModeDrum::onClockTick()
 
 void OmxModeDrum::loopUpdate(Micros elapsedTime)
 {
+	auto bgMacro = getActiveMacro();
+	if (bgMacro != nullptr)
+	{
+		bgMacro->loopUpdate();
+	}
+
 	for (uint8_t i = 0; i < 5; i++)
 	{
 		// Lets them do things in background
@@ -1142,6 +1148,13 @@ void OmxModeDrum::onDisplayUpdate()
 // incoming midi note on
 void OmxModeDrum::inMidiNoteOn(byte channel, byte note, byte velocity)
 {
+	auto activeMacro = getActiveMacro();
+
+	if (activeMacro != nullptr && activeMacro->inMidiNoteOn(channel, note, velocity))
+	{
+		return;
+	}
+
 	// midiSettings.midiLastNote = note;
 	// midiSettings.midiLastVel = velocity;
 	// int whatoct = (note / 12);
@@ -1195,6 +1208,13 @@ void OmxModeDrum::inMidiNoteOn(byte channel, byte note, byte velocity)
 
 void OmxModeDrum::inMidiNoteOff(byte channel, byte note, byte velocity)
 {
+	auto activeMacro = getActiveMacro();
+
+	if (activeMacro != nullptr && activeMacro->inMidiNoteOff(channel, note, velocity))
+	{
+		return;
+	}
+
 	// int whatoct = (note / 12);
 	// int thisKey;
 	// if ((whatoct % 2) == 0)

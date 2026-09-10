@@ -53,6 +53,13 @@ public:
 
     // Returns true if consumed
     bool inMidiControlChange(byte channel, byte control, byte value);
+    // Returns true if the macro consumed the incoming note. Forwarded even when the
+    // macro isn't entered so its LED cache is warm on entry.
+    bool inMidiNoteOn(byte channel, byte note, byte velocity);
+    bool inMidiNoteOff(byte channel, byte note, byte velocity);
+
+    // Lets the selected macro do background work (e.g. M8V2 identity retry).
+    void loopUpdate();
 
     // If this returns true, macro is consuming display and using encoder values
     bool onEncoderChanged(Encoder::Update enc);

@@ -43,6 +43,12 @@ namespace midimacro
 
 		virtual void inMidiControlChange(byte channel, byte control, byte value) {}
 
+		// Incoming MIDI hooks. Return true if the macro consumed the message so the
+		// host OMX mode leaves it alone (e.g. MI mode's key lighting).
+		virtual bool inMidiNoteOn(byte channel, byte note, byte velocity) { return false; }
+		virtual bool inMidiNoteOff(byte channel, byte note, byte velocity) { return false; }
+		virtual bool inSysEx(const uint8_t *data, unsigned length) { return false; }
+
 	protected:
 		bool enabled_;
 		bool encoderSelect_;

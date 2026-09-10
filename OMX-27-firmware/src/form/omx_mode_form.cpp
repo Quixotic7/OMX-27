@@ -4211,6 +4211,8 @@ void OmxModeForm::loopUpdate(Micros elapsedTime)
 		omxDisp.setDirty();
 	}
 
+	auxMacroManager_.loopUpdate();
+
 	for(auto machine : machines_)
 	{
 		machine->loopUpdate();
@@ -5270,13 +5272,16 @@ void OmxModeForm::onDisplayMixView()
 // incoming midi note on
 void OmxModeForm::inMidiNoteOn(byte channel, byte note, byte velocity)
 {
-	// FORM does not consume incoming MIDI notes (the old drum-key idea was dropped).
-	(void)channel; (void)note; (void)velocity;
+	// FORM does not consume incoming MIDI notes itself (the old drum-key idea was
+	// dropped), but the selected macro may (M8V2 mirrors Launchpad LED notes).
+	if (auxMacroManager_.inMidiNoteOn(channel, note, velocity))
+		return;
 }
 
 void OmxModeForm::inMidiNoteOff(byte channel, byte note, byte velocity)
 {
-	(void)channel; (void)note; (void)velocity;
+	if (auxMacroManager_.inMidiNoteOff(channel, note, velocity))
+		return;
 }
 
 void OmxModeForm::inMidiControlChange(byte channel, byte control, byte value)

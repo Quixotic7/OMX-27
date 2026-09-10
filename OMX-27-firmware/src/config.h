@@ -88,6 +88,10 @@ extern const OMXMode DEFAULT_MODE;
 #define NUM_MIDIFX_GROUPS 5
 #define NUM_MIDIFX_SLOTS 8
 
+// Uncomment to build the legacy M8 macro (mute/solo + control page) in macro slot 1
+// instead of the Launchpad Pro emulation (MidiMacroM8V2). See design/m8v2/M8V2-PLAN.md.
+// #define OMX_M8_MACRO_LEGACY
+
 enum FUNCKEYMODE
 {
 	FUNCKEYMODE_NONE, // No function keys

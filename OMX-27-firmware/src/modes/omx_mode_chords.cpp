@@ -513,6 +513,12 @@ void OmxModeChords::loopUpdate(Micros elapsedTime)
 {
 	updateFuncKeyMode();
 
+	auto bgMacro = getActiveMacro();
+	if (bgMacro != nullptr)
+	{
+		bgMacro->loopUpdate();
+	}
+
 	for (uint8_t i = 0; i < 5; i++)
 	{
 		// Lets them do things in background
@@ -975,6 +981,26 @@ void OmxModeChords::onEncoderButtonDown()
 
 void OmxModeChords::onEncoderButtonDownLong()
 {
+}
+
+void OmxModeChords::inMidiNoteOn(byte channel, byte note, byte velocity)
+{
+	auto activeMacro = getActiveMacro();
+
+	if (activeMacro != nullptr)
+	{
+		activeMacro->inMidiNoteOn(channel, note, velocity);
+	}
+}
+
+void OmxModeChords::inMidiNoteOff(byte channel, byte note, byte velocity)
+{
+	auto activeMacro = getActiveMacro();
+
+	if (activeMacro != nullptr)
+	{
+		activeMacro->inMidiNoteOff(channel, note, velocity);
+	}
 }
 
 void OmxModeChords::inMidiControlChange(byte channel, byte control, byte value)

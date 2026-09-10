@@ -48,6 +48,8 @@ public:
 	void onEncoderButtonDown() override;
 	void onEncoderButtonDownLong() override;
 
+	void inMidiNoteOn(byte channel, byte note, byte velocity) override;
+	void inMidiNoteOff(byte channel, byte note, byte velocity) override;
 	void inMidiControlChange(byte channel, byte control, byte value) override;
 
 
@@ -88,7 +90,7 @@ private:
 	bool macroActive_ = false;
 
 	midimacro::MidiMacroNorns nornsMarco_;
-	midimacro::MidiMacroM8 m8Macro_;
+	midimacro::MidiMacroM8Type m8Macro_;
 	midimacro::MidiMacroDeluge delugeMacro_;
 
 	midimacro::MidiMacroInterface *activeMacro_;
