@@ -23,7 +23,8 @@ namespace midimacro
 		enum View : uint8_t
 		{
 			VIEW_SESSION,
-			VIEW_NOTE
+			VIEW_NOTE,
+			VIEW_SEQ
 		};
 
 		enum PadMode : uint8_t
@@ -82,6 +83,13 @@ namespace midimacro
 		void sendLppTap(uint8_t n) { sendLpp(n, true); sendLpp(n, false); }
 		static bool isRingButton(uint8_t n);
 		void releaseLatchedTracks();
+		// Session right-hand cluster -> M8 Control Map note (0-7) on the macro channel,
+		// or -1 if this key is not part of the cluster. Same mapping as the old M8 macro.
+		static int8_t controlMapNote(uint8_t key);
+
+		static uint8_t seqNotePadNote(uint8_t key); // SEQ black keys 1-10 -> LPP r1/r2 note pads
+		static uint8_t seqSlotNote(uint8_t key);    // SEQ white keys -> left 4x4 slots
+		static uint8_t seqPatternNote(uint8_t key); // SEQ AUX+white -> right 4x4 pattern select
 
 		// Draws one grid/scene key from the palette cache: static/flash/pulse per ledMode_,
 		// offColor when the cached index is 0 (or the note is out of range).
@@ -92,7 +100,10 @@ namespace midimacro
 		bool muteLatch_ = false;
 		bool soloLatch_ = false;
 		bool ringAsCC_ = true;        // ring buttons as CC (LPP MK3 programmer mode) or notes
-		uint8_t latchedTracks_ = 0;   // bit i = track button 101+i held by the OMX-side latch
+		uint8_t latchedTracks_ = 0;   // bit i = track 101+i toggled on by the latch (LED memory)
+		uint8_t momentaryTracks_ = 0; // bit i = track 101+i toggled by a still-held momentary press
+		bool trackHeld_ = false;      // Note view: key 3 held -> white keys 11-18 are track buttons
+		bool recLatched_ = false;     // Seq view: AUX+8 latches LPP Record held (for Rec+keypad / Rec+Play combos)
 		uint8_t row_ = 8; // 1..8, which grid row keys 11-18 show (11-7 in Note view)
 
 		bool linked_ = false;
@@ -107,6 +118,7 @@ namespace midimacro
 		uint8_t ledColor_[kNumLppNotes]; // LPP palette index by LPP note
 		uint8_t ledMode_[kNumLppNotes];	 // 0 static, 1 flash, 2 pulse
 		uint8_t keyNoteSent_[kNumKeys];	 // LPP note currently held per OMX key, 0 = none
+		int8_t ctrlSent_[kNumKeys];		 // Control Map note sent per OMX key (M-CH), -1 = none
 
 		// Persistent display buffers - never pass String(...).c_str() of a temporary.
 		char dispLabel_[24];

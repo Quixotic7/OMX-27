@@ -411,6 +411,20 @@ Potentiometers always send CCs on the `M-CH` channel.
 
 If you need the previous mute/solo control macro, define `OMX_M8_MACRO_LEGACY` in `config.h` at build time. The new Launchpad Pro emulation will be replaced with the original macro, and `macromodes[]` list will remain unchanged.
 
+##### Notes view
+
+Hold AUX and tap key 4 for the M8 keyboard view. Keys 1/2 scroll the keyboard down/up (Launchpad Down/Up). Hold key 3 (Track) and keys 11-18 become the track buttons T1-T8. Key 9 is Edit/Rec and key 10 is Play, so hold key 9 and tap key 10 to live-record. The sixteen white keys are the bottom-left 4x4 of the Launchpad keyboard (rows 5-8, columns 1-4), with root notes shown in white as the M8 sends them.
+
+##### SEQ view
+
+Hold AUX and tap key 5 for the M8 sequencer view. Keys 1/2 scroll the keypads down/up. Black keys 3-10 are the eight keypads of Launchpad row 1 (pitches). The sixteen white keys are the phrase's note slots (the top-left 4x4). Hold AUX and the white keys become the chain's phrase slots (the top-right 4x4). Transport lives on the AUX layer so all eight keypads stay free: AUX + 9 taps Edit/Rec (the M8 only writes slots while its editing submode is on), AUX + 10 taps Play, and AUX + 8 latches Record held (AUX blinks red) for the M8's hold-Record combos; AUX + 8 again, or changing view, releases it. AUX plus keys 3/4/5 still switch between Session, Note and Seq views.
+
+A full end-user guide is in `design/m8v2/M8-MACRO-USER-GUIDE.md`.
+
+##### Session navigation
+
+Keys 1 and 2 move the M8 session box down and up (Launchpad Down/Up). The right-hand keys drive the M8 Control Map on the `M-CH` channel, like the original M8 macro: key 8 Up, 21 Left, 22 Down, 23 Right, 9 Option, 10 Edit, 24 Shift, 26 Play. For those to work, set the M8's Control Map channel to match `M-CH`. The left keys 11-18 mirror Launchpad row 8.
+
 ##### Ring buttons: CC or Note
 
 A real Launchpad Pro MK3 sends the buttons around the grid (arrows, Shift, Edit, Play, track buttons, Mute, Solo, scene launch) as CC messages and only the 8x8 pads as notes. The OMX does the same by default. If some of those buttons do nothing on your M8, switch the `RING` parameter on page 2 to `NOTE` and try again; grid pads are always notes.
