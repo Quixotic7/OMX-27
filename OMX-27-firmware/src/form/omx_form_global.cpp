@@ -1,3 +1,5 @@
+#include "../config.h"
+#ifdef OMXMODEFORM
 #include "omx_form_global.h"
 
 // Rate for a bar, 1 is 1 bar
@@ -8,3 +10,4 @@ const uint8_t kNumSeqRates = 16;
 // 1 = 384, 3 = 192, 4 = 128, 4 = 96, 5 = 76.8, 6 = 64, 8 = 48, 10 = 38.4, 12 = 32, 16 = 24, 20 = 19.2, 24 = 16, 32 = 12, 40 = 9.6, 48 = 8, 64 = 6
 
 OmxFormGlobalSettings omxFormGlobal;
+#endif // OMXMODEFORM

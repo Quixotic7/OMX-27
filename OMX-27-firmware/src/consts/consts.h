@@ -50,7 +50,15 @@
 
 // Comment out defines to disable modes if needed for debug build
 #define OMXMODEGRIDS
+// Sequencer: FORM (new) or the classic S1/S2. Uncomment OMXMODESEQ to build S1/S2 instead;
+// FORM is then compiled out automatically (they share the pattern storage region).
 // #define OMXMODESEQ
+#ifndef OMXMODESEQ
+#define OMXMODEFORM
+#endif
+#if defined(OMXMODESEQ) && defined(OMXMODEFORM)
+#error "OMXMODESEQ and OMXMODEFORM cannot both be enabled"
+#endif
 
 // HARDWARE Pin for CVGATE_PIN = 13 on beta1 boards, 22 on bodge/midi, 23 on 1.0
 #if DEV

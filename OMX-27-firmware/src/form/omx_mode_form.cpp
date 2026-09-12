@@ -1,3 +1,5 @@
+#include "../config.h"
+#ifdef OMXMODEFORM
 #include "omx_mode_form.h"
 #include "../config.h"
 #include "../globals.h" // sysSettings/potSettings/midiMacroConfig moved here in the q7/RP2040 restructure
@@ -5762,3 +5764,4 @@ void OmxModeForm::saveBankToFS() {}
 bool OmxModeForm::loadBankFromFS() { return false; }
 
 #endif
+#endif // OMXMODEFORM

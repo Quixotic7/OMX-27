@@ -1,3 +1,5 @@
+#include "../../config.h"
+#ifdef OMXMODEFORM
 #include "form_machine_omni.h"
 #include "../../config.h"
 #include "../../globals.h" // sysSettings/potSettings/midiMacroConfig moved here in the q7/RP2040 restructure
@@ -3003,4 +3005,4 @@ namespace FormOmni
         return startingAddress;
 	}
 }
-
+#endif // OMXMODEFORM

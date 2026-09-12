@@ -137,6 +137,8 @@ The current modes are:
 - [CH - Chords](#chordsmode)
 - [S1](#s1mode) - A step sequencer with 8 patterns that can be up to 64 steps. Only one pattern can be active at a time  
 - [S2](#s2mode) - The same as S1 but all 8 patterns are active  
+
+FORM and the classic S1/S2 sequencers are build-time alternatives. The default firmware builds FORM. To build S1/S2 instead, uncomment `#define OMXMODESEQ` in `src/consts/consts.h`; FORM is then compiled out, its slot is skipped in the mode rotation, and a saved FORM mode falls back to MI on boot. The two share the same pattern storage region.
 - [GR - Grids Sequencer](#gridsmode) (A rhythm sequencer based on Mutable Instruments Grids)  
 - [EL - Euclidean Sequencer](#elmode)
 - [OM - Organelle Mother](#organellemode)

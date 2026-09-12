@@ -43,7 +43,9 @@
 #endif
 #include "src/modes/omx_mode_euclidean.h"
 #include "src/modes/omx_mode_chords.h"
+#ifdef OMXMODEFORM
 #include "src/form/omx_mode_form.h"
+#endif
 #include "src/modes/omx_mode_config.h"
 #include "src/modes/omx_mode_remote.h"
 #include "src/modes/omx_screensaver.h"
@@ -78,7 +80,9 @@ OmxModeGrids omxModeGrids;
 #endif
 OmxModeEuclidean omxModeEuclid;
 OmxModeChords omxModeChords;
+#ifdef OMXMODEFORM
 OmxModeForm omxModeForm;
+#endif
 OmxModeConfig omxModeConfig;
 OmxModeRemote omxModeRemote;
 
@@ -313,18 +317,26 @@ void changeOmxMode(OMXMode newOmxmode)
 		activeOmxMode = &omxModeChords;
 		break;
 	case MODE_FORM:
+#ifdef OMXMODEFORM
 		activeOmxMode = &omxModeForm;
+#else
+		activeOmxMode = &omxModeMidi; // FORM compiled out (OMXMODESEQ build): fall back instead of leaving a null mode
+#endif
 		break;
 	case MODE_S1:
 #ifdef OMXMODESEQ
 		omxModeSeq.setSeq1Mode();
 		activeOmxMode = &omxModeSeq;
+#else
+		activeOmxMode = &omxModeMidi; // S1/S2 compiled out: fall back instead of leaving a null mode
 #endif
 		break;
 	case MODE_S2:
 #ifdef OMXMODESEQ
 		omxModeSeq.setSeq2Mode();
 		activeOmxMode = &omxModeSeq;
+#else
+		activeOmxMode = &omxModeMidi;
 #endif
 		break;
 	case MODE_OM:
@@ -677,7 +689,7 @@ void savePatterns(void)
 	}
 	// Serial.println((String)"nLocalAddress: " + nLocalAddress); // 11585
 
-#ifndef OMXMODESEQ
+#ifdef OMXMODEFORM
 	// FORM saved LAST: its footprint is the largest and the most likely to change, so
 	// anchoring it at the tail keeps every mode + MidiFX above at fixed offsets.
 	Serial.println("Saving FORM");
@@ -793,7 +805,7 @@ void loadPatterns(void)
 	}
 	// Serial.println((String) "nLocalAddress: " + nLocalAddress); // 5988
 
-#ifndef OMXMODESEQ
+#ifdef OMXMODEFORM
 	// FORM loaded LAST to match savePatterns()'s tail placement.
 	Serial.print("Loading FORM");
 	Serial.println((String) "nLocalAddress: " + nLocalAddress);
@@ -952,15 +964,22 @@ void loop()
 			// set mode
 			//			int modesize = NUM_OMX_MODES;
 			int newMode = constrain((int)sysSettings.newmode + amt, 0, NUM_OMX_MODES - 1);
-#ifndef OMXMODESEQ
-			// The S1/S2 sequencers are compiled out (kept behind OMXMODESEQ), so skip
-			// their slots in the mode rotation instead of landing on a dead no-op.
-			int skipDir = (amt < 0) ? -1 : 1;
-			while ((newMode == MODE_S1 || newMode == MODE_S2) && newMode > 0 && newMode < (NUM_OMX_MODES - 1))
+			// Skip mode slots whose implementation is compiled out (S1/S2 without OMXMODESEQ,
+			// FORM without OMXMODEFORM) instead of landing on a dead no-op.
 			{
-				newMode += skipDir;
-			}
+				int skipDir = (amt < 0) ? -1 : 1;
+				auto compiledOut = [](int m) {
+#ifndef OMXMODESEQ
+					if (m == MODE_S1 || m == MODE_S2) return true;
 #endif
+#ifndef OMXMODEFORM
+					if (m == MODE_FORM) return true;
+#endif
+					return false;
+				};
+				while (compiledOut(newMode) && newMode > 0 && newMode < (NUM_OMX_MODES - 1))
+					newMode += skipDir;
+			}
 			sysSettings.newmode = (OMXMode)newMode;
 			// omxDisp.dispMode();
 			// omxDisp.bumpDisplayTimer();
@@ -1339,7 +1358,9 @@ void setup()
 #endif
 	omxModeEuclid.SetScale(&globalScale);
 	omxModeChords.SetScale(&globalScale);
+#ifdef OMXMODEFORM
 	omxModeForm.SetScale(&globalScale);
+#endif
 	omxModeConfig.SetScale(&globalScale);
 
 	// Keypad
@@ -1391,7 +1412,9 @@ void setup()
 		// The FORM pattern bank lives in LittleFS and survives an FRAM wipe — pull it
 		// back BEFORE the reinit save below, so saveToStorage() re-persists the real
 		// bank instead of overwriting the flash file with empty defaults.
+#ifdef OMXMODEFORM
 		omxModeForm.restoreBankFromFS();
+#endif
 		saveToStorage();
 	}
 
