@@ -1,11 +1,11 @@
-# OMX-27 M8 Macro — User Guide
+# OMX-27 ML Macro (M8 Launchpad Pro) — User Guide
 
-The M8 macro turns the OMX-27 into a Launchpad Pro for the Dirtywave M8, so the M8 (hardware or the iOS app) drives the OMX's LEDs and the OMX's keys play, sequence and navigate the M8. It works over USB, including the iOS app through a camera-adapter or USB-C connection.
+The ML macro turns the OMX-27 into a Launchpad Pro for the Dirtywave M8, so the M8 (hardware or the iOS app) drives the OMX's LEDs and the OMX's keys play, sequence and navigate the M8. It works over USB, including the iOS app through a camera-adapter or USB-C connection.
 
 ## Setup
 
-1. **On the OMX:** set the `MCRO` parameter to `M8` (MIDI mode page 4, or CONFIG mode → MIDI). Set `M-CH` to the channel you use for the M8's Control Map (default 10).
-2. **Save and power-cycle.** When the M8 macro is the *saved* macro, the OMX enumerates over USB as a Novation "Launchpad Pro MK3". The M8 app only talks to a port with that name. If you later pick a different macro, save and power-cycle again and the OMX goes back to being `omx-27-v3`.
+1. **On the OMX:** set the `MCRO` parameter to `ML` (MIDI mode page 4, or CONFIG mode → MIDI). `M8` is the classic mute/solo macro and still works as before. Set `M-CH` to the channel you use for the M8's Control Map (default 10).
+2. **Save and power-cycle.** When `ML` is the *saved* macro, the OMX enumerates over USB as a Novation "Launchpad Pro MK3". The M8 app only talks to a port with that name. If you later pick a different macro, save and power-cycle again and the OMX goes back to being `omx-27-v3`.
 3. **On the M8:** MIDI Settings → `CTRL SURFACE` = `LAUNCHPAD PRO`. For the OMX's right-hand navigation keys, also set the Control Map channel to the same value as `M-CH`.
 4. **Connect** the OMX to the M8 (or the phone/iPad) over USB.
 5. **Enter the macro:** in MI, DRUM, CHORDS or FORM mode, double-click AUX. Double-click AUX again to leave.
@@ -109,6 +109,6 @@ The M8 sends its own colours for pads, track and scene buttons; the OMX shows th
 - **Shift / Option / Edit seem dead in Session view.** They are modifiers. Hold one and press an arrow to see them act. If combos also fail, check the M8's Control Map channel equals `M-CH`.
 - **Test without an M8.** Connect the OMX to a computer and run `OMX-27-firmware/tools/virtual_m8.py`; it plays the M8's side of the handshake and paints test colours.
 
-## Building the old macro
+## The classic M8 macro
 
-The previous mute/solo macro is still in the source. Define `OMX_M8_MACRO_LEGACY` in `config.h` and rebuild to get it back in the same `M8` slot.
+The original mute/solo + control-page macro is still available as `M8` in the `MCRO` list. Pick `M8` for the old behaviour or `ML` for the Launchpad emulation. Only `ML` changes the USB name.
