@@ -1,6 +1,6 @@
 // OMX-27 MIDI KEYBOARD / SEQUENCER
 
-//	v1.15.5 - M8 Macro Mode V2
+//	v1.15.6 - M8 Macro Mode V2
 //	Last update: April 2026
 //
 //	Original concept and initial code by Steven Noreyko
