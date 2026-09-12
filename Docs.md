@@ -340,7 +340,38 @@ Macro modes are supported in the MI and DRUM modes.
 
 #### M8 Macro Mode
 
-The M8 macro mode emulates a Launchpad Pro control surface, allowing the M8 (hardware or iOS app over USB) to drive the OMX-27 in Launchpad Pro mode while maintaining full MIDI keyboard and pot control.
+The classic M8 macro. From MI Mode, select `M8` from the `MCRO` parameter and double click the AUX button to enter Macro Mode. `M-CH` should be set to the same value as the Control Map Channel in the M8 MIDI settings screen (default channel 10). Double click AUX again to exit.
+
+The M8 macro mode has two pages, which change what the keys do.
+
+* Mute Solo Page:
+
+The bottom row of keys correspond to mutes (orange) and solos (red). The top "black keys" are as follows:
+
+```
+Orange - release all mutes
+Lime - go to mixer screen
+Cyan - snapshot load/paste *
+Magenta - snapshot save/enter selection mode *
+Red - release all solos
+Yellow - waveform display
+Blue - play
+```
+
+When M8 is selected from the `MCRO` parameter, potentiometers send on the `M-CH` MIDI channel in both regular keyboard mode and in the macro mode. Notes played on keys send on the currently selected `CH` MIDI channel.
+
+**Notes:**
+* M8 must be on the Mixer view for snapshots.
+* Snapshot Load uses the M8 key combo [SHIFT]+[OPTION]. On any view with a grid this key enters selection mode.
+* Snapshot Save uses the M8 key combo [SHIFT]+[EDIT]. On any view with a grid this key pastes the copied contents from selection mode.
+
+* Control Page:
+
+This page lets you navigate the M8 using the keys on the device. Top Key 1 and Bottom Keys 1-3 are the directional arrows; Top Key 4 Option; Top Key 5 Edit; Bottom Key 6 Shift; Bottom Key 7 Play. The right half of the keyboard is a 1-octave MIDI keyboard on the normal channel.
+
+#### ML Macro Mode (M8 Launchpad Pro)
+
+Select `ML` from the `MCRO` parameter to use the OMX-27 as a Launchpad Pro for the M8. This is a separate macro from the classic `M8` one above; both are available.
 
 ##### M8 Setup
 
@@ -407,10 +438,6 @@ Keys 3, 4, 5 are dark in Note view. The M8 decides note layout and colours; the 
 
 Potentiometers always send CCs on the `M-CH` channel.
 
-##### Legacy M8 Macro
-
-If you need the previous mute/solo control macro, define `OMX_M8_MACRO_LEGACY` in `config.h` at build time. The new Launchpad Pro emulation will be replaced with the original macro, and `macromodes[]` list will remain unchanged.
-
 ##### Notes view
 
 Hold AUX and tap key 4 for the M8 keyboard view. Keys 1/2 scroll the keyboard down/up (Launchpad Down/Up). Hold key 3 (Track) and keys 11-18 become the track buttons T1-T8. Key 9 is Edit/Rec and key 10 is Play, so hold key 9 and tap key 10 to live-record. The sixteen white keys are the bottom-left 4x4 of the Launchpad keyboard (rows 5-8, columns 1-4), with root notes shown in white as the M8 sends them.
@@ -435,7 +462,7 @@ With `MUTE` or `SOLO` set to `LATCH` on page 2, pressing a track key in Mute/Sol
 
 ##### Troubleshooting the handshake
 
-While unlinked the second display line reads `WAIT S<n> R<n>`: `S` counts identity replies the OMX has sent (one on entry, then one per second), `R` counts Device Inquiry requests received from the host. `R` staying at 0 means the M8 never asked; the OMX still sends its identity unprompted, so if the line never changes to `LPP LINK` the host is ignoring it. To isolate the OMX, connect it to a computer and run `tools/virtual_m8.py`, which plays the M8's side of the handshake. The M8 iOS app only talks to a MIDI port named like a Launchpad, so the OMX (RP2040 build) enumerates as a Novation Launchpad Pro MK3 whenever the M8 macro is the *saved* `MCRO` selection, and as `omx-27-v3` otherwise. After changing `MCRO`, save (CONFIG mode Save, or AUX in mode select) and power-cycle the OMX for the USB name to change.
+While unlinked the second display line reads `WAIT S<n> R<n>`: `S` counts identity replies the OMX has sent (one on entry, then one per second), `R` counts Device Inquiry requests received from the host. `R` staying at 0 means the M8 never asked; the OMX still sends its identity unprompted, so if the line never changes to `LPP LINK` the host is ignoring it. To isolate the OMX, connect it to a computer and run `tools/virtual_m8.py`, which plays the M8's side of the handshake. The M8 iOS app only talks to a MIDI port named like a Launchpad, so the OMX (RP2040 build) enumerates as a Novation Launchpad Pro MK3 whenever `ML` is the *saved* `MCRO` selection, and as `omx-27-v3` otherwise. After changing `MCRO`, save (CONFIG mode Save, or AUX in mode select) and power-cycle the OMX for the USB name to change.
 
 ##### Known Limitations
 
