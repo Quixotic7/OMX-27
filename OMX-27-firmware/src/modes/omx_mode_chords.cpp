@@ -228,6 +228,8 @@ OmxModeChords::OmxModeChords()
 
 	m8Macro_.setDoNoteOn(&OmxModeChords::doNoteOnForwarder, this);
 	m8Macro_.setDoNoteOff(&OmxModeChords::doNoteOffForwarder, this);
+	m8lpMacro_.setDoNoteOn(&OmxModeChords::doNoteOnForwarder, this);
+	m8lpMacro_.setDoNoteOff(&OmxModeChords::doNoteOffForwarder, this);
 	nornsMarco_.setDoNoteOn(&OmxModeChords::doNoteOnForwarder, this);
 	nornsMarco_.setDoNoteOff(&OmxModeChords::doNoteOffForwarder, this);
 	delugeMacro_.setDoNoteOn(&OmxModeChords::doNoteOnForwarder, this);
@@ -260,6 +262,8 @@ midimacro::MidiMacroInterface *OmxModeChords::getActiveMacro()
 		return &nornsMarco_;
 	case 3:
 		return &delugeMacro_;
+	case MIDIMACRO_M8LP:
+		return &m8lpMacro_;
 	}
 	return nullptr;
 }

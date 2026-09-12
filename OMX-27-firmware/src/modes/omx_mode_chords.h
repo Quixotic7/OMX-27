@@ -90,7 +90,8 @@ private:
 	bool macroActive_ = false;
 
 	midimacro::MidiMacroNorns nornsMarco_;
-	midimacro::MidiMacroM8Type m8Macro_;
+	midimacro::MidiMacroM8 m8Macro_;
+	midimacro::MidiMacroM8V2 m8lpMacro_;
 	midimacro::MidiMacroDeluge delugeMacro_;
 
 	midimacro::MidiMacroInterface *activeMacro_;

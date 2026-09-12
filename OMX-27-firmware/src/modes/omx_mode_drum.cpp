@@ -34,6 +34,8 @@ OmxModeDrum::OmxModeDrum()
 
 	m8Macro_.setDoNoteOn(&OmxModeDrum::doNoteOnForwarder, this);
 	m8Macro_.setDoNoteOff(&OmxModeDrum::doNoteOffForwarder, this);
+	m8lpMacro_.setDoNoteOn(&OmxModeDrum::doNoteOnForwarder, this);
+	m8lpMacro_.setDoNoteOff(&OmxModeDrum::doNoteOffForwarder, this);
 	nornsMarco_.setDoNoteOn(&OmxModeDrum::doNoteOnForwarder, this);
 	nornsMarco_.setDoNoteOff(&OmxModeDrum::doNoteOffForwarder, this);
 	delugeMacro_.setDoNoteOn(&OmxModeDrum::doNoteOnForwarder, this);
@@ -871,6 +873,8 @@ midimacro::MidiMacroInterface *OmxModeDrum::getActiveMacro()
 		return &nornsMarco_;
 	case 3:
 		return &delugeMacro_;
+	case MIDIMACRO_M8LP:
+		return &m8lpMacro_;
 	}
 	return nullptr;
 }
@@ -1245,6 +1249,7 @@ void OmxModeDrum::SetScale(MusicScales *scale)
 {
 	this->musicScale = scale;
 	m8Macro_.setScale(scale);
+	m8lpMacro_.setScale(scale);
 	nornsMarco_.setScale(scale);
 }
 

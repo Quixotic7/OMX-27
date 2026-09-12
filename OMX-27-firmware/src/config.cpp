@@ -114,8 +114,8 @@ const char *bool2lightswitchMsg[] = {"OFF", "ON"};
 const char *bool2Msg[] = {"TRUE", "FALS"};
 
 const char *modes[] = {"MI", "DRUM", "CH", "FORM", "S1", "S2", "GR", "EL", "OM", "RMT", "CFG"};
-const char *macromodes[] = {"Off", "M8", "NRN", "DEL"};
-const int nummacromodes = 3;
+const char *macromodes[] = {"Off", "M8", "NRN", "DEL", "ML"}; // ML = M8 Launchpad Pro emulation
+const int nummacromodes = 4;
 
 float multValues[] = {.25, .5, 1, 2, 4, 8, 16};
 const char *mdivs[] = {"1/64", "1/32", "1/16", "1/8", "1/4", "1/2", "W"};

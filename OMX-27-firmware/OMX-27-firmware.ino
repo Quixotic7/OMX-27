@@ -1197,7 +1197,7 @@ void setup()
 	Wire1.setSCL(I2C_SCL);		// i2c1 SCL
 
 	// USB identity depends on the SAVED macro, so storage comes up before the USB
-	// descriptors are set. If the M8 macro was saved as the selected MCRO, enumerate as a
+	// descriptors are set. If the ML (M8 Launchpad) macro was saved as MCRO, enumerate as a
 	// Novation Launchpad Pro MK3: the M8 iOS app only talks to a port with that name.
 	// Otherwise stay omx-27-v3. Changing MCRO takes effect after a save + reboot.
 	storage = Storage::initStorage();
@@ -1208,7 +1208,7 @@ void setup()
 			delay(10); // FRAM/I2C may not be settled right after a reboot (see loadHeader)
 			ver = storage->read(EEPROM_HEADER_ADDRESS + 0);
 		}
-		bool bootAsLaunchpad = (ver == EEPROM_VERSION) && (storage->read(EEPROM_HEADER_ADDRESS + 30) == 1);
+		bool bootAsLaunchpad = (ver == EEPROM_VERSION) && (storage->read(EEPROM_HEADER_ADDRESS + 30) == MIDIMACRO_M8LP);
 		if (bootAsLaunchpad)
 		{
 			strcpy(mfgstr, "Focusrite - Novation");

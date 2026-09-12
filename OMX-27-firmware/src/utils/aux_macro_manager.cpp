@@ -9,7 +9,8 @@
 
 // These are static and shared between different modes
 midimacro::MidiMacroNorns nornsMarco_;
-midimacro::MidiMacroM8Type m8Macro_;
+midimacro::MidiMacroM8 m8Macro_;     // slot 1 "M8" (classic)
+midimacro::MidiMacroM8V2 m8lpMacro_; // slot 4 "ML" (Launchpad Pro emulation)
 midimacro::MidiMacroDeluge delugeMacro_;
 
 AuxMacroManager::AuxMacroManager()
@@ -56,6 +57,8 @@ void AuxMacroManager::onModeActivated()
     // Called when the OMX mode is activated, remap the macros to this macro manager
     m8Macro_.setDoNoteOn(&AuxMacroManager::doNoteOnForwarder, this);
     m8Macro_.setDoNoteOff(&AuxMacroManager::doNoteOffForwarder, this);
+    m8lpMacro_.setDoNoteOn(&AuxMacroManager::doNoteOnForwarder, this);
+    m8lpMacro_.setDoNoteOff(&AuxMacroManager::doNoteOffForwarder, this);
     nornsMarco_.setDoNoteOn(&AuxMacroManager::doNoteOnForwarder, this);
     nornsMarco_.setDoNoteOff(&AuxMacroManager::doNoteOffForwarder, this);
     delugeMacro_.setDoNoteOn(&AuxMacroManager::doNoteOnForwarder, this);
@@ -85,6 +88,7 @@ void AuxMacroManager::SetScale(MusicScales *scale)
     musicScale_ = scale;
 
     m8Macro_.setScale(scale);
+    m8lpMacro_.setScale(scale);
     nornsMarco_.setScale(scale);
     delugeMacro_.setScale(scale);
 }
@@ -230,6 +234,8 @@ midimacro::MidiMacroInterface *AuxMacroManager::getActiveMacro()
         return &nornsMarco_;
     case 3:
         return &delugeMacro_;
+    case MIDIMACRO_M8LP:
+        return &m8lpMacro_;
     }
     return nullptr;
 }

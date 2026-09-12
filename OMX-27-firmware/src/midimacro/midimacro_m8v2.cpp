@@ -38,17 +38,14 @@ namespace midimacro
 		(void)length;
 		s_inquiryRx++;
 
-#ifndef OMX_M8_MACRO_LEGACY
-		// Slot 1 is the M8 macro. Reply even when the macro isn't entered, and from any
-		// OMX mode - the M8 asks as soon as it's plugged in.
-		if (midiMacroConfig.midiMacro == 1)
+		// Reply even when the macro isn't entered, and from any OMX mode - the M8 asks as
+		// soon as it's plugged in.
+		if (midiMacroConfig.midiMacro == MIDIMACRO_M8LP)
 		{
 			sendIdentityReply();
 		}
-#endif
 	}
 
-#ifndef OMX_M8_MACRO_LEGACY
 
 	enum M8V2Page
 	{
@@ -92,8 +89,7 @@ namespace midimacro
 
 	String MidiMacroM8V2::getName()
 	{
-		// Must stay "M8" so the macro list reads Off, M8, NRN, DEL.
-		return String("M8");
+		return String("ML"); // M8 Launchpad Pro
 	}
 
 	void MidiMacroM8V2::sendIdentity()
@@ -918,5 +914,4 @@ namespace midimacro
 		omxDisp.dispGenericModeLabelDoubleLine(dispLabel_, dispStatus_, params_.getNumPages(), params_.getSelPage());
 	}
 
-#endif // !OMX_M8_MACRO_LEGACY
 }

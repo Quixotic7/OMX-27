@@ -88,11 +88,13 @@ extern const OMXMode DEFAULT_MODE;
 #define NUM_MIDIFX_GROUPS 5
 #define NUM_MIDIFX_SLOTS 8
 
-// Uncomment to build the legacy M8 macro (mute/solo + control page) in macro slot 1
-// instead of the Launchpad Pro emulation (MidiMacroM8V2). See design/m8v2/M8V2-PLAN.md.
-// #define OMX_M8_MACRO_LEGACY
-// USB identity note: on the RP2040 build the OMX enumerates as a Novation Launchpad Pro MK3
-// whenever the M8 macro is the SAVED MCRO selection (see setup() in the .ino); otherwise omx-27-v3.
+// MIDI macro slots (index into macromodes[]). Slot 4 = M8 Launchpad Pro emulation ("ML").
+// On the RP2040 build the OMX enumerates as a Novation Launchpad Pro MK3 whenever ML is the
+// SAVED MCRO selection (see setup() in the .ino); otherwise omx-27-v3.
+#define MIDIMACRO_M8 1
+#define MIDIMACRO_NORNS 2
+#define MIDIMACRO_DELUGE 3
+#define MIDIMACRO_M8LP 4
 
 enum FUNCKEYMODE
 {

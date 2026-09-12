@@ -1,21 +1,16 @@
 #pragma once
 #include "midimacro_interface.h"
 
-// M8V2 - Launchpad Pro MK3 emulation for the Dirtywave M8.
-// See design/m8v2/M8V2-PLAN.md. Phase 1 = skeleton + handshake.
-//
-// The whole class is compiled only when the legacy macro is NOT selected.
-// Define OMX_M8_MACRO_LEGACY in config.h to build the old MidiMacroM8 instead.
+// ML - Launchpad Pro MK3 emulation for the Dirtywave M8 (macro slot 4, "ML").
+// See design/m8v2/M8V2-PLAN.md and design/m8v2/M8-MACRO-USER-GUIDE.md.
 
 namespace midimacro
 {
 	// Universal Device Inquiry hook, called from sysex.cpp BEFORE the F0 7D 00 00 gate.
-	// Replies with the Launchpad Pro MK3 identity whenever the M8 macro slot (1) is
-	// selected, regardless of whether the macro is currently entered or which OMX mode
-	// is running. Compiled to a no-op in the legacy build.
+	// Replies with the Launchpad Pro MK3 identity whenever the ML macro slot is selected,
+	// regardless of whether the macro is entered or which OMX mode is running.
 	void onDeviceInquiry(const uint8_t *data, unsigned length);
 
-#ifndef OMX_M8_MACRO_LEGACY
 
 	class MidiMacroM8V2 : public MidiMacroInterface
 	{
@@ -125,5 +120,4 @@ namespace midimacro
 		char dispStatus_[16];
 	};
 
-#endif // !OMX_M8_MACRO_LEGACY
 }
