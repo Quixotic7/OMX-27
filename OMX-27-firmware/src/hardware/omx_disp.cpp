@@ -1531,6 +1531,44 @@ void OmxDisp::dispGenericModeLabelDoubleLine(const char *label1, const char *lab
 	}
 }
 
+void OmxDisp::dispLaunchpadGrid(const uint8_t *lppLeds, uint64_t inView, const char *l1, const char *l2, const char *l3)
+{
+	if (isMessageActive())
+	{
+		renderMessage();
+		return;
+	}
+
+	display.fillRect(0, 0, 128, 32, BLACK);
+
+	// Grid: 8 columns x 4 px starting at x=48, 8 rows x 4 px starting at y=1, row 8 on top.
+	for (uint8_t r = 1; r <= 8; r++)
+	{
+		for (uint8_t c = 1; c <= 8; c++)
+		{
+			if (lppLeds[r * 10 + c] == 0)
+				continue;
+			int16_t x0 = 48 + (c - 1) * 4;
+			int16_t y0 = 1 + (8 - r) * 4;
+			bool big = (inView >> ((r - 1) * 8 + (c - 1))) & 1;
+			if (big)
+				display.fillRect(x0, y0, 3, 3, WHITE);
+			else
+				display.fillRect(x0 + 1, y0 + 1, 2, 2, WHITE);
+		}
+	}
+
+	u8g2_display.setFontMode(1);
+	u8g2_display.setFont(FONT_LABELS);
+	u8g2_display.setForegroundColor(WHITE);
+	u8g2_display.setBackgroundColor(BLACK);
+	// u8g2leftText puts the cursor (baseline) at y + (h - ascent) / 2, so y = 7/18/29 lands the
+	// 5x8 baselines on rows 8/19/30 - the same three-line spacing as the design mock.
+	if (l1) u8g2leftText(l1, 0, 7, 46, 10);
+	if (l2) u8g2leftText(l2, 0, 18, 46, 10);
+	if (l3) u8g2leftText(l3, 0, 29, 46, 10);
+}
+
 void OmxDisp::dispGenericModeLabelSmallText(const char *label, uint8_t numPages, int8_t selectedPage)
 {
 	if (isMessageActive())

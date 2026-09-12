@@ -2,7 +2,7 @@
   "format": "omx27-led-design",
   "version": 1,
   "device": "OMX-27",
-  "name": "Notes Mode",
+  "name": "Control Mode",
   "ledCount": 27,
   "convention": "OMX-27: 27 RGB LED keys addressed by key index 0-26, exactly matching the firmware strip.setPixelColor(index, 0xRRGGBB). key 0 = AUX (top-left). keys 1-10 = the 10 black keys (top row). keys 11-26 = the 16 white keys (bottom row). Each led is a colour \"#RRGGBB\"; \"#000000\" means the LED is off. keyMap lists each key's musical note. Controls (5 pots, the encoder turn/press, and the 128x32 OLED screen) carry text notes per state. Multiple states are alternative pages/modes of the same hardware.",
   "keyMap": [
@@ -169,107 +169,178 @@
       "name": "C6"
     }
   ],
-  "notes": "",
+  "notes": "'select' in the request read as Shift (M8 selection mode = Shift+Option).",
   "states": [
     {
       "state": 1,
-      "name": "Notes Mode",
+      "name": "Control - HAND L (arrows right)",
       "export": true,
-      "notes": "16 consecutive scale steps ascending 11->26 (row interval K=4: row r+1 col 1 = row r col 5). Root notes light white from the M8.",
+      "notes": "HAND=L. Pure M8 Control Map on M-CH; nothing goes to the Launchpad. Unassigned keys dark.",
       "leds": [
         "#7f00ff",
-        "#ff0000",
-        "#ff0000",
-        "#ff0000",
-        "#000000",
-        "#000000",
-        "#007fff",
+        "#ff8000",
         "#007fff",
         "#000000",
-        "#ff0000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#4b0082",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#00ff00",
         "#ffffff",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00",
-        "#ffff00"
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#4b0082",
+        "#4b0082",
+        "#4b0082",
+        "#000000",
+        "#000000"
       ],
       "keyNotes": {
         "0": "AUX",
-        "1": "Scroll keyboard down (CC70)",
-        "2": "Scroll keyboard up (CC80)",
-        "3": "Track (hold): keys 11-18 become T1-T8 (CC101-108)",
-        "6": "Launchpad Left (CC91) - previous track",
-        "7": "Launchpad Right (CC92) - next track",
-        "9": "Edit/Rec (CC10)",
-        "10": "Play (CC20)",
-        "11": "scale step 0: C1R1 (K=4 band; verify K on hardware)",
-        "12": "scale step 1: C2R1",
-        "13": "scale step 2: C3R1",
-        "14": "scale step 3: C4R1",
-        "15": "scale step 4: C1R2",
-        "16": "scale step 5: C2R2",
-        "17": "scale step 6: C3R2",
-        "18": "scale step 7: C4R2",
-        "19": "scale step 8: C1R3",
-        "20": "scale step 9: C2R3",
-        "21": "scale step 10: C3R3",
-        "22": "scale step 11: C4R3",
-        "23": "scale step 12: C1R4",
-        "24": "scale step 13: C2R4",
-        "25": "scale step 14: C3R4",
-        "26": "scale step 15: C4R4"
+        "1": "Option (Control Map note 3 on M-CH)",
+        "2": "Edit (Control Map note 2 on M-CH)",
+        "8": "Up (Control Map note 6 on M-CH)",
+        "12": "Shift (Control Map note 1 on M-CH)",
+        "13": "Play (Control Map note 0 on M-CH)",
+        "22": "Left (Control Map note 4 on M-CH)",
+        "23": "Down (Control Map note 7 on M-CH)",
+        "24": "Right (Control Map note 5 on M-CH)"
       },
       "pots": [
         {
           "pot": 1,
           "label": "K1",
           "note": "CC on M-CH",
-          "value": null
+          "value": 0
         },
         {
           "pot": 2,
           "label": "K2",
           "note": "",
-          "value": null
+          "value": 0
         },
         {
           "pot": 3,
           "label": "K3",
           "note": "",
-          "value": null
+          "value": 0
         },
         {
           "pot": 4,
           "label": "K4",
           "note": "",
-          "value": null
+          "value": 0
         },
         {
           "pot": 5,
           "label": "K5",
           "note": "",
-          "value": null
+          "value": 0
         }
       ],
       "encoder": {
-        "note": "scroll keyboard",
+        "note": "-",
         "press": "toggle param select"
       },
       "screen": {
         "note": "",
-        "text": "ML NOTE\nLPP LINK"
+        "text": "ML CTRL L\nLPP LINK"
+      }
+    },
+    {
+      "state": 2,
+      "name": "Control - HAND R (arrows left, classic layout)",
+      "export": true,
+      "notes": "HAND=R. Pure M8 Control Map on M-CH; nothing goes to the Launchpad. Unassigned keys dark.",
+      "leds": [
+        "#7f00ff",
+        "#4b0082",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#ff8000",
+        "#007fff",
+        "#4b0082",
+        "#4b0082",
+        "#4b0082",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000",
+        "#00ff00",
+        "#ffffff",
+        "#000000",
+        "#000000"
+      ],
+      "keyNotes": {
+        "0": "AUX",
+        "1": "Up (Control Map note 6 on M-CH)",
+        "9": "Option (Control Map note 3 on M-CH)",
+        "10": "Edit (Control Map note 2 on M-CH)",
+        "11": "Left (Control Map note 4 on M-CH)",
+        "12": "Down (Control Map note 7 on M-CH)",
+        "13": "Right (Control Map note 5 on M-CH)",
+        "23": "Shift (Control Map note 1 on M-CH)",
+        "24": "Play (Control Map note 0 on M-CH)"
+      },
+      "pots": [
+        {
+          "pot": 1,
+          "label": "K1",
+          "note": "CC on M-CH",
+          "value": 0
+        },
+        {
+          "pot": 2,
+          "label": "K2",
+          "note": "",
+          "value": 0
+        },
+        {
+          "pot": 3,
+          "label": "K3",
+          "note": "",
+          "value": 0
+        },
+        {
+          "pot": 4,
+          "label": "K4",
+          "note": "",
+          "value": 0
+        },
+        {
+          "pot": 5,
+          "label": "K5",
+          "note": "",
+          "value": 0
+        }
+      ],
+      "encoder": {
+        "note": "-",
+        "press": "toggle param select"
+      },
+      "screen": {
+        "note": "",
+        "text": "ML CTRL R\nLPP LINK"
       }
     }
   ]

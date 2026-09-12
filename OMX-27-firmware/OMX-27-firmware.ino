@@ -53,6 +53,7 @@
 #include "src/hardware/omx_leds.h"
 #include "src/midi/MIDIClockStats.h"
 #include "src/midi/norns_link.h"
+#include "src/midimacro/midimacro_m8v2.h"
 
 // Allows code to compile with smallest code LTO
 
@@ -500,6 +501,9 @@ void saveHeader()
 	uint16_t ssHue = (uint16_t)min(colorConfig.screensaverColor, (uint32_t)65024);
 	storage->write(EEPROM_HEADER_ADDRESS + 53, (uint8_t)(ssHue & 0xFF));
 	storage->write(EEPROM_HEADER_ADDRESS + 54, (uint8_t)((ssHue >> 8) & 0xFF));
+
+	// ML (M8 Launchpad) macro settings, one bit-packed byte. See ML-LAYOUT-V3.md section 7.
+	storage->write(EEPROM_HEADER_ADDRESS + 55, midimacro::m8lpMacroInstance().getSettingsByte());
 }
 
 // returns true if the header contained initialized data
@@ -604,6 +608,9 @@ bool loadHeader(void)
 	uint16_t ssHue = (uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 53) | ((uint16_t)storage->read(EEPROM_HEADER_ADDRESS + 54) << 8);
 	if (ssHue != 0xFFFF)
 		colorConfig.screensaverColor = ssHue;
+
+	// ML macro settings (0xFF = written by an older save -> keep defaults)
+	midimacro::m8lpMacroInstance().setSettingsByte(storage->read(EEPROM_HEADER_ADDRESS + 55));
 
 	// digitalWrite(BLUELED, HIGH);
 	return true;

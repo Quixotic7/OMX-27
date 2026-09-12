@@ -163,7 +163,10 @@ namespace MM
 			midiSettings.isBankSelect = false;
 		}
 
-		// sendControlChange(control, value, channel);
+		// Hand the CC to the active mode (macros use it for LED feedback: Deluge, ML ring
+		// buttons sent as CCs). Nothing forwarded these before, so those paths were dead.
+		if (activeOmxMode != nullptr)
+			activeOmxMode->inMidiControlChange(channel, control, value);
 	}
 
 	// absolute_time_t last_ext_tick_at_ = 0;

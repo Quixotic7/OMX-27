@@ -2,7 +2,8 @@
 #include "midimacro_interface.h"
 
 // ML - Launchpad Pro MK3 emulation for the Dirtywave M8 (macro slot 4, "ML").
-// See design/m8v2/M8V2-PLAN.md and design/m8v2/M8-MACRO-USER-GUIDE.md.
+// See design/m8v2/ML-LAYOUT-V3.md (authoritative layout spec), design/m8v2/M8V2-PLAN.md
+// and design/m8v2/M8-MACRO-USER-GUIDE.md.
 
 namespace midimacro
 {
@@ -15,11 +16,20 @@ namespace midimacro
 	class MidiMacroM8V2 : public MidiMacroInterface
 	{
 	public:
+		// Order matters: the AUX layer maps keys 15-22 to these in order (spec v3 sections 1 / 9c).
 		enum View : uint8_t
 		{
+			// Order = AUX layer keys 15..23.
 			VIEW_SESSION,
+			VIEW_CLIP,
+			VIEW_CLIPCOL, // Clip Launch by column
+			VIEW_MIX,
 			VIEW_NOTE,
-			VIEW_SEQ
+			VIEW_SEQ,
+			VIEW_PHRASE,
+			VIEW_BEAT,
+			VIEW_CTRL,
+			VIEW_COUNT
 		};
 
 		enum PadMode : uint8_t
@@ -49,6 +59,12 @@ namespace midimacro
 		bool inMidiNoteOn(byte channel, byte note, byte velocity) override;
 		bool inMidiNoteOff(byte channel, byte note, byte velocity) override;
 
+		// Bit-packed persistent settings, EEPROM header offset 55 (spec v3 section 7).
+		// bit0 HAND (0 L, 1 R)  bit1 MUTE latch  bit2 SOLO latch
+		// bit3 RING (0 CC, 1 note)  bits4-5 NROW (0 = K4, 1 = K3)
+		uint8_t getSettingsByte() const;
+		void setSettingsByte(uint8_t v); // 0xFF = never saved, keep defaults
+
 	protected:
 		void onEnabled() override;
 		void onDisabled() override;
@@ -61,14 +77,16 @@ namespace midimacro
 		static const uint8_t kNumLppNotes = 110;
 		static const uint8_t kNumKeys = 27;
 
-		// Maps an OMX key to the Launchpad Pro MK3 programmer note it sends.
-		// Depends on view_ and padMode_. Returns 0 for keys that send nothing
-		// (local-only actions like row scroll/pad-mode select, or the Option placeholder).
-		uint8_t lppNoteForKey(uint8_t key);
+		// Beat Repeat grid rows (spec section 5c). Launchpad rows count 1 = bottom, and the
+		// M8 docs say "line 8" = tracks, "lines 6/7" = range. If the docs actually count from
+		// the top these become 1, 3, 2 - the track row lights BLUE on the M8, so that settles
+		// it on hardware. One place to flip.
+		static const uint8_t kBeatTrackRow = 8;
+		static const uint8_t kBeatRangeRowA = 6;
+		static const uint8_t kBeatRangeRowB = 7;
 
 		void sendIdentity();
 		void releaseAllKeys();
-		void scrollRow(int8_t dir);
 		void setPadMode(PadMode newMode);
 
 		// Sends an LPP button. Grid pads (11-88, cols 1-8) are always Note On/Off; the ring
@@ -78,28 +96,63 @@ namespace midimacro
 		void sendLppTap(uint8_t n) { sendLpp(n, true); sendLpp(n, false); }
 		static bool isRingButton(uint8_t n);
 		void releaseLatchedTracks();
-		// Session right-hand cluster -> M8 Control Map note (0-7) on the macro channel,
-		// or -1 if this key is not part of the cluster. Same mapping as the old M8 macro.
-		static int8_t controlMapNote(uint8_t key);
+		void releaseMomentaryTracks(); // undo (retap) any momentary mute/solo track still mid-press
+		void releaseControlNotes();
+		// Drops every held/latched thing the macro owns (called on view change and exit).
+		void releaseAllHeld();
+		void switchView(View v, bool sendButton = true); // sendButton=false when following the M8
 
-		static uint8_t seqNotePadNote(uint8_t key); // SEQ black keys 1-10 -> LPP r1/r2 note pads
-		static uint8_t seqSlotNote(uint8_t key);    // SEQ white keys -> left 4x4 slots
-		static uint8_t seqPatternNote(uint8_t key); // SEQ AUX+white -> right 4x4 pattern select
+		// Session nav cluster -> M8 Control Map note (0-7) on the macro channel, or -1 if this
+		// key is not part of the cluster. Depends on the HAND setting (spec section 2).
+		int8_t controlMapNote(uint8_t key) const;
+		// Control view (spec section 9b): the M8's own key cluster, two-handed. Returns the
+		// Control Map note (0-7) for an OMX key, or -1 when the key is unassigned.
+		int8_t ctrlViewNote(uint8_t key) const;
+		void sendControlMapTap(uint8_t cm); // note on + off, no delay
+
+		void doWaveformMacro();  // Control Map Up+Down+Left+Right together (classic macro)
+		void doGotoMixerMacro(); // Shift + Up, Left x4, Down (classic macro, same delays)
+		void doStoreSnapshot();  // Shift + SShot
+		void doRecallSnapshot(); // SShot
+		void doMixAllTracks(uint8_t modifier); // unmute-all / unsolo-all
+
+		uint8_t notesPadForKey(uint8_t key) const;  // NOTE whites -> 16 consecutive scale steps
+		static uint8_t beatPadForKey(uint8_t key);  // BEAT keys 3-26 -> track / range rows
+		static uint8_t seqNotePadNote(uint8_t key); // SEQ/PHRASE black keys 3-10 -> pads 11-18
+		static uint8_t seqSlotNote(uint8_t key);    // SEQ whites -> left 4x4 note slots
+		static uint8_t seqPatternNote(uint8_t key); // PHRASE whites -> right 4x4 phrase slots
+		uint8_t sessionPadForKey(uint8_t key) const; // SESSION 11-19 pads / track buttons
+		uint8_t clipPadForKey(uint8_t key) const;    // CLIP 11-18 -> pads of clipRow_ (row) / clipRow_ as column in CLIPCOL
+		bool isClipView() const { return view_ == VIEW_CLIP || view_ == VIEW_CLIPCOL; }
+
+		// The M8 lights the Launchpad view button (Session 93 / Note 94 / Seq 97) of the view it
+		// is showing. When one lights up that our current view does not imply (e.g. the M8
+		// jumped to its sequencer after a pad double-tap), follow it.
+		void followM8View(uint8_t button, uint8_t prevColor, uint8_t newColor);
+		uint8_t impliedViewButton() const;
+		static uint8_t clipScenePadForKey(uint8_t key); // CLIP 19-26 -> scene buttons 19..89
+		void changePotBank(bool next); // AUX+13/14, same behaviour as the normal OMX AUX layer
 
 		// Draws one grid/scene key from the palette cache: static/flash/pulse per ledMode_,
 		// offColor when the cached index is 0 (or the note is out of range).
 		void drawPaletteKey(uint8_t key, uint8_t note, uint32_t offColor);
+		void drawAuxKey();
 
 		View view_ = VIEW_SESSION;
 		PadMode padMode_ = PAD_CLIP;
 		bool muteLatch_ = false;
 		bool soloLatch_ = false;
 		bool ringAsCC_ = true;        // ring buttons as CC (LPP MK3 programmer mode) or notes
+		bool rightHand_ = false;      // HAND setting: false = L, true = R
+		uint8_t nrow_ = 0;            // NROW setting: 0 = K4, 1 = K3 (Notes row interval)
 		uint8_t latchedTracks_ = 0;   // bit i = track 101+i toggled on by the latch (LED memory)
 		uint8_t momentaryTracks_ = 0; // bit i = track 101+i toggled by a still-held momentary press
 		bool trackHeld_ = false;      // Note view: key 3 held -> white keys 11-18 are track buttons
-		bool recLatched_ = false;     // Seq view: AUX+8 latches LPP Record held (for Rec+keypad / Rec+Play combos)
-		uint8_t row_ = 8; // 1..8, which grid row keys 11-18 show (11-7 in Note view)
+		bool recLatched_ = false;     // AUX+8 latches LPP Record held (for Rec+keypad / Rec+Play combos)
+		bool shiftLatched_ = false;   // AUX+3 latches LPP Shift for the duration of the AUX hold
+		uint8_t row_ = 8; // 1..8, which grid row Session keys 11-18 show
+		uint8_t clipRow_ = 8; // 1..8, Clip Launch selected row (not persisted)
+		bool clipMuteChord_ = false; // CLIP: keys 1+2 held together -> Launchpad Mute held, keys 3-10 = track buttons
 
 		bool linked_ = false;
 		uint32_t lastIdentityMs_ = 0;
@@ -119,5 +172,9 @@ namespace midimacro
 		char dispLabel_[24];
 		char dispStatus_[16];
 	};
+
+	// The one shared ML macro instance (defined in utils/aux_macro_manager.cpp, which owns
+	// all the static macro objects). Lets the .ino read/write its saved settings byte.
+	MidiMacroM8V2 &m8lpMacroInstance();
 
 }

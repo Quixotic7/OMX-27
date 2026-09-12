@@ -2,7 +2,7 @@
   "format": "omx27-led-design",
   "version": 1,
   "device": "OMX-27",
-  "name": "AUX Layout",
+  "name": "AUX Layer",
   "ledCount": 27,
   "convention": "OMX-27: 27 RGB LED keys addressed by key index 0-26, exactly matching the firmware strip.setPixelColor(index, 0xRRGGBB). key 0 = AUX (top-left). keys 1-10 = the 10 black keys (top row). keys 11-26 = the 16 white keys (bottom row). Each led is a colour \"#RRGGBB\"; \"#000000\" means the LED is off. keyMap lists each key's musical note. Controls (5 pots, the encoder turn/press, and the 128x32 OLED screen) carry text notes per state. Multiple states are alternative pages/modes of the same hardware.",
   "keyMap": [
@@ -173,9 +173,9 @@
   "states": [
     {
       "state": 1,
-      "name": "AUX Layout",
+      "name": "AUX Layer (hold AUX, identical in every view)",
       "export": true,
-      "notes": "",
+      "notes": "Identical in every view. 1/2 = Launchpad Left/Right, 11/12 = Launchpad Down/Up (octave-like), 13/14 = pot bank -/+ as on the normal OMX AUX layer. Mode row 15-23: Session, Clip (rows), Clip (columns), Mix, Notes, Seq, Phrase, Beat Repeat, Control; the current view's key is brighter. Keys 4, 24-25 dark.",
       "leds": [
         "#7f00ff",
         "#ff0000",
@@ -185,71 +185,82 @@
         "#ff00ff",
         "#ff00ff",
         "#ff00ff",
-        "#000000",
+        "#800000",
+        "#ff0000",
+        "#ffffff",
+        "#ff0000",
+        "#ff0000",
+        "#ff0000",
         "#ff0000",
         "#ff00ff",
-        "#0000ff",
-        "#0000ff",
-        "#0000ff",
-        "#0000ff",
+        "#ff00ff",
+        "#ff00ff",
+        "#ff00ff",
+        "#ff00ff",
+        "#ff00ff",
+        "#ff00ff",
+        "#ff00ff",
+        "#ff00ff",
         "#000000",
         "#000000",
-        "#000000",
-        "#000000",
-        "#000000",
-        "#000000",
-        "#000000",
-        "#000000",
-        "#000000",
-        "#000000",
-        "#000000",
-        "#000000"
+        "#ffff00"
       ],
       "keyNotes": {
-        "0": "AUX",
-        "1": "Launchpad Down",
-        "2": "Launchpad Up",
-        "3": "Launchpad Shift",
-        "5": "Launchpad Project View",
-        "6": "Store Snapshot(Show Message)",
-        "7": "Recall Snapshot(Show Message)",
-        "9": "Launchpad edit/record",
-        "10": "Launchpad Play",
-        "11": "Session Mode",
-        "12": "Mix Mode",
-        "13": "Notes Mode",
-        "14": "Seq Mode"
+        "0": "AUX (hold). LED mirrors the Novation logo (CC99) = M8 Live mode: purple off, M8's colour when Live; blinks red while Record is latched",
+        "1": "Launchpad Left (CC91) - with Shift latched (AUX+3 first) = M8 Live mode toggle",
+        "2": "Launchpad Right (CC92)",
+        "3": "Launchpad Shift (CC90), latched until AUX is released; blinks",
+        "5": "Launchpad Project view (CC98)",
+        "6": "Store snapshot (Shift + SShot CC1) - shows message",
+        "7": "Recall snapshot (SShot CC1) - shows message",
+        "8": "Latch Launchpad Record held (CC10) - AUX blinks red while latched",
+        "9": "Launchpad Edit/Rec (CC10) tap",
+        "10": "Launchpad Play (CC20) tap",
+        "11": "Launchpad Down (CC70) - notes down a row (octave-like), matches OMX AUX octave keys",
+        "12": "Launchpad Up (CC80) - notes up a row",
+        "13": "Pot bank previous (same as the normal OMX AUX layer)",
+        "14": "Pot bank next",
+        "15": "Session view (sends Session CC93)",
+        "16": "Clip Launch view - rows (sends Session CC93)",
+        "17": "Clip Launch view - columns (sends Session CC93)",
+        "18": "Mix view (sends Session CC93; OMX-side mute/solo page)",
+        "19": "Notes view (sends Note CC94)",
+        "20": "Seq view (sends Seq CC97)",
+        "21": "Phrase view (sends Seq CC97; right half of the sequencer screen)",
+        "22": "Beat Repeat view (sends Shift + Session)",
+        "23": "Control view (M8 Control Map keys, two-handed; layout follows HAND)",
+        "26": "Waveform display (Control Map: Up+Down+Left+Right on M-CH pressed together, as the classic macro)"
       },
       "pots": [
         {
           "pot": 1,
           "label": "K1",
-          "note": "",
-          "value": null
+          "note": "CC on M-CH",
+          "value": 0
         },
         {
           "pot": 2,
           "label": "K2",
           "note": "",
-          "value": null
+          "value": 0
         },
         {
           "pot": 3,
           "label": "K3",
           "note": "",
-          "value": null
+          "value": 0
         },
         {
           "pot": 4,
           "label": "K4",
           "note": "",
-          "value": null
+          "value": 0
         },
         {
           "pot": 5,
           "label": "K5",
           "note": "",
-          "value": null
+          "value": 0
         }
       ],
       "encoder": {
@@ -258,7 +269,7 @@
       },
       "screen": {
         "note": "",
-        "text": ""
+        "text": "AUX"
       }
     }
   ]

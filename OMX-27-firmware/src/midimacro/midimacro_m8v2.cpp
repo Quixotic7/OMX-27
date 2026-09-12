@@ -7,6 +7,7 @@
 #include "../consts/consts.h"
 #include "../consts/colors.h"
 #include "lpp_palette.h"
+#include "../utils/pot_bank_aux.h"
 
 namespace midimacro
 {
@@ -49,9 +50,40 @@ namespace midimacro
 
 	enum M8V2Page
 	{
-		M8V2PAGE_MAIN,	// row display, encoder scrolls
-		M8V2PAGE_LATCH, // MUTE / SOLO latch-vs-momentary
+		M8V2PAGE_MAIN,	  // row display, encoder scrolls
+		M8V2PAGE_SETTING, // HAND / MUTE / SOLO / RING
+		M8V2PAGE_SETTING2 // NROW  (the display only holds 4 legends per page)
 	};
+
+	// LPP button numbers used in more than one place.
+	static const uint8_t kLppSShot = 1;
+	static const uint8_t kLppMute = 2;
+	static const uint8_t kLppSolo = 3;
+	static const uint8_t kLppRec = 10;
+	static const uint8_t kLppPlay = 20;
+	static const uint8_t kLppDup = 50;
+	static const uint8_t kLppClear = 60;
+	static const uint8_t kLppDown = 70;
+	static const uint8_t kLppUp = 80;
+	static const uint8_t kLppShift = 90;
+	static const uint8_t kLppTrackL = 91;
+	static const uint8_t kLppTrackR = 92;
+	static const uint8_t kLppSession = 93;
+	static const uint8_t kLppNote = 94;
+	static const uint8_t kLppSeq = 97;
+	static const uint8_t kLppProject = 98;
+	static const uint8_t kLppLogo = 99;
+	static const uint8_t kLppTrack1 = 101;
+
+	// M8 Control Map notes on the macro channel.
+	static const uint8_t kCmPlay = 0;
+	static const uint8_t kCmShift = 1;
+	static const uint8_t kCmEdit = 2;
+	static const uint8_t kCmOption = 3;
+	static const uint8_t kCmLeft = 4;
+	static const uint8_t kCmRight = 5;
+	static const uint8_t kCmUp = 6;
+	static const uint8_t kCmDown = 7;
 
 	// Returns a half-brightness version of a 0xRRGGBB colour by shifting each channel
 	// right by 1 - used for the "off" phase of a pulsing (mode 2) LED.
@@ -69,7 +101,8 @@ namespace midimacro
 	MidiMacroM8V2::MidiMacroM8V2()
 	{
 		params_.addPage(1); // Main
-		params_.addPage(3); // Latch (MUTE, SOLO) + RING (CC/NOTE)
+		params_.addPage(4); // HAND, MUTE, SOLO, RING
+		params_.addPage(1); // NROW
 		encoderSelect_ = false;
 
 		for (uint8_t i = 0; i < kNumLppNotes; i++)
@@ -92,6 +125,39 @@ namespace midimacro
 		return String("ML"); // M8 Launchpad Pro
 	}
 
+	// ------------------------------------------------------------ Saved settings
+
+	uint8_t MidiMacroM8V2::getSettingsByte() const
+	{
+		uint8_t v = 0;
+		if (rightHand_)
+			v |= 0x01;
+		if (muteLatch_)
+			v |= 0x02;
+		if (soloLatch_)
+			v |= 0x04;
+		if (!ringAsCC_)
+			v |= 0x08; // bit3: 0 = CC, 1 = note
+		v |= (uint8_t)((nrow_ & 0x03) << 4);
+		return v;
+	}
+
+	void MidiMacroM8V2::setSettingsByte(uint8_t v)
+	{
+		if (v == 0xFF)
+			return; // never written (old save / fresh EEPROM) - keep defaults
+
+		rightHand_ = (v & 0x01) != 0;
+		muteLatch_ = (v & 0x02) != 0;
+		soloLatch_ = (v & 0x04) != 0;
+		ringAsCC_ = (v & 0x08) == 0;
+		nrow_ = (uint8_t)((v >> 4) & 0x03);
+		if (nrow_ > 1)
+			nrow_ = 0;
+	}
+
+	// ------------------------------------------------------------ Enable / disable
+
 	void MidiMacroM8V2::sendIdentity()
 	{
 		sendIdentityReply();
@@ -102,24 +168,28 @@ namespace midimacro
 	{
 		linked_ = false;
 		auxHeld_ = false;
+		shiftLatched_ = false;
 
 		// Always land back in Session/CLIP and release any modifier that might still be
 		// held from a previous session (e.g. macro switched away while Mute was down).
-		sendLpp(2, false);
-		sendLpp(3, false);
+		sendLpp(kLppMute, false);
+		sendLpp(kLppSolo, false);
+		sendLpp(kLppShift, false);
 		padMode_ = PAD_CLIP;
 		view_ = VIEW_SESSION;
 		row_ = 8; // Session pins the left keys to Launchpad row 8; keys 1/2 move the box.
+		clipRow_ = 8; // Clip Launch starts on the top row (not persisted)
 		latchedTracks_ = 0;
 		momentaryTracks_ = 0;
 		trackHeld_ = false;
+		recLatched_ = false;
 		for (uint8_t i = 0; i < kNumKeys; i++)
 			ctrlSent_[i] = -1;
 
 		sendIdentity();
 
 		// Ask the M8 for Session view (LPP Session button = note 93).
-		sendLppTap(93);
+		sendLppTap(kLppSession);
 
 		omxLeds.setDirty();
 		omxDisp.setDirty();
@@ -127,22 +197,30 @@ namespace midimacro
 
 	void MidiMacroM8V2::onDisabled()
 	{
-		releaseAllKeys();
-		releaseLatchedTracks();
-		momentaryTracks_ = 0;
-		for (uint8_t i = 0; i < kNumKeys; i++)
+		releaseAllHeld();
+
+		// Leaving the macro entirely while in Beat Repeat needs the same plain-Session exit
+		// tap as switching views does (spec section 5c), or the M8 is left in Beat Repeat
+		// with no way back short of finding Shift+Session on the hardware.
+		if (view_ == VIEW_BEAT)
 		{
-			if (ctrlSent_[i] >= 0)
+			if (shiftLatched_)
 			{
-				MM::sendNoteOff((uint8_t)ctrlSent_[i], 0, midiMacroConfig.midiMacroChan);
-				ctrlSent_[i] = -1;
+				sendLpp(kLppShift, false);
+				sendLppTap(kLppSession);
+			}
+			else
+			{
+				sendLppTap(kLppSession);
 			}
 		}
 
 		// Release the Mute/Solo modifiers regardless of which pad mode was active -
 		// harmless if they weren't held.
-		sendLpp(2, false);
-		sendLpp(3, false);
+		sendLpp(kLppMute, false);
+		sendLpp(kLppSolo, false);
+		sendLpp(kLppShift, false);
+		shiftLatched_ = false;
 
 		for (uint8_t i = 0; i < kNumLppNotes; i++)
 		{
@@ -151,8 +229,6 @@ namespace midimacro
 		}
 
 		auxHeld_ = false;
-		trackHeld_ = false;
-		if (recLatched_) { recLatched_ = false; sendLpp(10, false); }
 		omxLeds.setDirty();
 	}
 
@@ -168,6 +244,47 @@ namespace midimacro
 		}
 	}
 
+	void MidiMacroM8V2::releaseControlNotes()
+	{
+		for (uint8_t i = 0; i < kNumKeys; i++)
+		{
+			if (ctrlSent_[i] >= 0)
+			{
+				MM::sendNoteOff((uint8_t)ctrlSent_[i], 0, midiMacroConfig.midiMacroChan);
+				ctrlSent_[i] = -1;
+			}
+		}
+	}
+
+	// Everything the macro can be holding down on the M8 side, released in one place.
+	// Shift is deliberately NOT released here: it is latched for the duration of an AUX
+	// hold and dropped when AUX comes up (see onKeyUpdate), which is also when views switch.
+	void MidiMacroM8V2::releaseAllHeld()
+	{
+		releaseAllKeys();
+		releaseLatchedTracks();
+		releaseMomentaryTracks(); // must run before the modifier release just below
+		releaseControlNotes();
+
+		if (padMode_ == PAD_MUTE)
+			sendLpp(kLppMute, false);
+		else if (padMode_ == PAD_SOLO)
+			sendLpp(kLppSolo, false);
+		padMode_ = PAD_CLIP;
+
+		trackHeld_ = false;
+		if (clipMuteChord_)
+		{
+			clipMuteChord_ = false;
+			sendLpp(kLppMute, false);
+		}
+		if (recLatched_)
+		{
+			recLatched_ = false;
+			sendLpp(kLppRec, false);
+		}
+	}
+
 	bool MidiMacroM8V2::isRingButton(uint8_t n)
 	{
 		if (n >= 11 && n <= 88)
@@ -178,20 +295,75 @@ namespace midimacro
 		return true; // 1-8, 10/20/..90, 91-99, 101-108
 	}
 
-	int8_t MidiMacroM8V2::controlMapNote(uint8_t key)
+	int8_t MidiMacroM8V2::controlMapNote(uint8_t key) const
 	{
+		if (rightHand_)
+		{
+			switch (key)
+			{
+			case 8:  return kCmOption;
+			case 9:  return kCmEdit;
+			case 10: return kCmUp;
+			case 22: return kCmShift;
+			case 23: return kCmPlay;
+			case 24: return kCmLeft;
+			case 25: return kCmDown;
+			case 26: return kCmRight;
+			default: return -1; // key 21 is unassigned in the right-hand layout
+			}
+		}
+
 		switch (key)
 		{
-		case 8:  return 6; // Up
-		case 21: return 4; // Left
-		case 22: return 7; // Down
-		case 23: return 5; // Right
-		case 9:  return 3; // Option
-		case 10: return 2; // Edit
-		case 24: return 1; // Shift
-		case 26: return 0; // Play
-		default: return -1;
+		case 8:  return kCmUp;
+		case 9:  return kCmOption;
+		case 10: return kCmEdit;
+		case 22: return kCmLeft;
+		case 23: return kCmDown;
+		case 24: return kCmRight;
+		case 25: return kCmShift;
+		case 26: return kCmPlay;
+		default: return -1; // key 21 unassigned in the left-hand layout too
 		}
+	}
+
+	// Control view key cluster (spec section 9b). Indexed [rightHand_][Control Map note 0-7],
+	// so HAND just picks a row. 0 = no key (never used - every CM note has a key in both).
+	static const uint8_t kCtrlViewKeys[2][8] = {
+		//  Play Shift Edit Option Left Right Up  Down
+		{     13,   12,   2,     1,  22,   24,  8,   23 }, // HAND = L (arrows right: Left 22, Down 23, Right 24)
+		{     24,   23,  10,     9,  11,   13,  1,   12 }, // HAND = R (arrows left, classic)
+	};
+
+	int8_t MidiMacroM8V2::ctrlViewNote(uint8_t key) const
+	{
+		if (key == 0)
+			return -1;
+		const uint8_t *row = kCtrlViewKeys[rightHand_ ? 1 : 0];
+		for (uint8_t cm = 0; cm < 8; cm++)
+		{
+			if (row[cm] == key)
+				return (int8_t)cm;
+		}
+		return -1;
+	}
+
+	// AUX+13 / AUX+14, identical to the normal OMX AUX layer (omx_mode_midi_keyboard.cpp).
+	void MidiMacroM8V2::changePotBank(bool next)
+	{
+		const int n = NUM_CC_BANKS;
+		int b = potSettings.potbank;
+		b = next ? ((b + 1) % n) : ((b + n - 1) % n);
+		potSettings.potbank = b;
+		potBankAuxTriggerFlash((uint8_t)b);
+		MM::sendControlChange(90, potSettings.potbank, sysSettings.midiChannel);
+		omxDisp.displayMessagef("Pot Bank %d", b + 1);
+	}
+
+	void MidiMacroM8V2::sendControlMapTap(uint8_t cm)
+	{
+		MM::sendNoteOn(cm, 1, midiMacroConfig.midiMacroChan);
+		MM::sendNoteOff(cm, 0, midiMacroConfig.midiMacroChan);
 	}
 
 	void MidiMacroM8V2::sendLpp(uint8_t n, bool on)
@@ -209,10 +381,319 @@ namespace midimacro
 		for (uint8_t i = 0; i < 8; i++)
 		{
 			if (latchedTracks_ & (1 << i))
-				sendLpp((uint8_t)(101 + i), false);
+				sendLpp((uint8_t)(kLppTrack1 + i), false);
 		}
 		latchedTracks_ = 0;
 	}
+
+	// A momentary mute/solo press toggled the M8-side track state on key-down and expects a
+	// re-tap on key-up to undo it (see onKeyUpdate). If we abandon that key mid-press (view
+	// switch, mode change, macro exit) without the re-tap, the track is left muted/soloed on
+	// the M8 forever. Mute/Solo (2/3) must still be held when this runs, so callers do this
+	// before releasing that modifier.
+	void MidiMacroM8V2::releaseMomentaryTracks()
+	{
+		for (uint8_t i = 0; i < 8; i++)
+		{
+			if (momentaryTracks_ & (1 << i))
+				sendLppTap((uint8_t)(kLppTrack1 + i));
+		}
+		momentaryTracks_ = 0;
+	}
+
+	// ------------------------------------------------------------------- Macros
+
+	void MidiMacroM8V2::doWaveformMacro()
+	{
+		// All four Control Map arrows pressed together, exactly as the classic M8 macro.
+		MM::sendNoteOn(kCmUp, 1, midiMacroConfig.midiMacroChan);
+		MM::sendNoteOn(kCmDown, 1, midiMacroConfig.midiMacroChan);
+		MM::sendNoteOn(kCmRight, 1, midiMacroConfig.midiMacroChan);
+		MM::sendNoteOn(kCmLeft, 1, midiMacroConfig.midiMacroChan);
+		delay(40);
+		MM::sendNoteOff(kCmUp, 0, midiMacroConfig.midiMacroChan);
+		MM::sendNoteOff(kCmDown, 0, midiMacroConfig.midiMacroChan);
+		MM::sendNoteOff(kCmRight, 0, midiMacroConfig.midiMacroChan);
+		MM::sendNoteOff(kCmLeft, 0, midiMacroConfig.midiMacroChan);
+
+		omxDisp.displayMessageTimed("WAVEFORM", 5);
+	}
+
+	void MidiMacroM8V2::doGotoMixerMacro()
+	{
+		// Copied verbatim from the legacy MidiMacroM8 page 1 key 3: hold Shift, Up, Left x4,
+		// Down, release Shift. The delays are the legacy ones and are the only blocking
+		// delay()s in this macro.
+		const uint8_t ch = midiMacroConfig.midiMacroChan;
+		MM::sendNoteOn(kCmShift, 1, ch);
+		delay(40);
+		MM::sendNoteOn(kCmUp, 1, ch);
+		delay(20);
+		MM::sendNoteOff(kCmUp, 0, ch);
+		for (uint8_t i = 0; i < 4; i++)
+		{
+			delay(40);
+			MM::sendNoteOn(kCmLeft, 1, ch);
+			delay(20);
+			MM::sendNoteOff(kCmLeft, 0, ch);
+		}
+		delay(40);
+		MM::sendNoteOn(kCmDown, 1, ch);
+		delay(20);
+		MM::sendNoteOff(kCmDown, 0, ch);
+		MM::sendNoteOff(kCmShift, 0, ch);
+
+		omxDisp.displayMessageTimed("GOTO MIXER", 5);
+	}
+
+	void MidiMacroM8V2::doStoreSnapshot()
+	{
+		if (shiftLatched_)
+		{
+			sendLppTap(kLppSShot); // Shift is already down
+		}
+		else
+		{
+			sendLpp(kLppShift, true);
+			sendLppTap(kLppSShot);
+			sendLpp(kLppShift, false);
+		}
+		omxDisp.displayMessageTimed("SNAP STORED", 5);
+	}
+
+	void MidiMacroM8V2::doRecallSnapshot()
+	{
+		sendLppTap(kLppSShot);
+		omxDisp.displayMessageTimed("SNAP RECALL", 5);
+	}
+
+	// Mix view "all" keys. Taps every track whose mirrored T1-T8 LED says it is currently
+	// muted/soloed, with the Mute (2) or Solo (3) modifier held.
+	//
+	// NEEDS HARDWARE VERIFICATION (spec section 4, "Open point"): this relies on the M8
+	// reporting mute/solo state on the track LEDs at all times. The rule used here is
+	// "any track whose cached colour is neither off (0) nor white (3, 'playing')" - if the
+	// M8 reports something else, this is the one place to change.
+	void MidiMacroM8V2::doMixAllTracks(uint8_t modifier)
+	{
+		sendLpp(modifier, true);
+		for (uint8_t i = 0; i < 8; i++)
+		{
+			uint8_t c = ledColor_[kLppTrack1 + i];
+			if (c != 0 && c != 3)
+				sendLppTap((uint8_t)(kLppTrack1 + i));
+		}
+		sendLpp(modifier, false);
+		omxDisp.displayMessageTimed(modifier == kLppMute ? "UNMUTE ALL" : "UNSOLO ALL", 5);
+	}
+
+	// ------------------------------------------------------------------- Views
+
+	uint8_t MidiMacroM8V2::impliedViewButton() const
+	{
+		switch (view_)
+		{
+		case VIEW_NOTE: return kLppNote;
+		case VIEW_SEQ:
+		case VIEW_PHRASE: return kLppSeq;
+		case VIEW_CTRL: return 0; // Control view doesn't care what the M8 shows
+		default: return kLppSession; // Session, Clip, Clip-col, Mix, Beat Repeat all sit on the Session screen
+		}
+	}
+
+	void MidiMacroM8V2::followM8View(uint8_t button, uint8_t prevColor, uint8_t newColor)
+	{
+		if (!enabled_ || prevColor != 0 || newColor == 0)
+			return; // only on a button lighting up from off
+		if (button != kLppSession && button != kLppNote && button != kLppSeq)
+			return;
+		uint8_t implied = impliedViewButton();
+		if (implied == 0 || implied == button)
+			return; // we asked for this view ourselves (or don't care)
+
+		View v = (button == kLppSeq) ? VIEW_SEQ : (button == kLppNote) ? VIEW_NOTE : VIEW_SESSION;
+		if (view_ == VIEW_BEAT && button == kLppSession)
+			return; // Beat Repeat lives on the Session button (lit red); not a view change
+		switchView(v, false); // don't send the button back - the M8 is already there
+		omxDisp.displayMessageTimed(button == kLppSeq ? "M8 > SEQ" : button == kLppNote ? "M8 > NOTE" : "M8 > SESSION", 8);
+	}
+
+	void MidiMacroM8V2::switchView(View v, bool sendButton)
+	{
+		if (v >= VIEW_COUNT || v == view_)
+			return;
+
+		View oldView = view_;
+		releaseAllHeld();
+
+		// Leaving Beat Repeat always drops the M8 back into Session first. This has to be a
+		// PLAIN Session tap - if Shift is still latched (AUX+3, held for the rest of the AUX
+		// hold) it has to be released around the tap, or the M8 sees Shift+Session again and
+		// re-enters Beat Repeat instead of leaving it.
+		bool sentSession = false;
+		if (oldView == VIEW_BEAT)
+		{
+			if (shiftLatched_)
+			{
+				sendLpp(kLppShift, false);
+				sendLppTap(kLppSession);
+				sendLpp(kLppShift, true);
+			}
+			else
+			{
+				sendLppTap(kLppSession);
+			}
+			sentSession = true;
+		}
+
+		view_ = v;
+		row_ = 8;
+
+		const char *msg = "SESSION";
+		switch (v)
+		{
+		case VIEW_SESSION:
+			if (!sentSession && sendButton)
+				sendLppTap(kLppSession);
+			msg = "SESSION";
+			break;
+		case VIEW_CLIP:
+		case VIEW_CLIPCOL:
+			// OMX-side row/column picker over the M8's Session screen, so make sure it is there.
+			if (!sentSession)
+				sendLppTap(kLppSession);
+			msg = (v == VIEW_CLIP) ? "CLIP" : "CLIP COL";
+			break;
+		case VIEW_CTRL:
+			// Pure Control Map view: nothing goes to the Launchpad.
+			msg = "CONTROL";
+			break;
+		case VIEW_MIX:
+			// OMX-side view, but the mute/solo taps only make sense on the M8's Session
+			// screen, so make sure it is there (skip if leaving Beat already sent it).
+			if (!sentSession)
+				sendLppTap(kLppSession);
+			msg = "MIX";
+			break;
+		case VIEW_NOTE:
+			if (sendButton)
+				sendLppTap(kLppNote);
+			msg = "NOTE";
+			break;
+		case VIEW_SEQ:
+			if (sendButton)
+				sendLppTap(kLppSeq);
+			msg = "SEQ";
+			break;
+		case VIEW_PHRASE:
+			sendLppTap(kLppSeq);
+			msg = "PHRASE";
+			break;
+		case VIEW_BEAT:
+			// Shift + Session. Shift may already be latched by AUX+3.
+			if (shiftLatched_)
+			{
+				sendLppTap(kLppSession);
+			}
+			else
+			{
+				sendLpp(kLppShift, true);
+				sendLppTap(kLppSession);
+				sendLpp(kLppShift, false);
+			}
+			msg = "BEAT RPT";
+			break;
+		default:
+			break;
+		}
+
+		omxDisp.displayMessageTimed(msg, 5);
+		omxLeds.setDirty();
+		omxDisp.setDirty();
+	}
+
+	// ---------------------------------------------------------------- Key -> pad
+
+	// NOTE view whites: key 11 + s plays scale step s (0-15) above the base pad, sent as
+	// the pad in the lowest grid row that holds it (spec section 3). K is the M8's row
+	// interval, the NROW setting: 4 by default, 3 if the M8 lays rows out in true 4ths.
+	uint8_t MidiMacroM8V2::notesPadForKey(uint8_t key) const
+	{
+		if (key < 11 || key > 26)
+			return 0;
+		uint8_t s = (uint8_t)(key - 11);
+		uint8_t k = (nrow_ == 0) ? 4 : 3;
+		uint8_t row = (uint8_t)(1 + s / k);
+		uint8_t col = (uint8_t)(1 + s % k);
+		if (row > 8)
+			return 0;
+		return (uint8_t)(row * 10 + col);
+	}
+
+	uint8_t MidiMacroM8V2::beatPadForKey(uint8_t key)
+	{
+		if (key >= 3 && key <= 10)
+			return (uint8_t)(kBeatTrackRow * 10 + (key - 2));   // track row, cols 1-8
+		if (key >= 11 && key <= 18)
+			return (uint8_t)(kBeatRangeRowA * 10 + (key - 10)); // range row A, cols 1-8
+		if (key >= 19 && key <= 26)
+			return (uint8_t)(kBeatRangeRowB * 10 + (key - 18)); // range row B, cols 1-8
+		return 0;
+	}
+
+	uint8_t MidiMacroM8V2::sessionPadForKey(uint8_t key) const
+	{
+		if (key >= 11 && key <= 18)
+		{
+			if (padMode_ != PAD_CLIP)
+				return (uint8_t)(kLppTrack1 + (key - 11)); // track buttons T1-T8
+			return (uint8_t)(row_ * 10 + (key - 10));      // grid cols 1-8 of row_
+		}
+		if (key == 19)
+			return (uint8_t)(row_ * 10 + 9); // row launch / scene
+		return 0;
+	}
+
+	// CLIP whites 11-18: the eight pads of the selected row (spec section 9a).
+	uint8_t MidiMacroM8V2::clipPadForKey(uint8_t key) const
+	{
+		if (key < 11 || key > 18)
+			return 0;
+		if (view_ == VIEW_CLIPCOL)
+			return (uint8_t)((19 - key) * 10 + clipRow_); // column clipRow_, key 11 = row 8 (top) .. 18 = row 1
+		return (uint8_t)(clipRow_ * 10 + (key - 10));
+	}
+
+	// CLIP whites 19-26: the right-column scene buttons for rows 1-8 (19, 29 ... 89).
+	uint8_t MidiMacroM8V2::clipScenePadForKey(uint8_t key)
+	{
+		if (key < 19 || key > 26)
+			return 0;
+		return (uint8_t)((27 - key) * 10 + 9); // key 19 = row 8 (top) .. 26 = row 1
+	}
+
+	uint8_t MidiMacroM8V2::seqNotePadNote(uint8_t key)
+	{
+		if (key >= 3 && key <= 10)
+			return (uint8_t)(key + 8); // LPP row 1 C1-C8 -> 11-18 (keypads)
+		return 0;
+	}
+
+	uint8_t MidiMacroM8V2::seqSlotNote(uint8_t key)
+	{
+		if (key < 11 || key > 26) return 0;
+		uint8_t idx = key - 11;
+		return (uint8_t)((8 - idx / 4) * 10 + (idx % 4) + 1); // cols 1-4
+	}
+
+	uint8_t MidiMacroM8V2::seqPatternNote(uint8_t key)
+	{
+		if (key < 11 || key > 26) return 0;
+		uint8_t idx = key - 11;
+		return (uint8_t)((8 - idx / 4) * 10 + (idx % 4) + 5); // cols 5-8
+	}
+
+	// ------------------------------------------------------------------ Runtime
 
 	void MidiMacroM8V2::loopUpdate()
 	{
@@ -239,7 +720,8 @@ namespace midimacro
 			lastBlinkState_ = blink;
 			lastSlowBlinkState_ = slowBlink;
 
-			bool anyBlinking = (padMode_ == PAD_MUTE && muteLatch_) || (padMode_ == PAD_SOLO && soloLatch_);
+			bool anyBlinking = (padMode_ == PAD_MUTE && muteLatch_) || (padMode_ == PAD_SOLO && soloLatch_) ||
+							   recLatched_ || shiftLatched_;
 			for (uint8_t i = 0; i < kNumLppNotes && !anyBlinking; i++)
 			{
 				if (ledMode_[i] != 0 && ledColor_[i] != 0)
@@ -269,8 +751,10 @@ namespace midimacro
 
 		if (note < kNumLppNotes)
 		{
+			uint8_t prev = ledColor_[note];
 			ledColor_[note] = velocity; // vel 0 == note off
 			ledMode_[note] = channel - 1;
+			followM8View(note, prev, velocity);
 		}
 
 		if (!linked_)
@@ -320,7 +804,9 @@ namespace midimacro
 
 		if (control < kNumLppNotes)
 		{
+			uint8_t prev = ledColor_[control];
 			ledColor_[control] = value;
+			followM8View(control, prev, value);
 			ledMode_[control] = channel - 1;
 
 			if (!linked_)
@@ -337,97 +823,13 @@ namespace midimacro
 
 	// ------------------------------------------------------------------- Keys
 
-	uint8_t MidiMacroM8V2::lppNoteForKey(uint8_t key)
-	{
-		// LPP MK3 programmer numbering: note = row * 10 + col, row 1 = bottom.
-
-		if (view_ == VIEW_NOTE)
-		{
-			// Notes layout: keys 1/2 scroll the M8 keyboard (LPP Down/Up), key 3 is a held
-			// Track modifier (handled in onKeyUpdate), 9 = Edit/Rec, 10 = Play. White keys
-			// 11-26 are the left 4x4 of the keyboard (rows 5-8, cols 1-4), or the track
-			// buttons 101-108 on keys 11-18 while Track is held.
-			switch (key)
-			{
-			case 1: return 70;  // Scroll Down
-			case 2: return 80;  // Scroll Up
-			case 9: return 10;  // Edit / Rec
-			case 10: return 20; // Play
-			default: break;
-			}
-			if (trackHeld_ && key >= 11 && key <= 18)
-				return (uint8_t)(101 + (key - 11));
-			return seqSlotNote(key); // 0 for keys 3-8
-		}
-
-		// Session view. Keys 1/2 nudge the M8 session box (LPP Up 80 / Down 70). The left
-		// keys are pinned to Launchpad row 8 (row_ == 8 in Session).
-		if (key == 1)
-			return 70; // Scroll Down (box)
-		if (key == 2)
-			return 80; // Scroll Up (box)
-
-		if (key >= 11 && key <= 18)
-		{
-			if (padMode_ != PAD_CLIP)
-				return (uint8_t)(101 + (key - 11)); // track buttons T1-T8
-
-			return (uint8_t)(row_ * 10 + (key - 10)); // grid cols 1-8 of row_
-		}
-
-		switch (key)
-		{
-		case 19:
-			return (uint8_t)(row_ * 10 + 9); // row launch / scene
-		case 8:
-			return 80; // Up
-		case 22:
-			return 70; // Down
-		case 21:
-			return 91; // Track <
-		case 23:
-			return 92; // Track >
-		case 10:
-			return 10; // Edit / Rec
-		case 24:
-			return 90; // Shift
-		case 26:
-			return 20; // Play
-		default:
-			return 0; // key 9 (Option) and everything else send nothing
-		}
-	}
-
-	void MidiMacroM8V2::scrollRow(int8_t dir)
-	{
-		// Note view shows row_ and row_+1, so it can't scroll past 7.
-		uint8_t maxRow = (view_ == VIEW_NOTE) ? 7 : 8;
-
-		int8_t newRow = (int8_t)row_ + dir;
-		if (newRow < 1)
-			newRow = 1;
-		if (newRow > (int8_t)maxRow)
-			newRow = (int8_t)maxRow;
-
-		if ((uint8_t)newRow != row_)
-		{
-			row_ = (uint8_t)newRow;
-			omxLeds.setDirty();
-			omxDisp.setDirty();
-		}
-	}
-
 	// Pressing the active MUTE/SOLO key again toggles latch vs momentary; pressing a
 	// different mode key switches modes, releasing/reacquiring the M8-side modifier.
 	//
-	// NOTE (plan section 4b, unverified on hardware): the actual M8/LPP Mute-Solo
-	// semantics (a held modifier + track button vs a toggled mode) are not confirmed.
-	// What we implement here is intentionally simple: entering MUTE/SOLO holds down
-	// Note 2/3 for as long as that mode is active and keys 11-18 send track buttons
-	// 101-108 while held; the latch flag doesn't change that OMX-side behaviour at all
-	// (it's the same Note On/Off either way) - it's only meant to be read on the M8 side,
-	// where latch vs momentary is expected to change how the M8 treats the mute/solo
-	// press. If real hardware disagrees, this is the place to change it.
+	// NOTE (unverified on hardware): the actual M8/LPP Mute-Solo semantics (a held modifier
+	// + track button vs a toggled mode) are not confirmed. What we implement here is
+	// intentionally simple: entering MUTE/SOLO holds down Note 2/3 for as long as that mode
+	// is active and keys 11-18 send track buttons 101-108 while held.
 	void MidiMacroM8V2::setPadMode(PadMode newMode)
 	{
 		if (newMode == padMode_)
@@ -449,18 +851,18 @@ namespace midimacro
 
 		// Leaving MUTE/SOLO releases its modifier and any OMX-side latched tracks.
 		releaseLatchedTracks();
-		momentaryTracks_ = 0;
+		releaseMomentaryTracks(); // must run before the modifier release just below
 		if (padMode_ == PAD_MUTE)
-			sendLpp(2, false);
+			sendLpp(kLppMute, false);
 		else if (padMode_ == PAD_SOLO)
-			sendLpp(3, false);
+			sendLpp(kLppSolo, false);
 
 		padMode_ = newMode;
 
 		if (padMode_ == PAD_MUTE)
-			sendLpp(2, true);
+			sendLpp(kLppMute, true);
 		else if (padMode_ == PAD_SOLO)
-			sendLpp(3, true);
+			sendLpp(kLppSolo, true);
 
 		omxLeds.setDirty();
 		omxDisp.setDirty();
@@ -484,12 +886,29 @@ namespace midimacro
 			if (thisKey == 0)
 			{
 				auxHeld_ = false;
+				if (shiftLatched_)
+				{
+					shiftLatched_ = false;
+					sendLpp(kLppShift, false);
+				}
 				omxLeds.setDirty();
+				omxDisp.setDirty();
 				return;
 			}
 			if (thisKey == 3 && trackHeld_)
 			{
 				trackHeld_ = false;
+				omxLeds.setDirty();
+				omxDisp.setDirty();
+				return;
+			}
+
+			// CLIP mute chord ends as soon as either of keys 1/2 lifts; the other key's
+			// Clear/Duplicate is not re-asserted until it is pressed again.
+			if (clipMuteChord_ && (thisKey == 1 || thisKey == 2))
+			{
+				clipMuteChord_ = false;
+				sendLpp(kLppMute, false);
 				omxLeds.setDirty();
 				omxDisp.setDirty();
 				return;
@@ -510,7 +929,7 @@ namespace midimacro
 				uint8_t bit = (uint8_t)(1 << (thisKey - 11));
 				if (momentaryTracks_ & bit)
 				{
-					sendLppTap((uint8_t)(101 + (thisKey - 11)));
+					sendLppTap((uint8_t)(kLppTrack1 + (thisKey - 11)));
 					momentaryTracks_ &= (uint8_t)~bit;
 					omxLeds.setDirty();
 					return;
@@ -534,86 +953,143 @@ namespace midimacro
 			return;
 		}
 
-		// AUX shortcut layer: keys pressed while AUX is held never send pads.
+		// AUX shortcut layer - identical in every view (spec section 1).
 		if (auxHeld_)
 		{
-			// SEQ: AUX + a white key selects the pattern (right 4x4). Sent as a grid note and
-			// tracked in keyNoteSent_, so the (un-guarded) key-up releases it.
-			if (view_ == VIEW_SEQ && thisKey >= 11 && thisKey <= 26)
-			{
-				uint8_t pnote = seqPatternNote(thisKey);
-				sendLpp(pnote, true);
-				keyNoteSent_[thisKey] = pnote;
-				omxLeds.setDirty();
-				return;
-			}
-
-			// SEQ transport on the AUX layer so all eight keypads stay free:
-			// AUX+9 = Edit/Rec tap (toggle the M8 editing submode), AUX+10 = Play tap,
-			// AUX+8 = latch Record held/released (M8 "hold Rec + keypad" / "hold Rec + Play").
-			if (view_ == VIEW_SEQ && (thisKey == 8 || thisKey == 9 || thisKey == 10))
-			{
-				if (thisKey == 8)
-				{
-					recLatched_ = !recLatched_;
-					sendLpp(10, recLatched_);
-					omxDisp.displayMessageTimed(recLatched_ ? "REC HELD" : "REC OFF", 5);
-				}
-				else if (thisKey == 9)
-				{
-					if (!recLatched_)
-						sendLppTap(10);
-				}
-				else
-					sendLppTap(20);
-				omxLeds.setDirty();
-				omxDisp.setDirty();
-				return;
-			}
-
 			switch (thisKey)
 			{
 			case 1:
-				// Down (tap)
-				sendLppTap(70);
+				sendLppTap(kLppTrackL); // Track < ; with Shift latched this is the M8 Live mode toggle
 				return;
 			case 2:
-				// Up (tap)
-				sendLppTap(80);
+				sendLppTap(kLppTrackR); // Track >
 				return;
 			case 3:
-				sendLppTap(93);
-				if (recLatched_) { recLatched_ = false; sendLpp(10, false); }
-				view_ = VIEW_SESSION;
-				row_ = 8;
-				omxDisp.displayMessageTimed("SESSION", 5);
+				// Shift latched for the rest of the AUX hold (a second press cancels it).
+				shiftLatched_ = !shiftLatched_;
+				sendLpp(kLppShift, shiftLatched_);
 				omxLeds.setDirty();
-				omxDisp.setDirty();
 				return;
 			case 4:
-				sendLppTap(94);
-				if (recLatched_) { recLatched_ = false; sendLpp(10, false); }
-				view_ = VIEW_NOTE;
-				trackHeld_ = false;
-				omxDisp.displayMessageTimed("NOTE", 5);
+				return; // dark, no-op
+			case 5:
+				sendLppTap(kLppProject);
+				return;
+			case 6:
+				doStoreSnapshot();
+				return;
+			case 7:
+				doRecallSnapshot();
+				return;
+			case 8:
+				recLatched_ = !recLatched_;
+				sendLpp(kLppRec, recLatched_);
+				omxDisp.displayMessageTimed(recLatched_ ? "REC HELD" : "REC OFF", 5);
 				omxLeds.setDirty();
 				omxDisp.setDirty();
 				return;
-			case 5:
-				sendLppTap(97);
-				view_ = VIEW_SEQ;
-				omxDisp.displayMessageTimed("SEQ", 5);
+			case 9:
+				if (!recLatched_)
+					sendLppTap(kLppRec);
+				return;
+			case 10:
+				sendLppTap(kLppPlay);
+				return;
+			case 11:
+				sendLppTap(kLppDown);
+				return;
+			case 12:
+				sendLppTap(kLppUp);
+				return;
+			case 13:
+			case 14:
+				changePotBank(thisKey == 14);
 				omxLeds.setDirty();
 				omxDisp.setDirty();
+				return;
+			case 15:
+			case 16:
+			case 17:
+			case 18:
+			case 19:
+			case 20:
+			case 21:
+			case 22:
+			case 23:
+				switchView((View)(thisKey - 15));
+				return;
+			case 26:
+				doWaveformMacro();
 				return;
 			default:
 				return; // consumed, no-op
 			}
 		}
 
-		if (view_ == VIEW_SEQ)
+		// ---------------------------------------------------------- bare key, per view
+
+		if (view_ == VIEW_CTRL)
 		{
-			uint8_t note = (thisKey <= 10) ? seqNotePadNote(thisKey) : seqSlotNote(thisKey);
+			// Pure Control Map cluster on M-CH; every other key is inert.
+			int8_t cm = ctrlViewNote(thisKey);
+			if (cm >= 0)
+			{
+				MM::sendNoteOn((uint8_t)cm, 1, midiMacroConfig.midiMacroChan);
+				ctrlSent_[thisKey] = cm; // key-up releases this stored note, never a recomputed one
+				omxLeds.setDirty();
+			}
+			return;
+		}
+
+		if (isClipView())
+		{
+			// Keys 1/2 = Clear / Duplicate (held). Both together = Mute chord: Clear and
+			// Duplicate are released and Launchpad Mute is held instead, so keys 3-10 become
+			// the track buttons (tap to mute/unmute that track) for as long as both are down.
+			if (thisKey == 1 || thisKey == 2)
+			{
+				uint8_t other = (thisKey == 1) ? 2 : 1;
+				if (keyNoteSent_[other] != 0 && !clipMuteChord_)
+				{
+					sendLpp(keyNoteSent_[other], false);
+					keyNoteSent_[other] = 0;
+					clipMuteChord_ = true;
+					sendLpp(kLppMute, true);
+					omxDisp.displayMessageTimed("MUTE", 5);
+				}
+				else if (!clipMuteChord_)
+				{
+					uint8_t note = (thisKey == 1) ? kLppClear : kLppDup;
+					sendLpp(note, true);
+					keyNoteSent_[thisKey] = note;
+				}
+				omxLeds.setDirty();
+				omxDisp.setDirty();
+				return;
+			}
+
+			if (thisKey >= 3 && thisKey <= 10)
+			{
+				if (clipMuteChord_)
+				{
+					sendLppTap((uint8_t)(kLppTrack1 + (thisKey - 3))); // mute/unmute track 1-8
+					omxLeds.setDirty();
+					return;
+				}
+				// Row mode: key 3 = row 8 (top) .. key 10 = row 1, like the OLED grid.
+				// Column mode: key 3 = column 1 .. key 10 = column 8.
+				clipRow_ = (view_ == VIEW_CLIP) ? (uint8_t)(11 - thisKey) : (uint8_t)(thisKey - 2); // local only, no MIDI
+				omxLeds.setDirty();
+				omxDisp.setDirty();
+				return;
+			}
+
+			uint8_t note = 0;
+			if (thisKey <= 18)
+				note = clipPadForKey(thisKey);
+			else
+				note = clipScenePadForKey(thisKey);
+
 			if (note != 0)
 			{
 				sendLpp(note, true);
@@ -623,29 +1099,74 @@ namespace midimacro
 			return;
 		}
 
-		if (view_ == VIEW_SESSION)
+		if (view_ == VIEW_SEQ || view_ == VIEW_PHRASE)
 		{
-			switch (thisKey)
-			{
-			case 3: setPadMode(PAD_CLIP); return;
-			case 4: setPadMode(PAD_MUTE); return;
-			case 5: setPadMode(PAD_SOLO); return;
-			default: break;
-			}
+			uint8_t note = 0;
+			if (thisKey == 1)
+				note = kLppClear; // Clear held
+			else if (thisKey == 2)
+				note = kLppDup; // Duplicate held
+			else if (thisKey <= 10)
+				note = seqNotePadNote(thisKey);
+			else
+				note = (view_ == VIEW_SEQ) ? seqSlotNote(thisKey) : seqPatternNote(thisKey);
 
-			// Right-hand cluster drives the M8 Control Map on the macro channel (M-CH),
-			// like the pre-Launchpad M8 macro. Fixed per key, so key-up releases cleanly.
-			int8_t cm = controlMapNote(thisKey);
-			if (cm >= 0)
+			if (note != 0)
 			{
-				MM::sendNoteOn((uint8_t)cm, 1, midiMacroConfig.midiMacroChan);
-				ctrlSent_[thisKey] = cm;
+				sendLpp(note, true);
+				keyNoteSent_[thisKey] = note;
+				omxLeds.setDirty();
+			}
+			return;
+		}
+
+		if (view_ == VIEW_BEAT)
+		{
+			uint8_t note = beatPadForKey(thisKey);
+			if (note != 0)
+			{
+				sendLpp(note, true);
+				keyNoteSent_[thisKey] = note;
+				omxLeds.setDirty();
+			}
+			return;
+		}
+
+		if (view_ == VIEW_MIX)
+		{
+			if (thisKey >= 11 && thisKey <= 18)
+			{
+				sendLpp(kLppMute, true);
+				sendLppTap((uint8_t)(kLppTrack1 + (thisKey - 11)));
+				sendLpp(kLppMute, false);
 				omxLeds.setDirty();
 				return;
 			}
-			// Keys 1/2 (box up/down) and 11-19 (row-8 pads / tracks) fall through.
+			if (thisKey >= 19 && thisKey <= 26)
+			{
+				sendLpp(kLppSolo, true);
+				sendLppTap((uint8_t)(kLppTrack1 + (thisKey - 19)));
+				sendLpp(kLppSolo, false);
+				omxLeds.setDirty();
+				return;
+			}
+
+			switch (thisKey)
+			{
+			case 1: doMixAllTracks(kLppMute); break;
+			case 3: doGotoMixerMacro(); break;
+			case 4: doRecallSnapshot(); break;
+			case 5: doStoreSnapshot(); break;
+			case 6: doMixAllTracks(kLppSolo); break;
+			case 9: doWaveformMacro(); break;
+			case 10: sendLppTap(kLppPlay); break;
+			default: break;
+			}
+			omxLeds.setDirty();
+			return;
 		}
-		else // VIEW_NOTE
+
+		if (view_ == VIEW_NOTE)
 		{
 			if (thisKey == 3)
 			{
@@ -654,14 +1175,80 @@ namespace midimacro
 				omxDisp.setDirty();
 				return;
 			}
+
+			uint8_t note = 0;
+			switch (thisKey)
+			{
+			case 1: note = kLppDown; break;
+			case 2: note = kLppUp; break;
+			case 6: note = kLppTrackL; break;
+			case 7: note = kLppTrackR; break;
+			case 9: note = kLppRec; break;
+			case 10: note = kLppPlay; break;
+			default: break;
+			}
+			if (note == 0 && thisKey >= 11 && thisKey <= 26)
+				note = (trackHeld_ && thisKey <= 18) ? (uint8_t)(kLppTrack1 + (thisKey - 11))
+													 : notesPadForKey(thisKey);
+
+			if (note != 0)
+			{
+				sendLpp(note, true);
+				keyNoteSent_[thisKey] = note;
+				omxLeds.setDirty();
+			}
+			return;
 		}
 
-		uint8_t note = lppNoteForKey(thisKey);
+		// VIEW_SESSION
+		switch (thisKey)
+		{
+		case 3: setPadMode(PAD_CLIP); return;
+		case 4: setPadMode(PAD_MUTE); return;
+		case 5: setPadMode(PAD_SOLO); return;
+		case 6: // Clear (held): tap a pad to delete that chain (M8 edit submode)
+			sendLpp(kLppClear, true);
+			keyNoteSent_[thisKey] = kLppClear;
+			omxDisp.displayMessageTimed("CLEAR", 5);
+			omxLeds.setDirty();
+			return;
+		case 7: // Duplicate (held): tap source, tap destination
+			sendLpp(kLppDup, true);
+			keyNoteSent_[thisKey] = kLppDup;
+			omxDisp.displayMessageTimed("DUPLICATE", 5);
+			omxLeds.setDirty();
+			return;
+		default: break;
+		}
+
+		// Nav cluster drives the M8 Control Map on the macro channel (M-CH), like the
+		// pre-Launchpad M8 macro. Fixed per key, so key-up releases cleanly.
+		int8_t cm = controlMapNote(thisKey);
+		if (cm >= 0)
+		{
+			MM::sendNoteOn((uint8_t)cm, 1, midiMacroConfig.midiMacroChan);
+			ctrlSent_[thisKey] = cm;
+			omxLeds.setDirty();
+			return;
+		}
+
+		if (thisKey == 1 || thisKey == 2)
+		{
+			uint8_t note = (thisKey == 1) ? kLppDown : kLppUp;
+			sendLpp(note, true);
+			keyNoteSent_[thisKey] = note;
+			omxLeds.setDirty();
+			return;
+		}
+
+		uint8_t note = sessionPadForKey(thisKey);
+		if (note == 0)
+			return;
 
 		// MUTE/SOLO: keys 11-18 are the M8 track buttons. A tap toggles that track's
 		// mute/solo (the M8 acts on the press and ignores the release). Momentary re-taps
 		// on key-up to undo it; latch leaves it toggled until pressed again.
-		if (view_ == VIEW_SESSION && padMode_ != PAD_CLIP && thisKey >= 11 && thisKey <= 18)
+		if (padMode_ != PAD_CLIP && thisKey >= 11 && thisKey <= 18)
 		{
 			uint8_t bit = (uint8_t)(1 << (thisKey - 11));
 			bool latch = (padMode_ == PAD_MUTE && muteLatch_) || (padMode_ == PAD_SOLO && soloLatch_);
@@ -674,12 +1261,9 @@ namespace midimacro
 			return;
 		}
 
-		if (note != 0)
-		{
-			sendLpp(note, true);
-			keyNoteSent_[thisKey] = note;
-			omxLeds.setDirty();
-		}
+		sendLpp(note, true);
+		keyNoteSent_[thisKey] = note;
+		omxLeds.setDirty();
 	}
 
 	// ------------------------------------------------------------------- LEDs
@@ -716,26 +1300,22 @@ namespace midimacro
 		}
 	}
 
-	uint8_t MidiMacroM8V2::seqNotePadNote(uint8_t key)
+	// AUX key = M8 Live mode (Novation logo, note 99), or red slow-blink while Record is
+	// latched, or plain purple (spec section 5d). Always plain purple while AUX is held so
+	// the shortcut layer always looks the same.
+	void MidiMacroM8V2::drawAuxKey()
 	{
-		if (key == 1) return 70;                   // Scroll Down (keypads)
-		if (key == 2) return 80;                   // Scroll Up
-		if (key >= 3 && key <= 10) return key + 8; // LPP row 1 C1-C8 -> 11-18 (keypads)
-		return 0;                                  // Rec/Play live on the AUX layer in Seq
-	}
-
-	uint8_t MidiMacroM8V2::seqSlotNote(uint8_t key)
-	{
-		if (key < 11 || key > 26) return 0;
-		uint8_t idx = key - 11;
-		return (uint8_t)((8 - idx / 4) * 10 + (idx % 4) + 1); // cols 1-4
-	}
-
-	uint8_t MidiMacroM8V2::seqPatternNote(uint8_t key)
-	{
-		if (key < 11 || key > 26) return 0;
-		uint8_t idx = key - 11;
-		return (uint8_t)((8 - idx / 4) * 10 + (idx % 4) + 5); // cols 5-8
+		if (auxHeld_)
+		{
+			strip.setPixelColor(0, PURPLE);
+			return;
+		}
+		if (recLatched_)
+		{
+			strip.setPixelColor(0, omxLeds.getSlowBlinkState() ? RED : PURPLE);
+			return;
+		}
+		drawPaletteKey(0, kLppLogo, PURPLE);
 	}
 
 	void MidiMacroM8V2::drawLEDs()
@@ -745,37 +1325,53 @@ namespace midimacro
 
 		omxLeds.setAllLEDS(0, 0, 0);
 
-		strip.setPixelColor(0, PURPLE); // AUX, always
+		drawAuxKey();
 
 		if (auxHeld_)
 		{
 			// AUX shortcut overlay - everything else stays dark.
-			strip.setPixelColor(3, view_ == VIEW_SESSION ? CYAN : DKCYAN);
-			strip.setPixelColor(4, view_ == VIEW_NOTE ? LTCYAN : DKCYAN);
-			strip.setPixelColor(5, view_ == VIEW_SEQ ? LTCYAN : DKCYAN);
-			if (view_ == VIEW_SEQ)
+			strip.setPixelColor(1, RED);
+			strip.setPixelColor(2, RED);
+			bool shiftDark = shiftLatched_ && !omxLeds.getBlinkState();
+			strip.setPixelColor(3, shiftDark ? LEDOFF : MAGENTA);
+			strip.setPixelColor(4, LEDOFF); // dark, no-op
+			strip.setPixelColor(5, MAGENTA);
+			strip.setPixelColor(6, MAGENTA);
+			strip.setPixelColor(7, MAGENTA);
+			strip.setPixelColor(8, recLatched_ ? RED : DKRED);
+			strip.setPixelColor(9, RED);
+			strip.setPixelColor(10, ledColor_[kLppPlay] != 0 ? GREEN : WHITE);
+			strip.setPixelColor(11, RED); // LPP Down
+			strip.setPixelColor(12, RED); // LPP Up
+
+			// Pot bank -/+ : same preview / switch-flash treatment as the normal AUX layer.
 			{
-				for (uint8_t k = 11; k <= 26; k++)
-					drawPaletteKey(k, seqPatternNote(k), DKPURPLE);
-				strip.setPixelColor(8, recLatched_ ? RED : DKRED);          // latch Record
-				strip.setPixelColor(9, ledColor_[10] != 0 ? RED : DKRED);   // Edit/Rec tap
-				strip.setPixelColor(10, ledColor_[20] != 0 ? GREEN : WHITE); // Play tap
+				uint32_t fc;
+				bool lit;
+				if (potBankAuxPollFlash(&fc, &lit))
+				{
+					strip.setPixelColor(13, lit ? fc : LEDOFF);
+					strip.setPixelColor(14, lit ? fc : LEDOFF);
+				}
+				else
+				{
+					uint32_t c13;
+					uint32_t c14;
+					potBankAuxPreviewColors((uint8_t)potSettings.potbank, &c13, &c14);
+					strip.setPixelColor(13, c13);
+					strip.setPixelColor(14, c14);
+				}
 			}
-			else
-			{
-				strip.setPixelColor(1, ORANGE);
-				strip.setPixelColor(2, ORANGE);
-			}
+
+			for (uint8_t k = 15; k <= 23; k++)
+				strip.setPixelColor(k, (uint8_t)view_ == (k - 15) ? MAGENTA : DKMAGENTA);
+			strip.setPixelColor(26, YELLOW);
 			return;
 		}
 
-		// Keys 1/2 = LPP Scroll Down/Up in every view (Session recolours them below).
-		strip.setPixelColor(1, INDIGO);
-		strip.setPixelColor(2, INDIGO);
-
 		if (view_ == VIEW_SESSION)
 		{
-			// Keys 1/2 move the M8 session box up/down (not row scroll in Session).
+			// Keys 1/2 move the M8 session box up/down.
 			strip.setPixelColor(1, RBLUE);
 			strip.setPixelColor(2, RBLUE);
 
@@ -786,52 +1382,133 @@ namespace midimacro
 			strip.setPixelColor(3, padMode_ == PAD_CLIP ? MAGENTA : DKMAGENTA);
 			strip.setPixelColor(4, (padMode_ == PAD_MUTE && !muteDark) ? RED : DKRED);
 			strip.setPixelColor(5, (padMode_ == PAD_SOLO && !soloDark) ? YELLOW : DKYELLOW);
+			strip.setPixelColor(6, keyNoteSent_[6] ? WHITE : PURPLE); // Clear (held)
+			strip.setPixelColor(7, keyNoteSent_[7] ? WHITE : PURPLE); // Duplicate (held)
 
-			// Nav cluster
-			strip.setPixelColor(8, INDIGO);	 // Up (Control Map)
-			strip.setPixelColor(21, INDIGO); // Left (Control Map)
-			strip.setPixelColor(22, INDIGO); // Down (Control Map)
-			strip.setPixelColor(23, INDIGO); // Right (Control Map)
-
-			strip.setPixelColor(9, ORANGE);	// Option (Control Map, now functional)
-			strip.setPixelColor(10, RBLUE); // Edit
-			strip.setPixelColor(24, GREEN); // Shift
-			strip.setPixelColor(26, ledColor_[20] != 0 ? GREEN : WHITE); // Play
+			// Nav cluster: colour follows the function, wherever HAND put it.
+			for (uint8_t k = 8; k <= 26; k++)
+			{
+				if (k > 10 && k < 21)
+					continue;
+				int8_t cm = controlMapNote(k);
+				uint32_t c = LEDOFF;
+				switch (cm)
+				{
+				case kCmUp:
+				case kCmDown:
+				case kCmLeft:
+				case kCmRight: c = INDIGO; break;
+				case kCmOption: c = ORANGE; break;
+				case kCmEdit: c = RBLUE; break;
+				case kCmShift: c = GREEN; break;
+				case kCmPlay: c = ledColor_[kLppPlay] != 0 ? GREEN : WHITE; break;
+				default: continue;
+				}
+				strip.setPixelColor(k, c);
+			}
 
 			drawPaletteKey(19, (uint8_t)(row_ * 10 + 9), LOWWHITE); // Row launch / scene
 
 			for (uint8_t k = 11; k <= 18; k++)
 			{
-				// Must mirror lppNoteForKey(): in MUTE/SOLO these keys are the track
-				// buttons 101-108, not the grid row.
-				uint8_t note = (padMode_ != PAD_CLIP)
-								   ? (uint8_t)(101 + (k - 11))
-								   : (uint8_t)(row_ * 10 + (k - 10));
+				uint8_t note = sessionPadForKey(k);
 				drawPaletteKey(k, note, LEDOFF);
 				if (padMode_ != PAD_CLIP && ledColor_[note] == 0 && (latchedTracks_ & (1 << (k - 11))))
 					strip.setPixelColor(k, padMode_ == PAD_MUTE ? RED : YELLOW); // latched, no colour from the M8
 			}
 		}
-		else if (view_ == VIEW_SEQ)
+		else if (isClipView())
 		{
-			// Black keys 3-10 = keypads (LPP row 1); white keys 11-26 = left-4x4 note slots.
+			strip.setPixelColor(1, clipMuteChord_ ? RED : (keyNoteSent_[1] ? WHITE : RED));    // Clear
+			strip.setPixelColor(2, clipMuteChord_ ? RED : (keyNoteSent_[2] ? WHITE : ORANGE)); // Duplicate
+
+			if (clipMuteChord_)
+			{
+				for (uint8_t k = 3; k <= 10; k++) // track buttons: mirror T1-T8 (red = muted)
+					drawPaletteKey(k, (uint8_t)(kLppTrack1 + (k - 3)), DKRED);
+			}
+			else
+			{
+				for (uint8_t k = 3; k <= 10; k++)
+					strip.setPixelColor(k, ((view_ == VIEW_CLIP) ? (uint8_t)(11 - k) : (uint8_t)(k - 2)) == clipRow_ ? WHITE : LOWWHITE);
+			}
+
+			for (uint8_t k = 11; k <= 18; k++)
+				drawPaletteKey(k, clipPadForKey(k), LEDOFF);
+			for (uint8_t k = 19; k <= 26; k++)
+				drawPaletteKey(k, clipScenePadForKey(k), LOWWHITE);
+		}
+		else if (view_ == VIEW_CTRL)
+		{
+			// Only the cluster is lit; everything else stays dark (setAllLEDS above).
+			for (uint8_t k = 1; k < kNumKeys; k++)
+			{
+				int8_t cm = ctrlViewNote(k);
+				uint32_t c;
+				switch (cm)
+				{
+				case kCmUp:
+				case kCmDown:
+				case kCmLeft:
+				case kCmRight: c = INDIGO; break;
+				case kCmOption: c = ORANGE; break;
+				case kCmEdit: c = RBLUE; break;
+				case kCmShift: c = GREEN; break;
+				case kCmPlay: c = ledColor_[kLppPlay] != 0 ? GREEN : WHITE; break;
+				default: continue;
+				}
+				strip.setPixelColor(k, c);
+			}
+		}
+		else if (view_ == VIEW_MIX)
+		{
+			strip.setPixelColor(1, ORANGE);	 // unmute all
+			strip.setPixelColor(3, LIME);	 // goto mixer
+			strip.setPixelColor(4, CYAN);	 // recall snapshot
+			strip.setPixelColor(5, MAGENTA); // store snapshot
+			strip.setPixelColor(6, RED);	 // unsolo all
+			strip.setPixelColor(9, YELLOW);	 // waveform
+			strip.setPixelColor(10, ledColor_[kLppPlay] != 0 ? GREEN : BLUE);
+
+			for (uint8_t k = 11; k <= 18; k++)
+				drawPaletteKey(k, (uint8_t)(kLppTrack1 + (k - 11)), ORANGE);
+			for (uint8_t k = 19; k <= 26; k++)
+				drawPaletteKey(k, (uint8_t)(kLppTrack1 + (k - 19)), RED);
+		}
+		else if (view_ == VIEW_SEQ || view_ == VIEW_PHRASE)
+		{
+			strip.setPixelColor(1, RED);	// Clear (hold)
+			strip.setPixelColor(2, ORANGE); // Duplicate (hold)
 			for (uint8_t k = 3; k <= 10; k++)
 				drawPaletteKey(k, seqNotePadNote(k), DKCYAN);
-			if (recLatched_)
-				strip.setPixelColor(0, omxLeds.getSlowBlinkState() ? RED : PURPLE); // AUX blinks red while Record is latched
 			for (uint8_t k = 11; k <= 26; k++)
-				drawPaletteKey(k, seqSlotNote(k), LOWWHITE);
+				drawPaletteKey(k, view_ == VIEW_SEQ ? seqSlotNote(k) : seqPatternNote(k),
+							   view_ == VIEW_SEQ ? LOWWHITE : DKMAGENTA);
+		}
+		else if (view_ == VIEW_BEAT)
+		{
+			for (uint8_t k = 3; k <= 10; k++)
+				drawPaletteKey(k, beatPadForKey(k), DKBLUE);
+			for (uint8_t k = 11; k <= 18; k++)
+				drawPaletteKey(k, beatPadForKey(k), DKCYAN);
+			for (uint8_t k = 19; k <= 26; k++)
+				drawPaletteKey(k, beatPadForKey(k), DKCYAN);
 		}
 		else // VIEW_NOTE
 		{
-			strip.setPixelColor(3, trackHeld_ ? WHITE : RED);       // Track (hold)
-			strip.setPixelColor(9, ledColor_[10] != 0 ? RED : DKRED); // Edit / Rec
-			strip.setPixelColor(10, ledColor_[20] != 0 ? GREEN : RED); // Play
+			strip.setPixelColor(1, INDIGO);
+			strip.setPixelColor(2, INDIGO);
+			strip.setPixelColor(3, trackHeld_ ? WHITE : RED);			// Track (hold)
+			strip.setPixelColor(6, RBLUE);								// Track <
+			strip.setPixelColor(7, RBLUE);								// Track >
+			strip.setPixelColor(9, ledColor_[kLppRec] != 0 ? RED : DKRED);	// Edit / Rec
+			strip.setPixelColor(10, ledColor_[kLppPlay] != 0 ? GREEN : WHITE);	// Play
 
 			for (uint8_t k = 11; k <= 26; k++)
 			{
-				uint8_t note = (trackHeld_ && k <= 18) ? (uint8_t)(101 + (k - 11)) : seqSlotNote(k);
-				drawPaletteKey(k, note, (trackHeld_ && k <= 18) ? DKRED : LOWWHITE);
+				bool trk = (trackHeld_ && k <= 18);
+				uint8_t note = trk ? (uint8_t)(kLppTrack1 + (k - 11)) : notesPadForKey(k);
+				drawPaletteKey(k, note, trk ? DKRED : LOWWHITE);
 			}
 		}
 	}
@@ -843,29 +1520,28 @@ namespace midimacro
 		int8_t page = params_.getSelPage();
 		int8_t param = params_.getSelParam();
 
-		if (page != M8V2PAGE_LATCH)
-		{
-			// Main page: encoder = LPP Scroll Up/Down, same as keys 2/1.
-			if (enc.dir() != 0)
-				sendLppTap(enc.dir() > 0 ? 80 : 70);
+		if (enc.dir() == 0)
 			return;
-		}
 
-		// Latch page: any turn flips the latch flag for the selected param. See the
-		// comment on setPadMode() - this is the same flag, just editable two ways.
-		if (enc.dir() != 0)
+		if (page == M8V2PAGE_SETTING)
 		{
 			if (param == 0)
+			{
+				releaseControlNotes(); // the cluster moves under the user's fingers
+				rightHand_ = !rightHand_;
+				omxDisp.displayMessageTimed(rightHand_ ? "Hand: Right" : "Hand: Left", 5);
+			}
+			else if (param == 1)
 			{
 				muteLatch_ = !muteLatch_;
 				omxDisp.displayMessageTimed(muteLatch_ ? "Mute: Latch" : "Mute: Moment", 5);
 			}
-			else if (param == 1)
+			else if (param == 2)
 			{
 				soloLatch_ = !soloLatch_;
 				omxDisp.displayMessageTimed(soloLatch_ ? "Solo: Latch" : "Solo: Moment", 5);
 			}
-			else if (param == 2)
+			else if (param == 3)
 			{
 				releaseAllKeys(); // never leave a note held while the message type changes
 				releaseLatchedTracks();
@@ -873,9 +1549,38 @@ namespace midimacro
 				omxDisp.displayMessageTimed(ringAsCC_ ? "Ring: CC" : "Ring: Note", 5);
 			}
 			omxLeds.setDirty();
+			omxDisp.setDirty();
+			return;
 		}
 
-		omxDisp.setDirty();
+		if (page == M8V2PAGE_SETTING2)
+		{
+			if (param == 0)
+			{
+				releaseAllKeys();
+				nrow_ = (uint8_t)(nrow_ ? 0 : 1);
+				omxDisp.displayMessageTimed(nrow_ == 0 ? "Notes: K4" : "Notes: K3", 5);
+				omxLeds.setDirty();
+				omxDisp.setDirty();
+			}
+			return;
+		}
+
+		// Main page. In Clip Launch the encoder picks the row (spec section 9a); everywhere
+		// else it is the LPP scroll, same as AUX+12 / AUX+11.
+		if (isClipView())
+		{
+			int step = (enc.dir() > 0 ? 1 : -1);
+			if (view_ == VIEW_CLIP)
+				step = -step; // rows are listed top-down (8..1), so clockwise = next row down
+			int r = (int)clipRow_ + step;
+			clipRow_ = (uint8_t)constrain(r, 1, 8);
+			omxLeds.setDirty();
+			omxDisp.setDirty();
+			return;
+		}
+
+		sendLppTap(enc.dir() > 0 ? kLppUp : kLppDown);
 	}
 
 	void MidiMacroM8V2::onDisplayUpdate()
@@ -884,32 +1589,125 @@ namespace midimacro
 
 		int8_t page = params_.getSelPage();
 
-		if (page == M8V2PAGE_LATCH)
+		if (page == M8V2PAGE_SETTING)
 		{
-			omxDisp.setLegend(0, "MUTE", !muteLatch_, muteLatch_ ? "LATCH" : "MOMENT");
-			omxDisp.setLegend(1, "SOLO", !soloLatch_, soloLatch_ ? "LATCH" : "MOMENT");
-			omxDisp.setLegend(2, "RING", !ringAsCC_, ringAsCC_ ? "CC" : "NOTE");
+			// Plain text form: L and R are both real values, neither is "OFF".
+			omxDisp.setLegend(0, "HAND", rightHand_ ? "R" : "L");
+			omxDisp.setLegend(1, "MUTE", !muteLatch_, muteLatch_ ? "LATCH" : "MOMENT");
+			omxDisp.setLegend(2, "SOLO", !soloLatch_, soloLatch_ ? "LATCH" : "MOMENT");
+			omxDisp.setLegend(3, "RING", !ringAsCC_, ringAsCC_ ? "CC" : "NOTE");
 			omxDisp.dispGenericMode2(params_.getNumPages(), params_.getSelPage(), params_.getSelParam(), encoderSelect_);
 			return;
 		}
 
-		const char *modeName = "CLIP";
-		if (padMode_ == PAD_MUTE)
-			modeName = "MUTE";
-		else if (padMode_ == PAD_SOLO)
-			modeName = "SOLO";
+		if (page == M8V2PAGE_SETTING2)
+		{
+			omxDisp.setLegend(0, "NROW", nrow_ == 0 ? "K4" : "K3");
+			omxDisp.dispGenericMode2(params_.getNumPages(), params_.getSelPage(), params_.getSelParam(), encoderSelect_);
+			return;
+		}
 
-		if (view_ == VIEW_SEQ)
-			snprintf(dispLabel_, sizeof(dispLabel_), recLatched_ ? "M8 SEQ REC" : "M8 SEQ");
-		else if (view_ == VIEW_NOTE)
-			snprintf(dispLabel_, sizeof(dispLabel_), trackHeld_ ? "M8 NOTE TRK" : "M8 NOTE");
-		else
-			snprintf(dispLabel_, sizeof(dispLabel_), "M8 SESS R%d %s", (int)row_, modeName);
+		switch (view_)
+		{
+		case VIEW_CLIP:
+			snprintf(dispLabel_, sizeof(dispLabel_), "ML CLIP R%d", (int)clipRow_);
+			break;
+		case VIEW_CLIPCOL:
+			snprintf(dispLabel_, sizeof(dispLabel_), "ML CLIP C%d", (int)clipRow_);
+			break;
+		case VIEW_CTRL:
+			snprintf(dispLabel_, sizeof(dispLabel_), "ML CTRL %c", rightHand_ ? 'R' : 'L');
+			break;
+		case VIEW_MIX:
+			snprintf(dispLabel_, sizeof(dispLabel_), "ML MIX");
+			break;
+		case VIEW_NOTE:
+			snprintf(dispLabel_, sizeof(dispLabel_), trackHeld_ ? "ML NOTE TRK" : "ML NOTE");
+			break;
+		case VIEW_SEQ:
+			snprintf(dispLabel_, sizeof(dispLabel_), recLatched_ ? "ML SEQ REC" : "ML SEQ");
+			break;
+		case VIEW_PHRASE:
+			snprintf(dispLabel_, sizeof(dispLabel_), recLatched_ ? "ML PHRS REC" : "ML PHRS");
+			break;
+		case VIEW_BEAT:
+			snprintf(dispLabel_, sizeof(dispLabel_), "ML BEAT");
+			break;
+		default:
+		{
+			const char *modeName = "CLIP";
+			if (padMode_ == PAD_MUTE)
+				modeName = "MUTE";
+			else if (padMode_ == PAD_SOLO)
+				modeName = "SOLO";
+			snprintf(dispLabel_, sizeof(dispLabel_), "ML SESS %c R%d %s",
+					 rightHand_ ? 'R' : 'L', (int)row_, modeName);
+			break;
+		}
+		}
 
 		if (linked_)
 			snprintf(dispStatus_, sizeof(dispStatus_), "LPP LINK");
 		else // sent/received counters help debug a host that never asks or never answers
 			snprintf(dispStatus_, sizeof(dispStatus_), "WAIT S%u R%u", (unsigned)(s_identitySent % 100), (unsigned)(s_inquiryRx % 100));
+
+		// Page 1 of every view: the 8x8 Launchpad grid (design/m8v2/Display/cliplaunch.png). Pads
+		// the current view's keys reach draw 3x3, everything else lit on the M8 draws 2x2.
+		{
+			uint64_t mask = 0;
+			auto add = [&mask](uint8_t pad) {
+				uint8_t r = pad / 10, c = pad % 10;
+				if (r >= 1 && r <= 8 && c >= 1 && c <= 8)
+					mask |= (uint64_t)1 << ((r - 1) * 8 + (c - 1));
+			};
+			for (uint8_t k = 1; k < kNumKeys; k++)
+			{
+				switch (view_)
+				{
+				case VIEW_SESSION: if (k >= 11 && k <= 18) add((uint8_t)(80 + (k - 10))); break;
+				case VIEW_CLIP:
+				case VIEW_CLIPCOL: if (k >= 11 && k <= 18) add(clipPadForKey(k)); break;
+				case VIEW_NOTE: if (k >= 11) add(notesPadForKey(k)); break;
+				case VIEW_SEQ: add(k <= 10 ? seqNotePadNote(k) : seqSlotNote(k)); break;
+				case VIEW_PHRASE: add(k <= 10 ? seqNotePadNote(k) : seqPatternNote(k)); break;
+				case VIEW_BEAT: if (k >= 3) add(beatPadForKey(k)); break;
+				default: break; // MIX, CTRL: nothing in view
+				}
+			}
+
+			char l1[10], l2[10];
+			l2[0] = 0;
+			switch (view_)
+			{
+			case VIEW_SESSION:
+				snprintf(l1, sizeof(l1), "SESS %c", rightHand_ ? 'R' : 'L');
+				snprintf(l2, sizeof(l2), "%s", padMode_ == PAD_MUTE ? "MUTE" : padMode_ == PAD_SOLO ? "SOLO" : "CLIP");
+				break;
+			case VIEW_CLIP:
+			case VIEW_CLIPCOL:
+				snprintf(l1, sizeof(l1), "CLIP %c%d", view_ == VIEW_CLIPCOL ? 'C' : 'R', (int)clipRow_);
+				if (clipMuteChord_) snprintf(l2, sizeof(l2), "MUTE");
+				break;
+			case VIEW_MIX: snprintf(l1, sizeof(l1), "MIX"); break;
+			case VIEW_NOTE:
+				snprintf(l1, sizeof(l1), "NOTE");
+				if (trackHeld_) snprintf(l2, sizeof(l2), "TRACK");
+				break;
+			case VIEW_SEQ:
+				snprintf(l1, sizeof(l1), "SEQ");
+				if (recLatched_) snprintf(l2, sizeof(l2), "REC");
+				break;
+			case VIEW_PHRASE:
+				snprintf(l1, sizeof(l1), "PHRASE");
+				if (recLatched_) snprintf(l2, sizeof(l2), "REC");
+				break;
+			case VIEW_BEAT: snprintf(l1, sizeof(l1), "BEAT RPT"); break;
+			case VIEW_CTRL: snprintf(l1, sizeof(l1), "CTRL %c", rightHand_ ? 'R' : 'L'); break;
+			default: snprintf(l1, sizeof(l1), "ML"); break;
+			}
+			omxDisp.dispLaunchpadGrid(ledColor_, mask, l1, l2[0] ? l2 : nullptr, linked_ ? "LINK" : "WAIT");
+			return;
+		}
 
 		omxDisp.dispGenericModeLabelDoubleLine(dispLabel_, dispStatus_, params_.getNumPages(), params_.getSelPage());
 	}

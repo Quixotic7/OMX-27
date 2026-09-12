@@ -175,19 +175,19 @@
       "state": 1,
       "name": "Seq Mode",
       "export": true,
-      "notes": "",
+      "notes": "Whites = the phrase's 16 note slots (Launchpad top-left 4x4). Rec/Play/record-latch on the AUX layer. Encoder and AUX+1/2 scroll the keypads.",
       "leds": [
         "#7f00ff",
-        "#007fff",
-        "#80ffff",
-        "#007fff",
-        "#007fff",
-        "#007fff",
-        "#007fff",
-        "#007fff",
-        "#007fff",
-        "#007fff",
-        "#007fff",
+        "#ff0000",
+        "#ff8000",
+        "#004c4d",
+        "#004c4d",
+        "#004c4d",
+        "#004c4d",
+        "#004c4d",
+        "#004c4d",
+        "#004c4d",
+        "#004c4d",
         "#ffff00",
         "#ffff00",
         "#ffff00",
@@ -207,33 +207,38 @@
       ],
       "keyNotes": {
         "0": "AUX",
-        "1": "Scroll Down CC70",
-        "2": "Scroll Up CC80",
-        "3": "C1R1",
-        "9": "C1R2",
-        "10": "C2R1",
-        "11": "C1R8",
-        "12": "C2R8",
-        "13": "C3R8",
-        "14": "C4R8",
-        "15": "C1R7",
-        "16": "C2R7",
-        "17": "C3R7",
-        "18": "C4R7",
-        "19": "C1R6",
-        "20": "C2R6",
-        "21": "C3R6",
-        "22": "C4R6",
-        "23": "C1R5",
-        "24": "C2R5",
-        "25": "C3R5",
-        "26": "C4R5"
+        "1": "Clear (hold CC60) + tap a slot to delete",
+        "2": "Duplicate (hold CC50): tap source, tap destination (double-tap = deep clone)",
+        "3": "Keypad C1R1 (note 11)",
+        "4": "Keypad C2R1 (note 12)",
+        "5": "Keypad C3R1 (note 13)",
+        "6": "Keypad C4R1 (note 14)",
+        "7": "Keypad C5R1 (note 15)",
+        "8": "Keypad C6R1 (note 16)",
+        "9": "Keypad C7R1 (note 17)",
+        "10": "Keypad C8R1 (note 18)",
+        "11": "Note slot 1: C1R8 (note 81)",
+        "12": "Note slot 2: C2R8 (note 82)",
+        "13": "Note slot 3: C3R8 (note 83)",
+        "14": "Note slot 4: C4R8 (note 84)",
+        "15": "Note slot 5: C1R7 (note 71)",
+        "16": "Note slot 6: C2R7 (note 72)",
+        "17": "Note slot 7: C3R7 (note 73)",
+        "18": "Note slot 8: C4R7 (note 74)",
+        "19": "Note slot 9: C1R6 (note 61)",
+        "20": "Note slot 10: C2R6 (note 62)",
+        "21": "Note slot 11: C3R6 (note 63)",
+        "22": "Note slot 12: C4R6 (note 64)",
+        "23": "Note slot 13: C1R5 (note 51)",
+        "24": "Note slot 14: C2R5 (note 52)",
+        "25": "Note slot 15: C3R5 (note 53)",
+        "26": "Note slot 16: C4R5 (note 54)"
       },
       "pots": [
         {
           "pot": 1,
           "label": "K1",
-          "note": "",
+          "note": "CC on M-CH",
           "value": null
         },
         {
@@ -262,12 +267,12 @@
         }
       ],
       "encoder": {
-        "note": "",
-        "press": ""
+        "note": "scroll keypads",
+        "press": "toggle param select"
       },
       "screen": {
         "note": "",
-        "text": ""
+        "text": "ML SEQ\nLPP LINK"
       }
     }
   ]

@@ -35,9 +35,15 @@ Request for OMX-27 to transmit current state via sysex. No other payload.
 	//  35 - midiSettings.defaultVelocity
 	//  36 - clockConfig.globalQuantizeStepIndex
 	//  37 - cvNoteUtil.triggerMode
-	// 	38 - actvie pot bank
+	// 	38 - active pot bank
+	//  55 - ML macro settings (bit-packed; 0xFF = defaults)
+	//       bit0: HAND (0=L, 1=R)
+	//       bit1: MUTE (0=momentary, 1=latch)
+	//       bit2: SOLO (0=momentary, 1=latch)
+	//       bit3: RING (0=CC, 1=note)
+	//       bit4-5: NROW (0=K4, 1=K3, for Notes view row interval)
 	
-	//  XX - 63 - Not yet used
+	//  39-54, 56-63 - Not yet used
 
 ```
 Example: 
@@ -124,8 +130,13 @@ The M8 sends and receives Note On/Off on channel 1. OMX key presses are mapped t
 Grid pads:    note = row * 10 + col  (row 1-8, col 1-8; e.g. col 5 of row 3 = 35)
 Row launch:   note = row * 10 + 9    (e.g. row 1 = 19)
 Navigation:   Up 80, Down 70, Left 91, Right 92
-Buttons:      Shift 90, Edit 10, Play 20, Track 1-8 (101-108), Solo 3, Mute 2, SShot 1
+Buttons:      Shift 90, Track< 91, Track> 92, Session 93, Note 94, Seq 97, Project 98, Logo 99
+              Edit 10, Play 20, Mute 2, Solo 3, Track 1-8 (101-108), SShot 1
+Ring buttons: by default as CC (RING parameter = CC); set RING = NOTE to send as notes instead.
+              Grid pads are always notes.
 ```
+
+Button 99 (Launchpad logo) is M8 → OMX only: the M8 lights it while Live mode is active. Sent on CC 99 with velocity for palette index (7-bit, coloured/flashed/pulsed per the Launchpad protocol).
 
 Key 9 (Option) has no Launchpad Pro equivalent and does not send notes.
 

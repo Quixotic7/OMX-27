@@ -13,6 +13,13 @@ midimacro::MidiMacroM8 m8Macro_;     // slot 1 "M8" (classic)
 midimacro::MidiMacroM8V2 m8lpMacro_; // slot 4 "ML" (Launchpad Pro emulation)
 midimacro::MidiMacroDeluge delugeMacro_;
 
+namespace midimacro
+{
+    // Accessor so the .ino (saveHeader/loadHeader) can reach the ML macro's saved settings
+    // byte without knowing where the static instances live.
+    MidiMacroM8V2 &m8lpMacroInstance() { return m8lpMacro_; }
+}
+
 AuxMacroManager::AuxMacroManager()
 {
 }
