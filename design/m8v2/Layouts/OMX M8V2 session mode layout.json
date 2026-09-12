@@ -1,0 +1,368 @@
+{
+  "format": "omx27-led-design",
+  "version": 1,
+  "device": "OMX-27",
+  "name": "Session",
+  "ledCount": 27,
+  "convention": "OMX-27: 27 RGB LED keys addressed by key index 0-26, exactly matching the firmware strip.setPixelColor(index, 0xRRGGBB). key 0 = AUX (top-left). keys 1-10 = the 10 black keys (top row). keys 11-26 = the 16 white keys (bottom row). Each led is a colour \"#RRGGBB\"; \"#000000\" means the LED is off. keyMap lists each key's musical note. Controls (5 pots, the encoder turn/press, and the 128x32 OLED screen) carry text notes per state. Multiple states are alternative pages/modes of the same hardware.",
+  "keyMap": [
+    {
+      "key": 0,
+      "role": "aux",
+      "note": null,
+      "name": "AUX"
+    },
+    {
+      "key": 1,
+      "role": "black",
+      "note": 61,
+      "name": "C#4"
+    },
+    {
+      "key": 2,
+      "role": "black",
+      "note": 63,
+      "name": "D#4"
+    },
+    {
+      "key": 3,
+      "role": "black",
+      "note": 66,
+      "name": "F#4"
+    },
+    {
+      "key": 4,
+      "role": "black",
+      "note": 68,
+      "name": "G#4"
+    },
+    {
+      "key": 5,
+      "role": "black",
+      "note": 70,
+      "name": "A#4"
+    },
+    {
+      "key": 6,
+      "role": "black",
+      "note": 73,
+      "name": "C#5"
+    },
+    {
+      "key": 7,
+      "role": "black",
+      "note": 75,
+      "name": "D#5"
+    },
+    {
+      "key": 8,
+      "role": "black",
+      "note": 78,
+      "name": "F#5"
+    },
+    {
+      "key": 9,
+      "role": "black",
+      "note": 80,
+      "name": "G#5"
+    },
+    {
+      "key": 10,
+      "role": "black",
+      "note": 82,
+      "name": "A#5"
+    },
+    {
+      "key": 11,
+      "role": "white",
+      "note": 59,
+      "name": "B3"
+    },
+    {
+      "key": 12,
+      "role": "white",
+      "note": 60,
+      "name": "C4"
+    },
+    {
+      "key": 13,
+      "role": "white",
+      "note": 62,
+      "name": "D4"
+    },
+    {
+      "key": 14,
+      "role": "white",
+      "note": 64,
+      "name": "E4"
+    },
+    {
+      "key": 15,
+      "role": "white",
+      "note": 65,
+      "name": "F4"
+    },
+    {
+      "key": 16,
+      "role": "white",
+      "note": 67,
+      "name": "G4"
+    },
+    {
+      "key": 17,
+      "role": "white",
+      "note": 69,
+      "name": "A4"
+    },
+    {
+      "key": 18,
+      "role": "white",
+      "note": 71,
+      "name": "B4"
+    },
+    {
+      "key": 19,
+      "role": "white",
+      "note": 72,
+      "name": "C5"
+    },
+    {
+      "key": 20,
+      "role": "white",
+      "note": 74,
+      "name": "D5"
+    },
+    {
+      "key": 21,
+      "role": "white",
+      "note": 76,
+      "name": "E5"
+    },
+    {
+      "key": 22,
+      "role": "white",
+      "note": 77,
+      "name": "F5"
+    },
+    {
+      "key": 23,
+      "role": "white",
+      "note": 79,
+      "name": "G5"
+    },
+    {
+      "key": 24,
+      "role": "white",
+      "note": 81,
+      "name": "A5"
+    },
+    {
+      "key": 25,
+      "role": "white",
+      "note": 83,
+      "name": "B5"
+    },
+    {
+      "key": 26,
+      "role": "white",
+      "note": 84,
+      "name": "C6"
+    }
+  ],
+  "notes": "",
+  "states": [
+    {
+      "state": 1,
+      "name": "Left Hand Keyboard",
+      "export": true,
+      "notes": "",
+      "leds": [
+        "#7f00ff",
+        "#69468c",
+        "#ff00ff",
+        "#ff00ff",
+        "#cc0000",
+        "#cccc00",
+        "#bf80ff",
+        "#bf80ff",
+        "#69468c",
+        "#ffffff",
+        "#007fff",
+        "#ff80d4",
+        "#80ffff",
+        "#ff80d4",
+        "#80ffff",
+        "#80ffff",
+        "#ff80d4",
+        "#ff80d4",
+        "#ff80d4",
+        "#0000ff",
+        "#000000",
+        "#69468c",
+        "#69468c",
+        "#69468c",
+        "#00ff00",
+        "#000000",
+        "#ffffff"
+      ],
+      "keyNotes": {
+        "0": "AUX",
+        "1": "Scroll Down",
+        "2": "Scroll Up",
+        "3": "Clip trigger mode",
+        "4": "Mute mode/click again for toggling latch/momentary",
+        "5": "Solo Mode/Click again for toggling latch/momentary",
+        "6": "Store Snapshot",
+        "7": "Recall Snapshot",
+        "8": "up",
+        "9": "Option",
+        "10": "Edit",
+        "11": "TRK1-Renders top row of LPP",
+        "18": "TRK 8",
+        "19": "Row Launch Button",
+        "21": "left",
+        "22": "down",
+        "23": "right",
+        "24": "Shift",
+        "26": "Play"
+      },
+      "pots": [
+        {
+          "pot": 1,
+          "label": "K1",
+          "note": "",
+          "value": 0
+        },
+        {
+          "pot": 2,
+          "label": "K2",
+          "note": "",
+          "value": 0
+        },
+        {
+          "pot": 3,
+          "label": "K3",
+          "note": "",
+          "value": 0
+        },
+        {
+          "pot": 4,
+          "label": "K4",
+          "note": "",
+          "value": 0
+        },
+        {
+          "pot": 5,
+          "label": "K5",
+          "note": "",
+          "value": 0
+        }
+      ],
+      "encoder": {
+        "note": "",
+        "press": ""
+      },
+      "screen": {
+        "note": "",
+        "text": ""
+      }
+    },
+    {
+      "state": 2,
+      "name": "Right Hand Keyboard",
+      "export": true,
+      "notes": "",
+      "leds": [
+        "#7f00ff",
+        "#69468c",
+        "#ff00ff",
+        "#ff00ff",
+        "#cc0000",
+        "#cccc00",
+        "#bf80ff",
+        "#bf80ff",
+        "#ffffff",
+        "#007fff",
+        "#69468c",
+        "#ff80d4",
+        "#80ffff",
+        "#ff80d4",
+        "#80ffff",
+        "#80ffff",
+        "#ff80d4",
+        "#ff80d4",
+        "#ff80d4",
+        "#0000ff",
+        "#000000",
+        "#000000",
+        "#00ff00",
+        "#ffffff",
+        "#69468c",
+        "#69468c",
+        "#69468c"
+      ],
+      "keyNotes": {
+        "0": "AUX",
+        "1": "Scroll Down",
+        "2": "Scroll Up",
+        "3": "Clip trigger mode",
+        "4": "Mute mode/click again for toggling latch/momentary",
+        "5": "Solo Mode/Click again for toggling latch/momentary",
+        "6": "Store Snapshot",
+        "7": "Recall Snapshot",
+        "8": "Option",
+        "9": "Edit",
+        "10": "Up",
+        "11": "TRK1-Renders top row of LPP",
+        "18": "TRK 8",
+        "19": "Row Launch Button",
+        "21": "left",
+        "22": "Shift",
+        "23": "Play",
+        "24": "Left",
+        "25": "Down",
+        "26": "Right"
+      },
+      "pots": [
+        {
+          "pot": 1,
+          "label": "K1",
+          "note": "",
+          "value": 0
+        },
+        {
+          "pot": 2,
+          "label": "K2",
+          "note": "",
+          "value": 0
+        },
+        {
+          "pot": 3,
+          "label": "K3",
+          "note": "",
+          "value": 0
+        },
+        {
+          "pot": 4,
+          "label": "K4",
+          "note": "",
+          "value": 0
+        },
+        {
+          "pot": 5,
+          "label": "K5",
+          "note": "",
+          "value": 0
+        }
+      ],
+      "encoder": {
+        "note": "",
+        "press": ""
+      },
+      "screen": {
+        "note": "",
+        "text": ""
+      }
+    }
+  ]
+}
