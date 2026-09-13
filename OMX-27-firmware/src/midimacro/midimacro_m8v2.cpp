@@ -100,7 +100,7 @@ namespace midimacro
 
 	MidiMacroM8V2::MidiMacroM8V2()
 	{
-		params_.addPage(1); // Main
+		params_.addPage(2); // Main: p0 = row/scroll, p1 = Clip orientation (row/col)
 		params_.addPage(4); // HAND, MUTE, SOLO, RING
 		params_.addPage(1); // NROW
 		encoderSelect_ = false;
@@ -138,7 +138,7 @@ namespace midimacro
 			v |= 0x04;
 		if (!ringAsCC_)
 			v |= 0x08; // bit3: 0 = CC, 1 = note
-		v |= (uint8_t)((nrow_ & 0x03) << 4);
+		v |= (uint8_t)((nrow_ & 0x07) << 4);
 		return v;
 	}
 
@@ -151,8 +151,8 @@ namespace midimacro
 		muteLatch_ = (v & 0x02) != 0;
 		soloLatch_ = (v & 0x04) != 0;
 		ringAsCC_ = (v & 0x08) == 0;
-		nrow_ = (uint8_t)((v >> 4) & 0x03);
-		if (nrow_ > 1)
+		nrow_ = (uint8_t)((v >> 4) & 0x07); // 0..3 = K3..K6, 4 = AUTO
+		if (nrow_ > 4)
 			nrow_ = 0;
 	}
 
@@ -179,12 +179,16 @@ namespace midimacro
 		view_ = VIEW_SESSION;
 		row_ = 8; // Session pins the left keys to Launchpad row 8; keys 1/2 move the box.
 		clipRow_ = 8; // Clip Launch starts on the top row (not persisted)
+		clipColMode_ = false; // land in row orientation
 		latchedTracks_ = 0;
 		momentaryTracks_ = 0;
 		trackHeld_ = false;
 		recLatched_ = false;
 		for (uint8_t i = 0; i < kNumKeys; i++)
 			ctrlSent_[i] = -1;
+
+		params_.setSelPageAndParam(M8V2PAGE_MAIN, 0); // land on the 8x8 grid page, not a settings page
+		encoderSelect_ = false;
 
 		sendIdentity();
 
@@ -558,11 +562,10 @@ namespace midimacro
 			msg = "SESSION";
 			break;
 		case VIEW_CLIP:
-		case VIEW_CLIPCOL:
 			// OMX-side row/column picker over the M8's Session screen, so make sure it is there.
 			if (!sentSession)
 				sendLppTap(kLppSession);
-			msg = (v == VIEW_CLIP) ? "CLIP" : "CLIP COL";
+			msg = "CLIP";
 			break;
 		case VIEW_CTRL:
 			// Pure Control Map view: nothing goes to the Launchpad.
@@ -617,12 +620,78 @@ namespace midimacro
 	// NOTE view whites: key 11 + s plays scale step s (0-15) above the base pad, sent as
 	// the pad in the lowest grid row that holds it (spec section 3). K is the M8's row
 	// interval, the NROW setting: 4 by default, 3 if the M8 lays rows out in true 4ths.
+	// Infer the Notes-view row interval from the M8's root LEDs. The M8 lights roots on a
+	// lattice: pad(r,c) is scale step (r-1)*K + (c-1); roots are the steps that are multiples of
+	// the scale size N. We try each lit colour as the "root" colour and each K in 3..6, and keep
+	// the (colour, K) whose root pads are a consistent multiple-of-N lattice (5<=N<=12) spanning
+	// at least two rows. Returns the winning K, or 0 when nothing is confident enough.
+	static int m8v2_gcd(int a, int b) { while (b) { int t = a % b; a = b; b = t; } return a; }
+
+	uint8_t MidiMacroM8V2::detectAutoK() const
+	{
+		uint8_t bestK = 0;
+		int bestScore = -1;
+		for (uint8_t ci = 0; ci < 64; ci++)
+		{
+			uint8_t col = ledColor_[(1 + ci / 8) * 10 + (1 + ci % 8)];
+			if (col == 0)
+				continue;
+			bool seen = false; // test each colour once
+			for (uint8_t cj = 0; cj < ci && !seen; cj++)
+				if (ledColor_[(1 + cj / 8) * 10 + (1 + cj % 8)] == col)
+					seen = true;
+			if (seen)
+				continue;
+			for (uint8_t K = 3; K <= 6; K++)
+			{
+				int minStep = 1000, cnt = 0;
+				uint8_t rowsMask = 0;
+				for (uint8_t pj = 0; pj < 64; pj++)
+				{
+					uint8_t r = 1 + pj / 8, c = 1 + pj % 8;
+					if (ledColor_[r * 10 + c] != col)
+						continue;
+					int step = (r - 1) * K + (c - 1);
+					if (step < minStep)
+						minStep = step;
+					rowsMask |= (uint8_t)(1 << (r - 1));
+					cnt++;
+				}
+				if (cnt < 2)
+					continue;
+				uint8_t nrows = 0;
+				for (uint8_t b = 0; b < 8; b++)
+					if (rowsMask & (1 << b))
+						nrows++;
+				if (nrows < 2)
+					continue; // need >=2 rows or K is unconstrained
+				int g = 0;
+				for (uint8_t pj = 0; pj < 64; pj++)
+				{
+					uint8_t r = 1 + pj / 8, c = 1 + pj % 8;
+					if (ledColor_[r * 10 + c] != col)
+						continue;
+					g = m8v2_gcd(g, ((r - 1) * K + (c - 1)) - minStep);
+				}
+				if (g < 5 || g > 12)
+					continue; // not a plausible scale size
+				int score = cnt * 100 + g; // prefer more roots, then a larger scale period
+				if (score > bestScore)
+				{
+					bestScore = score;
+					bestK = K;
+				}
+			}
+		}
+		return bestK;
+	}
+
 	uint8_t MidiMacroM8V2::notesPadForKey(uint8_t key) const
 	{
 		if (key < 11 || key > 26)
 			return 0;
 		uint8_t s = (uint8_t)(key - 11);
-		uint8_t k = (nrow_ == 0) ? 4 : 3;
+		uint8_t k = (nrow_ == 4) ? autoK_ : (uint8_t)(3 + nrow_); // 0..3 = K3..K6, 4 = AUTO
 		uint8_t row = (uint8_t)(1 + s / k);
 		uint8_t col = (uint8_t)(1 + s % k);
 		if (row > 8)
@@ -659,7 +728,7 @@ namespace midimacro
 	{
 		if (key < 11 || key > 18)
 			return 0;
-		if (view_ == VIEW_CLIPCOL)
+		if (clipColMode_)
 			return (uint8_t)((19 - key) * 10 + clipRow_); // column clipRow_, key 11 = row 8 (top) .. 18 = row 1
 		return (uint8_t)(clipRow_ * 10 + (key - 10));
 	}
@@ -731,6 +800,23 @@ namespace midimacro
 			if (anyBlinking)
 				omxLeds.setDirty();
 		}
+
+		// AUTO Notes row interval: watch the M8's root LEDs and lock K to them (throttled).
+		if (view_ == VIEW_NOTE && nrow_ == 4)
+		{
+			uint32_t now = millis();
+			if (now - lastAutoNrowMs_ >= 250)
+			{
+				lastAutoNrowMs_ = now;
+				uint8_t k = detectAutoK();
+				if (k >= 3 && k != autoK_)
+				{
+					autoK_ = k;
+					omxLeds.setDirty();
+					omxDisp.setDirty();
+				}
+			}
+		}
 	}
 
 	void MidiMacroM8V2::onPotChanged(int potIndex, int prevValue, int newValue, int analogDelta)
@@ -755,6 +841,14 @@ namespace midimacro
 			ledColor_[note] = velocity; // vel 0 == note off
 			ledMode_[note] = channel - 1;
 			followM8View(note, prev, velocity);
+			// Live-refresh the OLED 8x8 grid while the M8 repaints (e.g. mid AUX scroll),
+			// not just when AUX is released.
+			if (enabled_ && prev != velocity)
+			{
+				uint8_t c = note % 10;
+				if (note >= 11 && note <= 88 && c >= 1 && c <= 8)
+					omxDisp.setDirty();
+			}
 		}
 
 		if (!linked_)
@@ -808,6 +902,12 @@ namespace midimacro
 			ledColor_[control] = value;
 			followM8View(control, prev, value);
 			ledMode_[control] = channel - 1;
+			if (enabled_ && prev != value)
+			{
+				uint8_t c = control % 10;
+				if (control >= 11 && control <= 88 && c >= 1 && c <= 8)
+					omxDisp.setDirty();
+			}
 
 			if (!linked_)
 			{
@@ -864,6 +964,7 @@ namespace midimacro
 		else if (padMode_ == PAD_SOLO)
 			sendLpp(kLppSolo, true);
 
+		omxDisp.displayMessageTimed(padMode_ == PAD_MUTE ? "MUTE MODE" : padMode_ == PAD_SOLO ? "SOLO MODE" : "CLIP MODE", 5);
 		omxLeds.setDirty();
 		omxDisp.setDirty();
 	}
@@ -900,6 +1001,21 @@ namespace midimacro
 				trackHeld_ = false;
 				omxLeds.setDirty();
 				omxDisp.setDirty();
+				return;
+			}
+
+			// Double-tap a clip pad -> jump to the sequencer, like a real Launchpad. Handled
+			// OMX-side so it does not depend on the M8 echoing the Seq button back.
+			if (e.clicks() >= 2 && thisKey >= 11 && thisKey <= 18 && !clipMuteChord_ &&
+				(view_ == VIEW_CLIP || (view_ == VIEW_SESSION && padMode_ == PAD_CLIP)))
+			{
+				if (keyNoteSent_[thisKey] != 0)
+				{
+					sendLpp(keyNoteSent_[thisKey], false);
+					keyNoteSent_[thisKey] = 0;
+				}
+				switchView(VIEW_SEQ); // sends the Seq button (97); the M8 follows
+				omxDisp.displayMessageTimed("M8 > SEQ", 8);
 				return;
 			}
 
@@ -959,7 +1075,7 @@ namespace midimacro
 			switch (thisKey)
 			{
 			case 1:
-				sendLppTap(kLppTrackL); // Track < ; with Shift latched this is the M8 Live mode toggle
+				sendLppTap(kLppTrackL); // Track < ; with Shift latched this is the M8 Live mode toggle (AUX LED confirms)
 				return;
 			case 2:
 				sendLppTap(kLppTrackR); // Track >
@@ -968,12 +1084,15 @@ namespace midimacro
 				// Shift latched for the rest of the AUX hold (a second press cancels it).
 				shiftLatched_ = !shiftLatched_;
 				sendLpp(kLppShift, shiftLatched_);
+				omxDisp.displayMessageTimed(shiftLatched_ ? "SHIFT ON" : "SHIFT OFF", 5);
 				omxLeds.setDirty();
+				omxDisp.setDirty();
 				return;
 			case 4:
 				return; // dark, no-op
 			case 5:
 				sendLppTap(kLppProject);
+				omxDisp.displayMessageTimed(shiftLatched_ ? "SEL PROJECT" : "PROJECT", 5);
 				return;
 			case 6:
 				doStoreSnapshot();
@@ -991,15 +1110,17 @@ namespace midimacro
 			case 9:
 				if (!recLatched_)
 					sendLppTap(kLppRec);
+				omxDisp.displayMessageTimed("EDIT/REC", 5);
 				return;
 			case 10:
 				sendLppTap(kLppPlay);
+				omxDisp.displayMessageTimed("PLAY", 5);
 				return;
 			case 11:
-				sendLppTap(kLppDown);
+				sendLppTap(kLppDown); // scroll - no message so the 8x8 grid stays visible
 				return;
 			case 12:
-				sendLppTap(kLppUp);
+				sendLppTap(kLppUp); // scroll - no message
 				return;
 			case 13:
 			case 14:
@@ -1015,7 +1136,6 @@ namespace midimacro
 			case 20:
 			case 21:
 			case 22:
-			case 23:
 				switchView((View)(thisKey - 15));
 				return;
 			case 26:
@@ -1062,6 +1182,7 @@ namespace midimacro
 					uint8_t note = (thisKey == 1) ? kLppClear : kLppDup;
 					sendLpp(note, true);
 					keyNoteSent_[thisKey] = note;
+					omxDisp.displayMessageTimed(thisKey == 1 ? "CLEAR" : "DUPLICATE", 5);
 				}
 				omxLeds.setDirty();
 				omxDisp.setDirty();
@@ -1078,7 +1199,7 @@ namespace midimacro
 				}
 				// Row mode: key 3 = row 8 (top) .. key 10 = row 1, like the OLED grid.
 				// Column mode: key 3 = column 1 .. key 10 = column 8.
-				clipRow_ = (view_ == VIEW_CLIP) ? (uint8_t)(11 - thisKey) : (uint8_t)(thisKey - 2); // local only, no MIDI
+				clipRow_ = clipColMode_ ? (uint8_t)(thisKey - 2) : (uint8_t)(11 - thisKey); // local only, no MIDI
 				omxLeds.setDirty();
 				omxDisp.setDirty();
 				return;
@@ -1363,7 +1484,7 @@ namespace midimacro
 				}
 			}
 
-			for (uint8_t k = 15; k <= 23; k++)
+			for (uint8_t k = 15; k <= 22; k++)
 				strip.setPixelColor(k, (uint8_t)view_ == (k - 15) ? MAGENTA : DKMAGENTA);
 			strip.setPixelColor(26, YELLOW);
 			return;
@@ -1430,7 +1551,7 @@ namespace midimacro
 			else
 			{
 				for (uint8_t k = 3; k <= 10; k++)
-					strip.setPixelColor(k, ((view_ == VIEW_CLIP) ? (uint8_t)(11 - k) : (uint8_t)(k - 2)) == clipRow_ ? WHITE : LOWWHITE);
+					strip.setPixelColor(k, (clipColMode_ ? (uint8_t)(k - 2) : (uint8_t)(11 - k)) == clipRow_ ? WHITE : LOWWHITE);
 			}
 
 			for (uint8_t k = 11; k <= 18; k++)
@@ -1558,8 +1679,15 @@ namespace midimacro
 			if (param == 0)
 			{
 				releaseAllKeys();
-				nrow_ = (uint8_t)(nrow_ ? 0 : 1);
-				omxDisp.displayMessageTimed(nrow_ == 0 ? "Notes: K4" : "Notes: K3", 5);
+				nrow_ = (uint8_t)((nrow_ + 1) % 5);
+				if (nrow_ == 4)
+					omxDisp.displayMessageTimed("Notes: AUTO", 5);
+				else
+				{
+					char m[16];
+					snprintf(m, sizeof(m), "Notes: K%d", (int)(3 + nrow_));
+					omxDisp.displayMessageTimed(m, 5);
+				}
 				omxLeds.setDirty();
 				omxDisp.setDirty();
 			}
@@ -1568,10 +1696,19 @@ namespace midimacro
 
 		// Main page. In Clip Launch the encoder picks the row (spec section 9a); everywhere
 		// else it is the LPP scroll, same as AUX+12 / AUX+11.
+		if (isClipView() && param == 1)
+		{
+			// Orientation param (right of the grid): toggle rows <-> columns.
+			clipColMode_ = !clipColMode_;
+			omxDisp.displayMessageTimed(clipColMode_ ? "Clip: Cols" : "Clip: Rows", 5);
+			omxLeds.setDirty();
+			omxDisp.setDirty();
+			return;
+		}
 		if (isClipView())
 		{
 			int step = (enc.dir() > 0 ? 1 : -1);
-			if (view_ == VIEW_CLIP)
+			if (!clipColMode_)
 				step = -step; // rows are listed top-down (8..1), so clockwise = next row down
 			int r = (int)clipRow_ + step;
 			clipRow_ = (uint8_t)constrain(r, 1, 8);
@@ -1593,16 +1730,23 @@ namespace midimacro
 		{
 			// Plain text form: L and R are both real values, neither is "OFF".
 			omxDisp.setLegend(0, "HAND", rightHand_ ? "R" : "L");
-			omxDisp.setLegend(1, "MUTE", !muteLatch_, muteLatch_ ? "LATCH" : "MOMENT");
-			omxDisp.setLegend(2, "SOLO", !soloLatch_, soloLatch_ ? "LATCH" : "MOMENT");
-			omxDisp.setLegend(3, "RING", !ringAsCC_, ringAsCC_ ? "CC" : "NOTE");
+			omxDisp.setLegend(1, "MUTE", muteLatch_ ? "LAT" : "MOM");
+			omxDisp.setLegend(2, "SOLO", soloLatch_ ? "LAT" : "MOM");
+			omxDisp.setLegend(3, "RING", ringAsCC_ ? "CC" : "NOTE");
 			omxDisp.dispGenericMode2(params_.getNumPages(), params_.getSelPage(), params_.getSelParam(), encoderSelect_);
 			return;
 		}
 
 		if (page == M8V2PAGE_SETTING2)
 		{
-			omxDisp.setLegend(0, "NROW", nrow_ == 0 ? "K4" : "K3");
+			{
+				static char nrowVal[6];
+				if (nrow_ == 4)
+					snprintf(nrowVal, sizeof(nrowVal), "A%d", (int)autoK_); // AUTO, showing the locked interval
+				else
+					snprintf(nrowVal, sizeof(nrowVal), "K%d", (int)(3 + nrow_));
+				omxDisp.setLegend(0, "NROW", nrowVal);
+			}
 			omxDisp.dispGenericMode2(params_.getNumPages(), params_.getSelPage(), params_.getSelParam(), encoderSelect_);
 			return;
 		}
@@ -1610,10 +1754,7 @@ namespace midimacro
 		switch (view_)
 		{
 		case VIEW_CLIP:
-			snprintf(dispLabel_, sizeof(dispLabel_), "ML CLIP R%d", (int)clipRow_);
-			break;
-		case VIEW_CLIPCOL:
-			snprintf(dispLabel_, sizeof(dispLabel_), "ML CLIP C%d", (int)clipRow_);
+			snprintf(dispLabel_, sizeof(dispLabel_), "ML CLIP %c%d", clipColMode_ ? 'C' : 'R', (int)clipRow_);
 			break;
 		case VIEW_CTRL:
 			snprintf(dispLabel_, sizeof(dispLabel_), "ML CTRL %c", rightHand_ ? 'R' : 'L');
@@ -1665,8 +1806,7 @@ namespace midimacro
 				switch (view_)
 				{
 				case VIEW_SESSION: if (k >= 11 && k <= 18) add((uint8_t)(80 + (k - 10))); break;
-				case VIEW_CLIP:
-				case VIEW_CLIPCOL: if (k >= 11 && k <= 18) add(clipPadForKey(k)); break;
+				case VIEW_CLIP: if (k >= 11 && k <= 18) add(clipPadForKey(k)); break;
 				case VIEW_NOTE: if (k >= 11) add(notesPadForKey(k)); break;
 				case VIEW_SEQ: add(k <= 10 ? seqNotePadNote(k) : seqSlotNote(k)); break;
 				case VIEW_PHRASE: add(k <= 10 ? seqNotePadNote(k) : seqPatternNote(k)); break;
@@ -1684,8 +1824,7 @@ namespace midimacro
 				snprintf(l2, sizeof(l2), "%s", padMode_ == PAD_MUTE ? "MUTE" : padMode_ == PAD_SOLO ? "SOLO" : "CLIP");
 				break;
 			case VIEW_CLIP:
-			case VIEW_CLIPCOL:
-				snprintf(l1, sizeof(l1), "CLIP %c%d", view_ == VIEW_CLIPCOL ? 'C' : 'R', (int)clipRow_);
+				snprintf(l1, sizeof(l1), "CLIP");
 				if (clipMuteChord_) snprintf(l2, sizeof(l2), "MUTE");
 				break;
 			case VIEW_MIX: snprintf(l1, sizeof(l1), "MIX"); break;
@@ -1705,7 +1844,15 @@ namespace midimacro
 			case VIEW_CTRL: snprintf(l1, sizeof(l1), "CTRL %c", rightHand_ ? 'R' : 'L'); break;
 			default: snprintf(l1, sizeof(l1), "ML"); break;
 			}
-			omxDisp.dispLaunchpadGrid(ledColor_, mask, l1, l2[0] ? l2 : nullptr, linked_ ? "LINK" : "WAIT");
+			const char *rlabel = nullptr, *rvalue = nullptr;
+			bool rsel = false;
+			if (view_ == VIEW_CLIP)
+			{
+				rlabel = "ORIENT";
+				rvalue = clipColMode_ ? "COL" : "ROW";
+				rsel = (page == M8V2PAGE_MAIN && params_.getSelParam() == 1);
+			}
+			omxDisp.dispLaunchpadGrid(ledColor_, mask, l1, l2[0] ? l2 : nullptr, linked_ ? "LINK" : "WAIT", rlabel, rvalue, rsel);
 			return;
 		}
 

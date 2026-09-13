@@ -12,6 +12,10 @@ The ML macro turns the OMX-27 into a Launchpad Pro for the Dirtywave M8, so the 
 
 The screen shows `WAIT S<n> R<n>` until the M8 answers (S = identity replies sent, R = inquiries received), then `LPP LINK`. Once linked, the M8 paints the OMX keys with its own colours.
 
+**Terminology.** *LPP* = a Launchpad Pro button or pad (what the OMX pretends to be, sent on channel 1). *M8 Key* = one of the M8's own physical buttons (Play, Shift, Edit, Option, arrows), driven over the M8 Control Map on `M-CH`. These are two different Shifts: the **LPP Shift** (AUX+3) is the Launchpad modifier; the **M8 Key Shift** in the Session and Control nav clusters presses the M8's own Shift button.
+
+**Messages.** Most shortcuts flash a short confirmation on the OLED (for example `SHIFT ON`, `PROJECT`, `MUTE MODE`, `CLEAR`, `Clip: Cols`) so a two-finger combo tells you what it did. The scroll keys (AUX+1/2 Left/Right, AUX+11/12 Down/Up) stay silent so the 8x8 grid remains visible while you scroll; Live mode is shown by the AUX LED instead.
+
 ## Views
 
 Hold **AUX** and press a key from the AUX layer (below) to switch views. The same command switches the M8's own Launchpad view. Mix is an OMX-side view (the M8 stays on its Session screen; the OMX sends Session when you enter Mix). Control is pure M8 Control Map on the M-CH channel (nothing to the Launchpad).
@@ -19,14 +23,13 @@ Hold **AUX** and press a key from the AUX layer (below) to switch views. The sam
 | AUX + key | View | Purpose |
 |---|---|---|
 | 15 | Session | Clip launch (left/right-hand layout selectable via HAND param) |
-| 16 | Clip Launch | Direct row selection: pick a Launchpad row (1-8) and launch clips |
+| 16 | Clip Launch | Launch clips a row or a column at a time (orientation is a page-1 param) |
 | 17 | Mix | Track mute/solo overview without leaving M8 Session |
 | 18 | Notes | Keyboard: 16 consecutive scale notes, Track select, Edit/Play |
 | 19 | Seq | Sequencer: keypads + phrase slots, Clear/Duplicate |
 | 20 | Phrase | Sequencer phrase selector: 16 phrase slots (like Seq phrase panel) |
 | 21 | Beat Repeat | Beat loop: **M8 must be playing** (hold pads to loop a range) |
 | 22 | Control | M8 Control Map (arrows, Option, Edit, Shift, Play): two-handed layout |
-| 23 | Clip Launch (columns) | Same as Clip Launch, but keys 3-10 pick a track column and 11-18 are that column's clips |
 
 ## AUX layer (hold AUX) — global, every view
 
@@ -35,7 +38,7 @@ The AUX layer is identical in all views. Tap keys while AUX is held:
 | Key | Function |
 |---|---|
 | 1 / 2 | **Launchpad Left / Right** (Track <>) — with Shift latched (AUX+3), AUX+1 toggles Live mode |
-| 3 | **Shift latch:** hold AUX, press 3; Shift latches until AUX is released. Enables combos like Shift+Session (beat repeat) or Shift+Left (live mode). Key 3 blinks magenta while latched. |
+| 3 | **LPP Shift latch:** hold AUX, press 3; the Launchpad Shift latches until AUX is released. Enables combos like Shift+Session (beat repeat) or Shift+Left (live mode). Key 3 blinks magenta while latched. |
 | 4 | — (dark) |
 | 5 | **Launchpad Project view** — with Shift latched, selects a project |
 | 6 | **Store snapshot:** hold AUX, press 6 to save the M8's current state |
@@ -45,11 +48,13 @@ The AUX layer is identical in all views. Tap keys while AUX is held:
 | 10 | **Play** — global control |
 | 11 / 12 | **Launchpad Down / Up** (octave-like, move notes a row) |
 | 13 / 14 | **Pot bank − / +** (cycle through pot banks, same as normal OMX AUX layer) |
-| 15-23 | **View selection:** Session, Clip Launch, Mix, Notes, Seq, Phrase, Beat Repeat, Control, Clip Launch by column |
+| 15-22 | **View selection:** Session, Clip Launch, Mix, Notes, Seq, Phrase, Beat Repeat, Control (key 23 unused) |
 | 26 | **Waveform display** — Control Map macro (Up+Down+Left+Right) |
 | 23-25 | — (dark) |
 
 **LED colours:** 15-22 magenta (bright = current view); 11-14 red; 26 yellow; 1/2 red; 3 magenta (blinks when Shift latched); 5/6/7 magenta; 9 red; 10 white/green (green when M8 reports Play lit); 8 dark red (bright red when Record latched).
+
+On page 1 (the 8x8 grid) the grid redraws live as you scroll with AUX+1/2/11/12, so you can watch the M8's view move while holding AUX.
 
 ### Session view (AUX + 15) — left / right hand
 
@@ -105,19 +110,17 @@ Shows any Launchpad row directly. The black keys select the row (1-8), the white
 | 1 | **Clear**: hold, then tap a pad to delete that chain |
 | 2 | **Duplicate**: hold, tap the source pad, tap the destination |
 | 1 + 2 | **Mute chord**: hold both and keys 3-10 mute or unmute tracks 1-8 (red = muted) |
-| 3-10 | **Select Launchpad row 1-8** (key 3 = row 1 bottom, key 10 = row 8 top; selected row key is white); track mute buttons while the chord is held |
+| 3-10 | **Select Launchpad row** (key 3 = row 8 top, key 10 = row 1 bottom, matching the OLED grid; selected row key is white); track mute buttons while the chord is held |
 | 11-18 | The eight pads of the selected row (tracks 1-8) |
-| 19-26 | **Row launch for rows 1-8** (the Launchpad's right column; key 19 = row 1, key 26 = row 8) |
+| 19-26 | **Row launch** (the Launchpad's right column; key 19 = row 8 top, key 26 = row 1 bottom) |
 
-**Encoder:** turn to select row (same as keys 3-10); no MIDI output. Scrolling the M8's session box is AUX + 11/12.
+**Encoder:** turn to select the row/column (same as keys 3-10); no MIDI output. Scrolling the M8's session box is AUX + 11/12.
 
-**Column variant (AUX + 23):** the same view turned sideways. Keys 3-10 select a track column 1-8, keys 11-18 are that column's eight clips (key 11 = bottom row 1, key 18 = top row 8, matching the row-launch keys), and everything else, including Clear, Duplicate, the mute chord and the row-launch keys, behaves the same. Status `ML CLIP C<n>`.
+**Orientation (rows vs columns):** Clip Launch is one view; a page-1 encoder parameter on the right of the 8x8 grid switches between rows and columns. Click the encoder to select the `ORIENT` field, click again to edit, turn to toggle `ROW`/`COL` (a `Clip: Rows` / `Clip: Cols` message confirms). In **columns**, keys 3-10 select a track column 1-8, keys 11-18 are that column's eight clips (key 11 = row 8 top, key 18 = row 1), and Clear, Duplicate, the mute chord and the row-launch keys all behave the same. Status `ML CLIP C<n>`; rows show `ML CLIP R<n>`.
 
 **LED colours:** 11-18 mirror the selected row's pads; 19-26 mirror the scene buttons (the M8 lights the playing row's scene); 3-10 are LOWWHITE with the selected row WHITE. In edit mode (Rec on), the blue cursor pad shows wherever it is in the M8 grid.
 
 Mute/solo modes stay in Session view; Clip Launch is launching only. AUX layer (snapshots, Rec, Play, waveform) works as everywhere.
-
-**Status line:** `ML CLIP R<n>` (e.g., `ML CLIP R5` = row 5 selected).
 
 ### Notes view (AUX + 18) — keyboard
 
@@ -133,7 +136,7 @@ The M8 keyboard view. Every pad plays an in-scale note for the current track.
 
 **The 16-note keyboard:** the M8's keyboard view is a 2D grid with root notes repeated every column. The OMX maps keys 11-26 as 16 consecutive scale steps (middle row first, then up by column bands). This makes the layout simpler: key 11 = base note, key 12 = base + 1, …, key 26 = base + 15. The M8 lights roots and pads; the OMX mirrors them.
 
-**Row interval:** the **NROW** parameter (page 3) is `K=4` by default (the M8's standard 4th interval). If your scale or M8 version uses `K=3` (thirds), change NROW to see roots every 7 keys instead. Verify on the M8 by checking that roots pulse at regular intervals.
+**Row interval (NROW):** the M8's Notes grid puts each row up a perfect fourth (5 semitones), so the number of *scale steps* per row depends on the M8's scale. Leave **NROW** on **AUTO** (recommended) and the macro reads the M8's root LEDs and locks the spacing on its own — K5 for Chromatic, K3 for a 7-note scale, and so on. The AUTO legend shows the locked value (e.g. `A5`). If you prefer to pin it, K3-K6 are selectable: K5 for Chromatic, K3 for major/minor. With the right value keys 11-26 climb the scale with no gaps and the roots line up.
 
 Hold key 3 (Track) to jump between tracks; hold key 9 (Edit/Rec) and tap key 10 (Play) to live-record into the current phrase.
 
@@ -188,7 +191,7 @@ The M8's beat-repeat mode (hidden under Shift + Session on the Launchpad). **The
 
 | Key | Function |
 |---|---|
-| 3-10 | Track select (1-8): the M8 lights these blue when beat repeat is active |
+| 3-10 | Track select (1-8), Launchpad row 1 (bottom) |
 | 11-18 | Range pads, first range row |
 | 19-26 | Range pads, second range row |
 
@@ -232,7 +235,7 @@ The AUX layer (snapshots, Rec, Play, waveform, view selection) works as everywhe
 
 ## Following the M8
 
-Double-tap a clip pad in Session or either Clip Launch view and the M8 jumps to its sequencer, exactly like a real Launchpad. The OMX notices the M8 lighting the Seq button and switches to Seq view by itself, showing `M8 > SEQ`. The same happens for Note and Session when the M8 changes view on its own.
+Double-tap a clip pad in Session or Clip Launch view and the OMX switches to Seq view itself and sends the Seq button so the M8 follows, showing `M8 > SEQ`. It no longer waits for the M8 to echo the Seq button back. The OMX also follows when the M8 changes to Note or Session on its own.
 
 ## Parameters (encoder)
 
@@ -245,15 +248,15 @@ Click the encoder to toggle between select and edit; turn to change.
 | Param | Setting | Meaning |
 |---|---|---|
 | `HAND` | L / R | Left-hand or right-hand navigation layout (Session view). Default L. Saved. |
-| `MUTE` | M / L | Momentary or latch mute toggle. Default M. Saved. |
-| `SOLO` | M / L | Momentary or latch solo toggle. Default M. Saved. |
+| `MUTE` | MOM / LAT | Momentary or latch mute toggle (shown `MOM`/`LAT`). Default **LAT**. Saved. |
+| `SOLO` | MOM / LAT | Momentary or latch solo toggle (shown `MOM`/`LAT`). Default **LAT**. Saved. |
 | `RING` | CC / NOTE | Send ring buttons as CC (default, like a real Launchpad) or as notes. Change only if a button stops responding. Saved. |
 
 **Page 3:**
 
 | Param | Setting | Meaning |
 |---|---|---|
-| `NROW` | K4 / K3 | Notes view row interval: K=4 (default, standard M8 fourths) or K=3 (thirds). Verify on the M8 by checking root-note spacing. Saved. |
+| `NROW` | AUTO / K3 / K4 / K5 / K6 | Notes view row interval. **AUTO** detects it from the M8's root LEDs (legend shows the locked value, e.g. `A5`). Or pin it: K5 = Chromatic, K3 = 7-note scales. Default K3. Saved. |
 
 All settings survive power cycles and are saved with CONFIG mode Save.
 

@@ -1531,7 +1531,8 @@ void OmxDisp::dispGenericModeLabelDoubleLine(const char *label1, const char *lab
 	}
 }
 
-void OmxDisp::dispLaunchpadGrid(const uint8_t *lppLeds, uint64_t inView, const char *l1, const char *l2, const char *l3)
+void OmxDisp::dispLaunchpadGrid(const uint8_t *lppLeds, uint64_t inView, const char *l1, const char *l2, const char *l3,
+								const char *rlabel, const char *rvalue, bool rsel)
 {
 	if (isMessageActive())
 	{
@@ -1567,6 +1568,29 @@ void OmxDisp::dispLaunchpadGrid(const uint8_t *lppLeds, uint64_t inView, const c
 	if (l1) u8g2leftText(l1, 0, 7, 46, 10);
 	if (l2) u8g2leftText(l2, 0, 18, 46, 10);
 	if (l3) u8g2leftText(l3, 0, 29, 46, 10);
+
+	// Optional right-side field (e.g. Clip orientation). Grid ends at x=80; use x>=84.
+	if (rlabel || rvalue)
+	{
+		if (rlabel) u8g2leftText(rlabel, 84, 7, 44, 10);
+		if (rvalue)
+		{
+			if (rsel)
+			{
+				display.fillRect(84, 14, 40, 12, WHITE);
+				u8g2_display.setForegroundColor(BLACK);
+				u8g2_display.setBackgroundColor(WHITE);
+				u8g2centerText(rvalue, 84, 21, 40, 10);
+				u8g2_display.setForegroundColor(WHITE);
+				u8g2_display.setBackgroundColor(BLACK);
+			}
+			else
+			{
+				display.drawRect(84, 14, 40, 12, WHITE);
+				u8g2centerText(rvalue, 84, 21, 40, 10);
+			}
+		}
+	}
 }
 
 void OmxDisp::dispGenericModeLabelSmallText(const char *label, uint8_t numPages, int8_t selectedPage)

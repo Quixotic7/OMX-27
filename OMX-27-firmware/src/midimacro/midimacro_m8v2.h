@@ -19,10 +19,9 @@ namespace midimacro
 		// Order matters: the AUX layer maps keys 15-22 to these in order (spec v3 sections 1 / 9c).
 		enum View : uint8_t
 		{
-			// Order = AUX layer keys 15..23.
+			// Order = AUX layer keys 15..22.
 			VIEW_SESSION,
 			VIEW_CLIP,
-			VIEW_CLIPCOL, // Clip Launch by column
 			VIEW_MIX,
 			VIEW_NOTE,
 			VIEW_SEQ,
@@ -81,9 +80,9 @@ namespace midimacro
 		// M8 docs say "line 8" = tracks, "lines 6/7" = range. If the docs actually count from
 		// the top these become 1, 3, 2 - the track row lights BLUE on the M8, so that settles
 		// it on hardware. One place to flip.
-		static const uint8_t kBeatTrackRow = 8;
-		static const uint8_t kBeatRangeRowA = 6;
-		static const uint8_t kBeatRangeRowB = 7;
+		static const uint8_t kBeatTrackRow = 1; // M8 doc: track toggles on Launchpad row 1 (bottom)
+		static const uint8_t kBeatRangeRowA = 3; // first loop-selection row (row 3)
+		static const uint8_t kBeatRangeRowB = 2; // second loop-selection row (row 2)
 
 		void sendIdentity();
 		void releaseAllKeys();
@@ -117,13 +116,14 @@ namespace midimacro
 		void doMixAllTracks(uint8_t modifier); // unmute-all / unsolo-all
 
 		uint8_t notesPadForKey(uint8_t key) const;  // NOTE whites -> 16 consecutive scale steps
+		uint8_t detectAutoK() const;                // infer NOTE row interval from the M8 root LEDs (0 = unsure)
 		static uint8_t beatPadForKey(uint8_t key);  // BEAT keys 3-26 -> track / range rows
 		static uint8_t seqNotePadNote(uint8_t key); // SEQ/PHRASE black keys 3-10 -> pads 11-18
 		static uint8_t seqSlotNote(uint8_t key);    // SEQ whites -> left 4x4 note slots
 		static uint8_t seqPatternNote(uint8_t key); // PHRASE whites -> right 4x4 phrase slots
 		uint8_t sessionPadForKey(uint8_t key) const; // SESSION 11-19 pads / track buttons
-		uint8_t clipPadForKey(uint8_t key) const;    // CLIP 11-18 -> pads of clipRow_ (row) / clipRow_ as column in CLIPCOL
-		bool isClipView() const { return view_ == VIEW_CLIP || view_ == VIEW_CLIPCOL; }
+		uint8_t clipPadForKey(uint8_t key) const;    // CLIP 11-18 -> pads of clipRow_ (row) / clipRow_ as column when clipColMode_
+		bool isClipView() const { return view_ == VIEW_CLIP; }
 
 		// The M8 lights the Launchpad view button (Session 93 / Note 94 / Seq 97) of the view it
 		// is showing. When one lights up that our current view does not imply (e.g. the M8
@@ -140,18 +140,21 @@ namespace midimacro
 
 		View view_ = VIEW_SESSION;
 		PadMode padMode_ = PAD_CLIP;
-		bool muteLatch_ = false;
-		bool soloLatch_ = false;
+		bool muteLatch_ = true;   // default LATCH (a tap toggles and stays); Moment is opt-in
+		bool soloLatch_ = true;   // default LATCH; Moment is opt-in
 		bool ringAsCC_ = true;        // ring buttons as CC (LPP MK3 programmer mode) or notes
 		bool rightHand_ = false;      // HAND setting: false = L, true = R
-		uint8_t nrow_ = 0;            // NROW setting: 0 = K4, 1 = K3 (Notes row interval)
+		uint8_t nrow_ = 0;            // NROW: 0..3 = K3..K6, 4 = AUTO (detect from M8 root LEDs)
+		uint8_t autoK_ = 5;           // AUTO mode: last detected row interval (fallback 5 = chromatic)
+		uint32_t lastAutoNrowMs_ = 0; // throttle for autodetect
 		uint8_t latchedTracks_ = 0;   // bit i = track 101+i toggled on by the latch (LED memory)
 		uint8_t momentaryTracks_ = 0; // bit i = track 101+i toggled by a still-held momentary press
 		bool trackHeld_ = false;      // Note view: key 3 held -> white keys 11-18 are track buttons
 		bool recLatched_ = false;     // AUX+8 latches LPP Record held (for Rec+keypad / Rec+Play combos)
 		bool shiftLatched_ = false;   // AUX+3 latches LPP Shift for the duration of the AUX hold
 		uint8_t row_ = 8; // 1..8, which grid row Session keys 11-18 show
-		uint8_t clipRow_ = 8; // 1..8, Clip Launch selected row (not persisted)
+		uint8_t clipRow_ = 8; // 1..8, Clip Launch selected row / column (not persisted)
+		bool clipColMode_ = false; // Clip Launch orientation: false = rows, true = columns (page-1 param)
 		bool clipMuteChord_ = false; // CLIP: keys 1+2 held together -> Launchpad Mute held, keys 3-10 = track buttons
 
 		bool linked_ = false;

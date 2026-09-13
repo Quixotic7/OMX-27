@@ -5,8 +5,10 @@ Reviewed 2026-09-11 against `OMX M8V2 aux mode layout.json`, `OMX M8V2 session m
 plus the Notes-mode text spec. **All layout JSONs in the reference folder were regenerated on
 2026-09-11 to match this document** (aux, session L/R, notes, seq, plus new mix, phrase, beat repeat).
 
-Legend: `LPP n` = Launchpad button n on ch 1 (ring as CC, pads as notes). `CM n` = M8 Control
-Map note n on M-CH. Verdicts: ✅ as designed · 🔁 changed, reason given · ❓ needs a decision.
+Legend: `LPP n` = Launchpad button n on ch 1 (ring as CC, pads as notes), i.e. what the OMX
+emulates. `CM n` = *M8 Key* n, an M8 physical button driven over the M8 Control Map on M-CH.
+Note the two Shifts: LPP Shift (AUX+3, the Launchpad modifier) vs M8 Key Shift (nav clusters).
+Verdicts: ✅ as designed · 🔁 changed, reason given · ❓ needs a decision.
 
 ---
 
@@ -26,17 +28,16 @@ Map note n on M-CH. Verdicts: ✅ as designed · 🔁 changed, reason given · �
 | 11 / 12 | Launchpad Down / Up | LPP 70 / 80 tap | 🔁 2026-09-12: moved here because on the M8 they move the notes a row, octave-like, matching the OMX AUX octave keys |
 | 13 / 14 | Pot bank − / + | local: `potSettings.potbank` wraps, flash as the normal OMX AUX layer | 🔁 2026-09-12 |
 | 15 | Session view | switch view + LPP 93 | |
-| 16 | Clip Launch view (rows) | switch view + LPP 93 | see §9a |
-| 17 | Clip Launch view (columns) | switch view + LPP 93 | see §9a |
-| 18 | Mix view | switch view + LPP 93 (see §4) | |
-| 19 | Notes view | switch view + LPP 94 | |
-| 20 | Seq view | switch view + LPP 97 | |
-| 21 | Phrase view | switch view + LPP 97 | |
-| 22 | Beat Repeat view | switch view + Shift+Session | |
-| 23 | Control view | switch view, no Launchpad button | see §9b |
-| 24-25 | — | dark | |
+| 16 | Clip Launch view | switch view + LPP 93 | 🔁 2026-09-12: rows AND columns in one view; orientation is a page-1 encoder param (see §9a) |
+| 17 | Mix view | switch view + LPP 93 (see §4) | |
+| 18 | Notes view | switch view + LPP 94 | |
+| 19 | Seq view | switch view + LPP 97 | |
+| 20 | Phrase view | switch view + LPP 97 | |
+| 21 | Beat Repeat view | switch view + Shift+Session | |
+| 22 | Control view | switch view, no Launchpad button | see §9b |
+| 23-25 | — | dark | |
 
-LEDs while AUX is held: 15-23 magenta, current view bright; 11-14 red; 26 yellow; 1/2 red; 3 magenta (blinks when
+LEDs while AUX is held: 15-22 magenta, current view bright; 11-14 red; 26 yellow; 1/2 red; 3 magenta (blinks when
 Shift latched); 5/6/7 magenta; 9 red; 10 white/green; 8 dark red / red when latched.
 
 Removed from the old AUX layer: AUX+3/4/5 = Session/Note/Seq (moved to 11-14), AUX+whites =
@@ -108,7 +109,15 @@ With K = 4 this is a column band four pads wide climbing the grid, which is exac
 mirror simple (one pad per key) and matches how the M8 lights roots.
 
 If the M8's row interval turns out to be a true 4th (**K = 3**), the same formula still holds,
-the band is just three wide: 11-13 = R_b C1-3, 14-16 = R_b+1 C1-3, … 26 = R_b+5 C2. **Verify on
+the band is just three wide: 11-13 = R_b C1-3, 14-16 = R_b+1 C1-3, … 26 = R_b+5 C2. **Notes interval, 2026-09-13 (hardware-confirmed):** the M8 Notes grid is col +1 = +1 scale step,
+row +1 = a perfect fourth (5 semitones). In scale steps that fourth is 3 for a 7-note scale but 5
+for Chromatic, so K depends on the M8's scale. `NROW` now offers **K3-K6** (K5 Chromatic, K3
+diatonic), default K3. Verified on D Chromatic: K5 gives pads 11,12,13,14,15,21... = consecutive
+semitones with no skips. **AUTO row-interval detection added
+2026-09-13:** NROW gains an AUTO value (nrow_ 4) that reads the M8 root LEDs each ~250ms in
+Notes view - for each lit colour and K in 3..6 it checks the root pads form a multiple-of-N
+lattice (5<=N<=12) over >=2 rows, and locks K. Bench-verified: chromatic roots -> K5, diatonic
+roots -> K3. **Verify on
 hardware:** in Notes view the M8 lights root notes white; with the right K the white keys show
 a root every 7 keys (major/minor) and the pitch rises smoothly across 11→26. Expose K as a
 hidden param (`NROW` 3/4) if it varies with the M8's scale setting.
@@ -193,18 +202,15 @@ which tracks follow the repeat, the rest play on. Release to resume.
 
 | Key | Function | Sends |
 |---|---|---|
-| 3-10 | Track 1-8 include / exclude (the row the M8 lights **blue**) | pads on the track row, cols 1-8 |
-| 11-18 | Range pads, first range row, cols 1-8 | pads 61-68 |
-| 19-26 | Range pads, second range row, cols 1-8 | pads 71-78 |
+| 3-10 | Track 1-8 include / exclude (Launchpad row 1, the bottom row) | pads 11-18 |
+| 11-18 | Loop selection, first row (Launchpad row 3) | pads 31-38 |
+| 19-26 | Loop selection, second row (Launchpad row 2) | pads 21-28 |
 | 1 / 2 | — | |
 
 Entering sends Shift+Session; leaving to any other view sends Session (`93`) first so the M8
 drops out of beat repeat. Status line `ML BEAT`. LEDs mirror the M8.
 
-**Row numbering to verify.** The docs call them "lines 6 and 7" (range) and "line 8" (tracks).
-Launchpad rows count 1 = bottom, so that reads as rows 6, 7 and 8, which is what the layout file
-uses. The same docs say "middle two rows" and "blue *bottom* row", which fits counting from the
-top, i.e. rows 3, 2 and 1. One constant in the code; the blue track row on the M8 settles it.
+**Row numbering confirmed 2026-09-12** from the meetup videos (`M8 Launchpad Pro Doc.md`): tracks on row 1, loop selection on row 3 then row 2.
 
 ## 5d. AUX LED = Live mode
 
@@ -262,8 +268,8 @@ meaning "keep defaults" so no `EEPROM_VERSION` bump is needed:
 
 ```
 bit 0  HAND   0 = left, 1 = right
-bit 1  MUTE   0 = momentary, 1 = latch
-bit 2  SOLO   0 = momentary, 1 = latch
+bit 1  MUTE   0 = momentary, 1 = latch   (default now LATCH; a saved 0 keeps momentary)
+bit 2  SOLO   0 = momentary, 1 = latch   (default now LATCH)
 bit 3  RING   0 = CC, 1 = note
 bit 4-5 NROW  0 = K4, 1 = K3 (Notes row interval)
 ```
@@ -310,10 +316,13 @@ row directly: the black keys pick the row, the white keys are that row.
 
 Scrolling the session box moved to AUX+11/12 (2026-09-12).
 
-**Column variant (AUX+17, `VIEW_CLIPCOL`):** identical, except keys 3-10 select a Launchpad
-*column* (track 1-8, left to right) and keys 11-18 are that column's eight pads, key 11 = row 8
-(top) … key 18 = row 1, matching the row-launch keys 19-26 (key 19 = row 8). The mute chord, Clear,
-Duplicate, row launch and the encoder work the same. Status `ML CLIP C<n>`.
+**Orientation param (2026-09-12, revised):** rows and columns are ONE view (`VIEW_CLIP` +
+`clipColMode_`); the old separate `VIEW_CLIPCOL` is gone. A page-1 encoder param on the right of
+the 8×8 grid (`ORIENT` = `ROW`/`COL`) toggles it: click to select the field, click to edit, turn
+to switch (also shows a `Clip: Rows` / `Clip: Cols` message). In **columns**, keys 3-10 select a
+Launchpad column (track 1-8, left to right) and keys 11-18 are that column's eight pads, key 11 =
+row 8 (top) … key 18 = row 1, matching the row-launch keys. The mute chord, Clear, Duplicate,
+row launch and the encoder work the same. Status `ML CLIP C<n>` (rows: `ML CLIP R<n>`).
 
 LEDs: 11-18 mirror the selected row; 19-26 mirror the scene buttons 19…89, so the whole right
 column is visible at once (the M8 lights the playing row's scene button); 3-10 = LOWWHITE with
@@ -357,9 +366,10 @@ Unassigned keys (in L: 3-7, 9-11, 14-20, 24-26): dark. Options if you want them 
 
 ### 9c. AUX layer mode row (final order)
 
-2026-09-12: **15 Session · 16 Clip (rows) · 17 Clip (columns) · 18 Mix · 19 Notes · 20 Seq ·
-21 Phrase · 22 Beat Repeat · 23 Control**, with 11/12 = Launchpad Down/Up and 13/14 = pot bank
-−/+ below. The `View` enum is in this order and the AUX key is `15 + view`.
+2026-09-12 (revised): **15 Session · 16 Clip Launch · 17 Mix · 18 Notes · 19 Seq · 20 Phrase ·
+21 Beat Repeat · 22 Control**, with 11/12 = Launchpad Down/Up and 13/14 = pot bank −/+ below.
+Clip row/column is one view with a page-1 orientation param (the separate column view was removed).
+The `View` enum is in this order and the AUX key is `15 + view`.
 
 ### 9d. Build notes
 

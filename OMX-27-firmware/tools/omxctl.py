@@ -31,6 +31,8 @@ def inp(sub, *args): sysex(0x51, sub, *args)
 def k_down(k):            inp(0x00, k, 1, 0, 0, 1)
 def k_up(k, quick=True):  inp(0x00, k, 0, 0, 1 if quick else 0, 1)
 def k_held(k):            inp(0x00, k, 1, 1, 0, 1)   # emits onKeyHeldUpdate
+def dbl_click(k=0):       # clicks=2 on the key-up; AUX double-click toggles the MIDI macro
+    inp(0x00, k, 1, 0, 0, 1); time.sleep(0.03); inp(0x00, k, 0, 0, 1, 2); time.sleep(0.4)
 def tap(k, ms=40):        k_down(k); time.sleep(ms/1000.0); k_up(k, quick=True)
 def hold(k, ms=300, held=False):
     k_down(k); time.sleep(ms/1000.0)

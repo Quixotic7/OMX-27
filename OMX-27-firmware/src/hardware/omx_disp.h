@@ -45,7 +45,8 @@ public:
 	// indexed by Launchpad pad number row*10+col (row 1 = bottom, drawn at the bottom); 0 = off
 	// = nothing drawn. inView is a 64-bit mask, bit (row-1)*8 + (col-1): pads in view draw 3x3,
 	// the rest 2x2. Up to three short labels (5x8 font, ~9 chars) go down the left; nullptr skips.
-	void dispLaunchpadGrid(const uint8_t *lppLeds, uint64_t inView, const char *l1, const char *l2, const char *l3);
+	void dispLaunchpadGrid(const uint8_t *lppLeds, uint64_t inView, const char *l1, const char *l2, const char *l3,
+						   const char *rlabel = nullptr, const char *rvalue = nullptr, bool rsel = false);
 	// Held-modifier split view: top label + a row of topCount boxes (top keys) over a row
 	// of bottomCount boxes (bottom keys) + bottom label. Boxes are filled to show state.
 	// Pass nullptr for a fill array to draw empty outlines; pass count 0 to omit that row

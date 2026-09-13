@@ -173,9 +173,9 @@
   "states": [
     {
       "state": 1,
-      "name": "Clip Launch (row 5 selected)",
+      "name": "Clip Launch (rows orientation, row 5 selected)",
       "export": true,
-      "notes": "Black keys 3-10 select the Launchpad row shown on keys 11-18, key 3 = row 8 (top) .. key 10 = row 1, matching the OLED grid; keys 19-26 are the row-launch buttons, key 19 = row 8. Keys 1/2 = Clear/Duplicate; hold both for the Mute chord (3-10 become track mute buttons T1-T8). Encoder clockwise = next row down; scrolling the session box is AUX+11/12.",
+      "notes": "ONE view with a row/column orientation toggle (the old separate column view is gone). ORIENTATION is a page-1 encoder param on the right of the 8x8 grid (click to select it, click to edit, turn to switch ROW<->COL); it also shows a Clip: Rows / Clip: Cols message. ROWS (shown here): black keys 3-10 select the Launchpad row on keys 11-18, key 3 = row 8 (top) .. key 10 = row 1, matching the OLED grid; keys 19-26 = row-launch, key 19 = row 8. COLUMNS: keys 3-10 select a track column 1-8, keys 11-18 are that column top-down (key 11 = row 8) and keys 19-26 stay row-launch. Keys 1/2 = Clear/Duplicate (msg CLEAR/DUPLICATE); hold both for the Mute chord (3-10 become track mute buttons T1-T8, msg MUTE). Encoder clockwise = next row down (rows) / next column (cols); scrolling the session box is AUX+11/12.",
       "leds": [
         "#7f00ff",
         "#ff0000",
@@ -267,8 +267,8 @@
         }
       ],
       "encoder": {
-        "note": "select row",
-        "press": "toggle param select"
+        "note": "select row (rows) / column (cols); on page-1 param ORIENT, turn = toggle ROW<->COL",
+        "press": "toggle param select (page-1 params: 1 row/col select, 2 ORIENT)"
       },
       "screen": {
         "note": "",

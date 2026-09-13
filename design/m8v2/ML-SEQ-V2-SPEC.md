@@ -1,0 +1,99 @@
+# ML Seq view v2 — step-hold editing (proposal)
+
+Status: **design, not built.** 2026-09-13. Supersedes the current Seq view (keys 3-10 fixed
+keypads, whites = note slots) once approved. Current Seq view keeps working until then.
+
+## Why
+
+The current Seq view pins eight pitch pads on the black keys, so you get eight notes and no
+velocity. The M8's own Launchpad sequencer works differently and better: you hold a step and the
+grid becomes the editor for that step. This spec adopts that model, FORM-style, so the whole top
+row is usable and we gain velocity and octave editing.
+
+## Two hold orders (from hardware behaviour)
+
+- **Modifier-first** — Clear / Duplicate: hold the modifier, then tap the step(s) it acts on.
+- **Step-first** — Notes / Velocity / Octave: hold the step, then tap a note, a side-row ring
+  CC (velocity), or an octave key.
+
+The OMX tracks both: a held modifier (Clear/Dup) or a held step, one at a time.
+
+## Modes (chosen while nothing is held)
+
+The selected mode decides what a **held step** does. Selecting a mode never touches the step or
+the AUX layer.
+
+| Mode | Held-step top row does |
+|---|---|
+| NOTE (default) | keys 1-10 = ten consecutive in-scale notes → lock the note into the step |
+| VEL | top row = the side-row ring CCs → set the step's velocity |
+| OCT | top row = octave down / up → shift the held step's octave |
+
+No step-edit gesture ever uses the AUX menu. AUX stays for view switch, transport and scroll,
+used on their own.
+
+## Key map
+
+**White keys 11-26 = the 16 steps** of the current phrase (the M8's step block). Tap toggles a
+step; hold to edit it in the selected mode.
+
+**Top row (keys 1-10), nothing held (idle):**
+
+| Key | Function |
+|---|---|
+| 1 | Clear (modifier: hold, then tap step(s) to clear) |
+| 2 | Duplicate (modifier: hold, tap source step, tap destination) |
+| 3 / 4 / 5 | Mode select: NOTE / VEL / OCT (active key bright) |
+| 6-10 | Reserved for shortcuts (e.g. step mute, note-off, nudge) — TBD |
+
+**Top row, a step held, per mode:**
+
+- **NOTE:** keys 1-10 = ten consecutive in-scale notes, exactly the Notes-view mapping (K /
+  auto-K). Keys 9-10 spill into grid row 2, which is fine — the M8's note-lock keyboard spans
+  rows 1-4. Pressing a key locks that note into the held step.
+- **VEL:** keys map to the side-row ring CCs (scene column). Pressing sets the step's velocity.
+  Level count and exact CCs to confirm on hardware (expected 8: CC 19,29,…,89).
+- **OCT:** keys send the M8 octave shift (LPP Up 80 / Down 70) applied to the held step.
+
+## Hold logic (OMX state)
+
+- `heldStep_` — the step pad currently held (0 = none). Set on white key-down when no modifier
+  is held; its pad note is kept on; cleared and released on key-up.
+- `heldModifier_` — Clear (60) or Dup (50) held from the idle top row; kept on until key-up.
+- While `heldStep_` is set, the top row is remapped to the selected mode and each top-row tap is
+  sent as that mode's pad/CC on top of the still-held step note.
+- While `heldModifier_` is set, step taps are sent with the modifier held (modifier-first).
+- One step and one modifier at a time; this matches the M8 and keeps the state small. Same shape
+  as the existing `trackHeld_` / `clipMuteChord_` code.
+
+## LEDs
+
+- Steps 11-26 mirror the M8 (lit = active step, playhead as the M8 sends it).
+- Idle top row: Clear/Dup fixed colours; mode selectors 3/4/5 dim, active one bright; shortcuts
+  as added.
+- Step held: top row shows the mode's palette — NOTE mirrors the M8 keyboard/roots, VEL a level
+  ramp, OCT up/down. All driven from the mirrored M8 LEDs where possible.
+
+## Hardware probe — DONE 2026-09-13 (see ML-M8-PROTOCOL-FINDINGS.md)
+
+Confirmed on a real M8 over its DIN MIDI ports:
+
+1. **Record must be on** first (send Rec = 10); without it grid pads only audition.
+2. **Steps = the top-left 4×4** (pads 81-84 / 71-74 / 61-64 / 51-54), step 0 = R8C1,
+   `step = (8-row)*4 + (col-1)`. Hold a step pad to select it (cursor follows, step lights).
+3. **Note-lock** — hold a step, tap a **keyboard pad (rows 1-4, chromatic K5)**; the note writes
+   to the step at default velocity 64. So the ten-note NOTE mode works.
+4. **Velocity** — hold a step, tap the **side column (19 29 39 49 59 69 79)** = the level ramp.
+5. **Octave** — hold a step, tap **Down 70 / Up 80**.
+6. Buttons register as either note or CC; LED feedback is note-on, velocity = colour.
+
+Our current Seq view already targets these exact step pads and the row-1 keyboard, so the pad
+math is proven; v2 is the interaction layer on top.
+
+## Build notes
+
+- Reuse `notesPadForKey()` (with K / auto-K) for NOTE mode.
+- Velocity: send the side-column ring CCs; add a small level→CC table once (2) is confirmed.
+- Flash: Teensy 3.2 is at 97.8% (~5.8 KB free). Stub the hold logic and modes first and check
+  the build fits before finishing; trim elsewhere if needed.
+- Keep the current Seq view behind the change until the probe passes and the layout is approved.
