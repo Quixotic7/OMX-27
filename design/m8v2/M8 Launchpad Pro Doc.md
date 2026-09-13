@@ -35,22 +35,22 @@ Track 1 = CC101 - Track 8 = CC108
 Snapshot = CC1
 Mute = CC2
 Solo = CC3
-Row 1 = CC81 - CC88
-Row 2 = CC71 - CC78
-Row 3 = CC61 - CC68
-Row 4 = CC51 - CC58
-Row 5 = CC41 - CC48
-Row 6 = CC31 - CC38
-Row 7 = CC21 - CC28
-Row 8 = CC11 - CC18
-Launch Row 1 = CC89
-Launch Row 2 = CC79
-Launch Row 3 = CC69
-Launch Row 4 = CC59
-Launch Row 5 = CC49
-Launch Row 6 = CC39
-Launch Row 7 = CC29
-Launch Row 8 = CC19
+Row 8 = CC81 - CC88
+Row 7 = CC71 - CC78
+Row 6 = CC61 - CC68
+Row 5 = CC51 - CC58
+Row 4 = CC41 - CC48
+Row 3 = CC31 - CC38
+Row 2 = CC21 - CC28
+Row 1 = CC11 - CC18
+Launch Row 8 = CC89
+Launch Row 7 = CC79
+Launch Row 6 = CC69
+Launch Row 5 = CC59
+Launch Row 4 = CC49
+Launch Row 3 = CC39
+Launch Row 2 = CC29
+Launch Row 1 = CC19
 
 # notes mode
 
@@ -86,3 +86,8 @@ x------x
 
 # Beat Repeat
 - Enter by pressing Shift + Session
+
+use row 3 then 2 to do the loop selection
+
+Row 1 provides toggles for which tracks you want to effect
+
