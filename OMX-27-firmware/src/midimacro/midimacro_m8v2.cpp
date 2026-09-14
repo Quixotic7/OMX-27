@@ -281,6 +281,42 @@ namespace midimacro
 	// Everything the macro can be holding down on the M8 side, released in one place.
 	// Shift is deliberately NOT released here: it is latched for the duration of an AUX
 	// hold and dropped when AUX comes up (see onKeyUpdate), which is also when views switch.
+	// Seq v2: lock a step so the top row can edit it hands-free. First lock auto-arms Record (so
+	// played notes write to the step); switching to a different step keeps Record on.
+	void MidiMacroM8V2::lockSeqStep(uint8_t stepKey)
+	{
+		if (seqLockedStep_ == stepKey)
+			return;
+		if (seqLockedStep_ != 0)
+		{
+			sendLpp(seqSlotNote(seqLockedStep_), false); // switch: release the old step's pad
+			keyNoteSent_[seqLockedStep_] = 0;
+		}
+		else if (!recLatched_ && ledColor_[kLppRec] == 0)
+		{
+			sendLpp(kLppRec, true); // arm Record only if it wasn't already on; remember to undo it
+			seqAutoRec_ = true;
+		}
+		uint8_t pad = seqSlotNote(stepKey);
+		sendLpp(pad, true);
+		keyNoteSent_[stepKey] = pad;
+		seqLockedStep_ = stepKey;
+	}
+
+	void MidiMacroM8V2::unlockSeqStep()
+	{
+		if (seqLockedStep_ == 0)
+			return;
+		sendLpp(seqSlotNote(seqLockedStep_), false);
+		keyNoteSent_[seqLockedStep_] = 0;
+		seqLockedStep_ = 0;
+		if (seqAutoRec_)
+		{
+			sendLpp(kLppRec, false); // undo the auto-arm (leave a manually-latched Record alone)
+			seqAutoRec_ = false;
+		}
+	}
+
 	void MidiMacroM8V2::releaseAllHeld()
 	{
 		releaseAllKeys();
@@ -295,7 +331,12 @@ namespace midimacro
 		padMode_ = PAD_CLIP;
 
 		trackHeld_ = false;
-		seqLockedStep_ = 0; // releaseAllKeys() above already sent the locked step's pad note-off
+		seqLockedStep_ = 0;	 // releaseAllKeys() above already sent the locked step's pad note-off
+		if (seqAutoRec_)
+		{
+			seqAutoRec_ = false; // undo the lock's auto-armed Record
+			sendLpp(kLppRec, false);
+		}
 		if (clipMuteChord_)
 		{
 			clipMuteChord_ = false;
@@ -1023,9 +1064,17 @@ namespace midimacro
 	{
 		uint8_t thisKey = (uint8_t)e.key();
 
-		// Ignore held repeats, same as the other macros.
+		// Ignore held repeats, same as the other macros. A held AUX, though, means it's a
+		// deliberate hold (AUX menu) - not the quick tap that unlocks a Seq step.
 		if (e.held())
+		{
+			if (thisKey == 0)
+			{
+				auxHeld_ = true;
+				auxConsumed_ = true;
+			}
 			return;
+		}
 
 		if (thisKey >= kNumKeys)
 			return;
@@ -1041,6 +1090,12 @@ namespace midimacro
 				{
 					shiftLatched_ = false;
 					sendLpp(kLppShift, false);
+				}
+				// A quick standalone AUX tap (not held long, no key used) unlocks a locked Seq step.
+				if (!auxConsumed_ && view_ == VIEW_SEQ && seqLockedStep_ != 0)
+				{
+					unlockSeqStep();
+					omxDisp.displayMessageTimed("SEQ UNLOCK", 5);
 				}
 				omxLeds.setDirty();
 				omxDisp.setDirty();
@@ -1119,19 +1174,12 @@ namespace midimacro
 		// Key down
 		if (thisKey == 0)
 		{
-			// Seq v2: while a step is locked, AUX unlocks it (releases the held pad, top row
-			// returns to the mode/shortcut layer) instead of opening the AUX layer.
-			if (view_ == VIEW_SEQ && seqLockedStep_ != 0)
-			{
-				sendLpp(seqSlotNote(seqLockedStep_), false);
-				keyNoteSent_[seqLockedStep_] = 0;
-				seqLockedStep_ = 0;
-				omxDisp.displayMessageTimed("SEQ UNLOCK", 5);
-				omxLeds.setDirty();
-				omxDisp.setDirty();
-				return;
-			}
+			// AUX opens the AUX layer as usual (so you can hold AUX + a key even while a Seq step
+			// is locked, e.g. to toggle playback). A *quick standalone* AUX tap instead unlocks a
+			// locked Seq step - decided on key-up via auxConsumed_ (set if AUX is held long or a
+			// key is used while it's down).
 			auxHeld_ = true;
+			auxConsumed_ = false;
 			omxLeds.setDirty();
 			return;
 		}
@@ -1139,6 +1187,7 @@ namespace midimacro
 		// AUX shortcut layer - identical in every view (spec section 1).
 		if (auxHeld_)
 		{
+			auxConsumed_ = true; // a key was used while AUX was held -> this AUX press is not a quick tap
 			switch (thisKey)
 			{
 			case 1:
@@ -1312,24 +1361,9 @@ namespace midimacro
 					keyNoteSent_[thisKey] = pad;
 				}
 				else if (seqLockedStep_ == thisKey)
-				{
-					// re-tap the locked step -> unlock
-					sendLpp(pad, false);
-					keyNoteSent_[thisKey] = 0;
-					seqLockedStep_ = 0;
-				}
+					unlockSeqStep(); // re-tap the locked step -> unlock
 				else
-				{
-					// lock this step; if another was locked, release it first (switch)
-					if (seqLockedStep_ != 0)
-					{
-						sendLpp(seqSlotNote(seqLockedStep_), false);
-						keyNoteSent_[seqLockedStep_] = 0;
-					}
-					sendLpp(pad, true);
-					keyNoteSent_[thisKey] = pad;
-					seqLockedStep_ = thisKey;
-				}
+					lockSeqStep(thisKey); // lock (or switch to) this step
 				omxLeds.setDirty();
 				omxDisp.setDirty();
 				return;

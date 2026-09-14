@@ -102,6 +102,8 @@ namespace midimacro
 		void releaseControlNotes();
 		// Drops every held/latched thing the macro owns (called on view change and exit).
 		void releaseAllHeld();
+		void lockSeqStep(uint8_t stepKey); // Seq v2: lock a step for hands-free editing (auto-arms Record)
+		void unlockSeqStep();			   // release the locked step + disarm auto-Record
 		void switchView(View v, bool sendButton = true); // sendButton=false when following the M8
 
 		// Session nav cluster -> M8 Control Map note (0-7) on the macro channel, or -1 if this
@@ -167,6 +169,10 @@ namespace midimacro
 		bool linked_ = false;
 		uint32_t lastIdentityMs_ = 0;
 		bool auxHeld_ = false;
+		bool auxConsumed_ = false; // AUX became a hold, or a key was used while AUX was held; a
+								   // quick standalone AUX tap (auxConsumed_ still false on release)
+								   // is what unlocks a locked Seq step
+		bool seqAutoRec_ = false;  // Seq lock auto-armed Record; disarm it again on unlock
 
 		// Last seen blink phases, so loopUpdate() only calls omxLeds.setDirty() once per
 		// actual blink transition (and only when something cached is actually flash/pulse).
