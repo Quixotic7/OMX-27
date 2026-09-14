@@ -1,8 +1,8 @@
 # ML Seq view v2 — step-hold editing (proposal)
 
-Status: **BUILT 2026-09-13** (uncommitted). NOTE mode verified on a real M8; VEL/OCT built but
-their M8 edit effect is unconfirmed (see Build status at the end). Phrase view keeps the old
-keypad+phrase-slot layout; only Seq view changed.
+Status: **BUILT & VERIFIED 2026-09-13**. NOTE, VEL and OCT modes all confirmed on a real M8
+(see Build status at the end). Phrase view keeps the old keypad+phrase-slot layout; only Seq
+view changed.
 
 ## Why
 
@@ -107,11 +107,16 @@ Builds on all targets (teensy31 98.1%). Flashed and tested against the real M8:
 
 - **NOTE mode — CONFIRMED.** Hold a step (white key) + tap a top-row note → the note locks into
   that phrase step. Verified: locked B-3 into step 2 on the M8.
-- **VEL / OCT — built, effect unconfirmed.** Tapping the side-column (VEL) did not visibly change
-  the step's velocity on the M8. In the earlier probe I only saw the side column *light* while a
-  step was held; I never confirmed that *tapping* a side button edits velocity, nor Up/Down for
-  octave. The M8's velocity/octave edit gesture needs another probe (it may be hold-based, or a
-  different pad set) before VEL/OCT can be trusted.
+- **VEL mode — CONFIRMED (2026-09-13, second probe).** Hold a step *that already holds a note*,
+  then tap a top-row key (1-8 → side column CC 19,29,…,89) → the step's velocity changes. The
+  side column is a ramp: key 1 (CC19, bottom) drives velocity low, key 8 (CC89, top) drives it
+  high; taps near an end nudge toward the cap. Verified on step 2: V went 0x64→0x74→0x7F with
+  key 8, then to 0x0A with key 1. **Key insight:** the M8 shows velocity in *hex* and its default
+  is 0x64 (100). The earlier "no change" was reading hex as decimal and/or holding an empty step
+  (velocity only edits a step that has a note).
+- **OCT mode — CONFIRMED (2026-09-13, second probe).** Hold a step with a note, then tap a top-row
+  key (1-5 → LPP Down 70, 6-10 → LPP Up 80) → the held step's octave shifts. Verified on step 4:
+  F-3 → F-4 (up), F-4 → F-3 → F-2 (down).
 
 **Integration nuance found:** the M8's Launchpad only enters step-edit mode for a phrase after it
 receives the Seq button (97) *while the M8 is on that phrase*. If the M8 screen is on the phrase

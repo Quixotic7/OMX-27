@@ -57,9 +57,13 @@ and Duplicate (50) also light while armed. Without Record, grid pads just auditi
 - **Lock a note:** hold a step pad, then tap a keyboard pad → the note is written to that step at
   default velocity 64 (verified: step 9 → B-3 then C#4; step 12 → C#4). Holding the step also
   moves the M8's phrase cursor to it.
-- **Velocity:** hold the step, tap the **side/scene column** (19 29 39 49 59 69 79) → those light
-  up as the velocity ramp while the step is held.
-- **Octave:** hold the step, tap **Down (70) / Up (80)** → both light while a step is held.
+- **Velocity (CONFIRMED — edits the value):** hold a step **that already holds a note**, tap the
+  **side/scene column** (19 29 39 49 59 69 79 89) → the step's velocity changes. It's a ramp:
+  bottom (19) = low, top (89) = high; taps near an end nudge toward the cap. Verified: step at V
+  0x64 went 0x64→0x74→0x7F tapping 89, then 0x0A tapping 19. **The M8 shows velocity in hex;
+  default is 0x64 (=100 dec).** An empty step has no velocity to edit — hold a step with a note.
+- **Octave (CONFIRMED — edits the value):** hold a step with a note, tap **Down (70) / Up (80)** →
+  the held step's note shifts an octave. Verified: F-3 → F-4 (Up), F-4 → F-3 → F-2 (Down).
 - Shift (90) also lights while a step is held (instrument-pool / other combos).
 
 This matches the Seq v2 spec's model and maps cleanly onto the OMX: the 16 white keys = the 16
