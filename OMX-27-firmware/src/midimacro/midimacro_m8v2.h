@@ -102,8 +102,9 @@ namespace midimacro
 		void releaseControlNotes();
 		// Drops every held/latched thing the macro owns (called on view change and exit).
 		void releaseAllHeld();
-		void lockSeqStep(uint8_t stepKey); // Seq v2: lock a step for hands-free editing (auto-arms Record)
-		void unlockSeqStep();			   // release the locked step + disarm auto-Record
+		void seqHoldStep(uint8_t stepKey); // Seq: press/hold a step (engage top lock, arm Record, write a held note)
+		void seqReleaseStep(uint8_t stepKey); // Seq: release a held step (disarm the auto-Record)
+		void seqUnlockTop();			   // Seq: drop the top-row edit lock (quick AUX tap / view change)
 		void switchView(View v, bool sendButton = true); // sendButton=false when following the M8
 
 		// Session nav cluster -> M8 Control Map note (0-7) on the macro channel, or -1 if this
@@ -162,12 +163,17 @@ namespace midimacro
 		uint8_t clipRow_ = 8; // 1..8, Clip Launch selected row / column (not persisted)
 		bool clipColMode_ = false; // Clip Launch orientation: false = rows, true = columns (page-1 param)
 		uint8_t seqMode_ = 0;        // Seq v2 edit mode: 0 NOTE, 1 VEL, 2 OCT
-		uint8_t seqLockedStep_ = 0;  // Seq v2: white key (11-26) LOCKED as the step being edited
-									 // (its pad stays held on the M8); 0 = none. Unlock via AUX or re-tap.
+		bool seqTopLocked_ = false;  // Seq: top row is in edit mode (notes/vel/oct) rather than the
+									 // idle shortcut/mode-select layer. Engaged by a step press; cleared
+									 // only by a quick AUX tap or re-entering the view.
+		uint8_t seqHeldStepKey_ = 0; // Seq: the step key (11-26) physically held right now, 0 = none.
+									 // Record is armed while a step is held; placement writes to it.
 		bool clipMuteChord_ = false; // CLIP: keys 1+2 held together -> Launchpad Mute held, keys 3-10 = track buttons
 
 		bool linked_ = false;
 		uint32_t lastIdentityMs_ = 0;
+		uint32_t enabledAtMs_ = 0; // when the macro was entered; suppresses follow-view briefly so
+								   // we always land in Session even if the M8 is sitting on a phrase
 		bool auxHeld_ = false;
 		bool auxConsumed_ = false; // AUX became a hold, or a key was used while AUX was held; a
 								   // quick standalone AUX tap (auxConsumed_ still false on release)
