@@ -194,8 +194,8 @@ namespace midimacro
 		row_ = 8; // Session pins the left keys to Launchpad row 8; keys 1/2 move the box.
 		clipRow_ = 8; // Clip Launch starts on the top row (not persisted)
 		clipColMode_ = false; // land in row orientation
-		seqHeldStep_ = 0;
-		seqMode_ = 0; // Seq v2 defaults: no step held, NOTE mode
+		seqLockedStep_ = 0;
+		seqMode_ = 0; // Seq v2 defaults: no step locked, NOTE mode
 		latchedTracks_ = 0;
 		momentaryTracks_ = 0;
 		trackHeld_ = false;
@@ -295,7 +295,7 @@ namespace midimacro
 		padMode_ = PAD_CLIP;
 
 		trackHeld_ = false;
-		seqHeldStep_ = 0;
+		seqLockedStep_ = 0; // releaseAllKeys() above already sent the locked step's pad note-off
 		if (clipMuteChord_)
 		{
 			clipMuteChord_ = false;
@@ -305,6 +305,13 @@ namespace midimacro
 		{
 			recLatched_ = false;
 			sendLpp(kLppRec, false);
+		}
+		if (shiftLatched_)
+		{
+			// Never leave Shift stuck on the M8 (e.g. after the instrument-pool combo) when a
+			// view switch or macro exit happens - releasing it here is the safety net.
+			shiftLatched_ = false;
+			sendLpp(kLppShift, false);
 		}
 	}
 
@@ -1095,20 +1102,35 @@ namespace midimacro
 				}
 			}
 
+			// Seq v2: a LOCKED step stays held on the M8 across key-up (tap-to-lock), so the top
+			// row can edit it hands-free. It's released only on unlock (AUX / re-tap / view change).
+			if (view_ == VIEW_SEQ && thisKey == seqLockedStep_)
+				return;
+
 			if (keyNoteSent_[thisKey] != 0)
 			{
 				sendLpp(keyNoteSent_[thisKey], false);
 				keyNoteSent_[thisKey] = 0;
 				omxLeds.setDirty();
 			}
-			if (thisKey == seqHeldStep_)
-				seqHeldStep_ = 0; // Seq v2: this step is no longer held
 			return;
 		}
 
 		// Key down
 		if (thisKey == 0)
 		{
+			// Seq v2: while a step is locked, AUX unlocks it (releases the held pad, top row
+			// returns to the mode/shortcut layer) instead of opening the AUX layer.
+			if (view_ == VIEW_SEQ && seqLockedStep_ != 0)
+			{
+				sendLpp(seqSlotNote(seqLockedStep_), false);
+				keyNoteSent_[seqLockedStep_] = 0;
+				seqLockedStep_ = 0;
+				omxDisp.displayMessageTimed("SEQ UNLOCK", 5);
+				omxLeds.setDirty();
+				omxDisp.setDirty();
+				return;
+			}
 			auxHeld_ = true;
 			omxLeds.setDirty();
 			return;
@@ -1183,8 +1205,14 @@ namespace midimacro
 			case 22:
 				switchView((View)(thisKey - 15));
 				return;
-			case 26:
+			case 25:
 				doWaveformMacro();
+				return;
+			case 26:
+				// The M8's own Play button (Control Map), not the Launchpad Play - on a phrase
+				// screen this plays just the phrase you're on.
+				sendControlMapTap(kCmPlay);
+				omxDisp.displayMessageTimed("M8 PLAY", 5);
 				return;
 			default:
 				return; // consumed, no-op
@@ -1267,40 +1295,68 @@ namespace midimacro
 
 		if (view_ == VIEW_SEQ)
 		{
-			// Seq v2 (spec ML-SEQ-V2-SPEC): white keys 11-26 are the 16 steps (top-left 4x4);
-			// hold a step, then the top row edits it per the selected mode. Clear/Duplicate are
-			// modifier-first (hold, then tap steps). Record must be armed (AUX+8/9) to lock.
+			// Seq v2 (spec ML-SEQ-V2-SPEC): white keys 11-26 are the 16 steps (top-left 4x4).
+			// Tap a step to LOCK it (its pad stays held on the M8); the top row then edits that
+			// step in the selected mode, hands-free, until you unlock (AUX, or re-tap the step).
+			// Clear/Duplicate are modifier-first (hold, then tap steps). Record must be armed
+			// (AUX+8/9) for notes/velocity/octave to actually write.
 			bool modHeld = (keyNoteSent_[1] == kLppClear) || (keyNoteSent_[2] == kLppDup);
 			if (thisKey >= 11 && thisKey <= 26)
 			{
 				uint8_t pad = seqSlotNote(thisKey);
 				if (pad == 0)
 					return;
-				sendLpp(pad, true); // with a modifier held: clear/dup this step; else select it to edit
-				keyNoteSent_[thisKey] = pad;
-				if (!modHeld)
-					seqHeldStep_ = thisKey; // step-first: this step is now held for editing
+				if (modHeld)
+				{
+					sendLpp(pad, true); // clear/dup this step (released on key-up)
+					keyNoteSent_[thisKey] = pad;
+				}
+				else if (seqLockedStep_ == thisKey)
+				{
+					// re-tap the locked step -> unlock
+					sendLpp(pad, false);
+					keyNoteSent_[thisKey] = 0;
+					seqLockedStep_ = 0;
+				}
+				else
+				{
+					// lock this step; if another was locked, release it first (switch)
+					if (seqLockedStep_ != 0)
+					{
+						sendLpp(seqSlotNote(seqLockedStep_), false);
+						keyNoteSent_[seqLockedStep_] = 0;
+					}
+					sendLpp(pad, true);
+					keyNoteSent_[thisKey] = pad;
+					seqLockedStep_ = thisKey;
+				}
 				omxLeds.setDirty();
+				omxDisp.setDirty();
 				return;
 			}
-			if (seqHeldStep_ != 0)
+			if (seqLockedStep_ != 0)
 			{
-				// a step is held: the top row applies the selected mode to it
-				if (seqMode_ == 0) // NOTE
-				{
+				// a step is locked: the top row applies the selected mode to it
+				if (seqMode_ == 0) // NOTE: play the note sustained (audible preview) + lock it to
+				{                  // the held step; released on key-up (see onKeyUpdate)
 					uint8_t p = seqTopNotePad(thisKey);
 					if (p)
-						sendLppTap(p);
+					{
+						sendLpp(p, true);
+						keyNoteSent_[thisKey] = p;
+					}
 				}
 				else if (seqMode_ == 1) // VEL: side-row ring column 19..89
 				{
 					if (thisKey >= 1 && thisKey <= 8)
 						sendLppTap((uint8_t)(thisKey * 10 + 9));
 				}
-				else // OCT: left half = down, right half = up
+				else // OCT: key 6 = down, key 7 = up
 				{
-					if (thisKey >= 1 && thisKey <= 10)
-						sendLppTap(thisKey <= 5 ? kLppDown : kLppUp);
+					if (thisKey == 6)
+						sendLppTap(kLppDown);
+					else if (thisKey == 7)
+						sendLppTap(kLppUp);
 				}
 				omxLeds.setDirty();
 				return;
@@ -1588,7 +1644,8 @@ namespace midimacro
 
 			for (uint8_t k = 15; k <= 22; k++)
 				strip.setPixelColor(k, (uint8_t)view_ == (k - 15) ? MAGENTA : DKMAGENTA);
-			strip.setPixelColor(26, YELLOW);
+			strip.setPixelColor(25, YELLOW); // waveform
+			strip.setPixelColor(26, GREEN);	 // M8 Play (phrase)
 			return;
 		}
 
@@ -1700,22 +1757,22 @@ namespace midimacro
 		}
 		else if (view_ == VIEW_SEQ)
 		{
-			// steps on the white keys (held step = white); top row depends on hold state
+			// steps on the white keys (locked step = white); top row depends on lock state
 			for (uint8_t k = 11; k <= 26; k++)
 			{
-				if (k == seqHeldStep_)
+				if (k == seqLockedStep_)
 					strip.setPixelColor(k, WHITE);
 				else
 					drawPaletteKey(k, seqSlotNote(k), LOWWHITE);
 			}
-			if (seqHeldStep_ != 0)
+			if (seqLockedStep_ != 0)
 			{
 				if (seqMode_ == 0)
 					for (uint8_t k = 1; k <= 10; k++) drawPaletteKey(k, seqTopNotePad(k), DKCYAN);
 				else if (seqMode_ == 1)
 					for (uint8_t k = 1; k <= 10; k++) strip.setPixelColor(k, (k <= 8) ? GREEN : LEDOFF);
-				else
-					for (uint8_t k = 1; k <= 10; k++) strip.setPixelColor(k, (k <= 5) ? BLUE : CYAN);
+				else // OCT: key 6 down, key 7 up
+					for (uint8_t k = 1; k <= 10; k++) strip.setPixelColor(k, (k == 6) ? BLUE : (k == 7) ? CYAN : LEDOFF);
 			}
 			else
 			{
@@ -1961,7 +2018,7 @@ namespace midimacro
 				break;
 			case VIEW_SEQ:
 				snprintf(l1, sizeof(l1), ledColor_[kLppRec] != 0 ? "SEQ REC" : "SEQ");
-				snprintf(l2, sizeof(l2), "%s", seqMode_ == 0 ? "NOTE" : seqMode_ == 1 ? "VEL" : "OCT");
+				snprintf(l2, sizeof(l2), "%s%s", seqLockedStep_ ? "LK " : "", seqMode_ == 0 ? "NOTE" : seqMode_ == 1 ? "VEL" : "OCT");
 				break;
 			case VIEW_PHRASE:
 				snprintf(l1, sizeof(l1), "PHRASE");

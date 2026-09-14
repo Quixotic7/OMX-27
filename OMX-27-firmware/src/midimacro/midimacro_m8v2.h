@@ -159,8 +159,9 @@ namespace midimacro
 		uint8_t row_ = 8; // 1..8, which grid row Session keys 11-18 show
 		uint8_t clipRow_ = 8; // 1..8, Clip Launch selected row / column (not persisted)
 		bool clipColMode_ = false; // Clip Launch orientation: false = rows, true = columns (page-1 param)
-		uint8_t seqMode_ = 0;      // Seq v2 edit mode: 0 NOTE, 1 VEL, 2 OCT
-		uint8_t seqHeldStep_ = 0;  // Seq v2: white key (11-26) held as a step, 0 = none
+		uint8_t seqMode_ = 0;        // Seq v2 edit mode: 0 NOTE, 1 VEL, 2 OCT
+		uint8_t seqLockedStep_ = 0;  // Seq v2: white key (11-26) LOCKED as the step being edited
+									 // (its pad stays held on the M8); 0 = none. Unlock via AUX or re-tap.
 		bool clipMuteChord_ = false; // CLIP: keys 1+2 held together -> Launchpad Mute held, keys 3-10 = track buttons
 
 		bool linked_ = false;
