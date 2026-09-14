@@ -75,14 +75,10 @@ namespace midimacro
 	static const uint8_t kLppLogo = 99;
 	static const uint8_t kLppTrack1 = 101;
 
-	// M8 Session track-button LED palette (hardware-decoded 2026-09-13 by matching the mirrored
-	// RGB against lpp_palette.h and cross-checking the M8's own M/S mixer panel):
-	// muted = coral 0xff6161 (palette idx 6 or its alias 73 - same colour), soloed = cyan
-	// 0x61e9ff (idx 79), 0 = empty. Playing tracks pulse green/grey. The earlier 5/78 guess was
-	// wrong. Match both muted aliases since which index the M8 emits can't be told from colour.
-	static const uint8_t kTrkMuted = 6;
-	static const uint8_t kTrkMutedAlt = 73;
-	static const uint8_t kTrkSoloed = 79;
+	// (Historical note: the M8's Session track-button LED palette is muted = coral 0xff6161
+	// (idx 6/73), soloed = cyan 0x61e9ff (idx 79). We no longer read it - the M8 doesn't stream
+	// those track-button LEDs back reliably over TRS - so mute/solo state is tracked OMX-side;
+	// see omxMuted_/omxSoloed_ and ML-M8-PROTOCOL-FINDINGS.md.)
 
 	// Settle gap (ms) after pressing a Mute/Solo modifier before tapping the track, so the
 	// M8 registers the modifier as held first. Without it the M8 processes the track tap in
@@ -126,6 +122,8 @@ namespace midimacro
 			ledColor_[i] = 0;
 			ledMode_[i] = 0;
 		}
+		omxMuted_ = 0;
+		omxSoloed_ = 0; // OMX-authoritative track state resets on macro enter/exit
 		for (uint8_t i = 0; i < kNumKeys; i++)
 		{
 			keyNoteSent_[i] = 0;
@@ -249,6 +247,8 @@ namespace midimacro
 			ledColor_[i] = 0;
 			ledMode_[i] = 0;
 		}
+		omxMuted_ = 0;
+		omxSoloed_ = 0; // OMX-authoritative track state resets on macro enter/exit
 
 		auxHeld_ = false;
 		omxLeds.setDirty();
@@ -399,6 +399,18 @@ namespace midimacro
 			MM::sendNoteOff(n, 0, 1);
 	}
 
+	void MidiMacroM8V2::tapTrackToggle(uint8_t trackIdx, bool solo)
+	{
+		if (trackIdx >= 8)
+			return;
+		sendLppTap((uint8_t)(kLppTrack1 + trackIdx));
+		uint8_t bit = (uint8_t)(1 << trackIdx);
+		if (solo)
+			omxSoloed_ ^= bit;
+		else
+			omxMuted_ ^= bit;
+	}
+
 	void MidiMacroM8V2::releaseLatchedTracks()
 	{
 		for (uint8_t i = 0; i < 8; i++)
@@ -419,7 +431,7 @@ namespace midimacro
 		for (uint8_t i = 0; i < 8; i++)
 		{
 			if (momentaryTracks_ & (1 << i))
-				sendLppTap((uint8_t)(kLppTrack1 + i));
+				tapTrackToggle(i, padMode_ == PAD_SOLO); // undo the momentary toggle
 		}
 		momentaryTracks_ = 0;
 	}
@@ -490,34 +502,24 @@ namespace midimacro
 		omxDisp.displayMessageTimed("SNAP RECALL", 5);
 	}
 
-	// Mix view "all" keys, using the hardware-decoded track LED palette
-	// (kTrkMuted / kTrkSoloed).
+	// Mix view "all" keys, driven by the OMX-authoritative track state (omxMuted_/omxSoloed_).
 	//
-	// - UNMUTE ALL (Mute modifier): toggle mute only on tracks the M8 reports as muted (coral).
-	//   The old bug tapped every non-off/non-white track - which includes the pulsing green/grey
-	//   playing tracks - and so muted them (the inversion the user reported).
-	// - CLEAR SOLO (Solo modifier): tap only tracks the M8 reports as soloed (cyan); re-tapping a
-	//   soloed track un-solos it, returning to all-playing. Nothing else is touched.
+	// - UNMUTE ALL (Mute modifier): toggle mute only on the tracks omxMuted_ says are muted.
+	// - CLEAR SOLO (Solo modifier): toggle solo only on the tracks omxSoloed_ says are soloed,
+	//   which un-solos them and returns to all-playing. Nothing else is touched (no inversion).
 	void MidiMacroM8V2::doMixAllTracks(uint8_t modifier)
 	{
-		// Note: this reads the mirrored track-button LEDs, which the M8 only streams on a
-		// mute/solo change while playing - so it acts on tracks toggled since the macro linked.
-		// That is fine (and safe: it never touches a playing track, avoiding the old inversion
-		// bug) but it can't see mutes set before linking or while stopped.
+		// Clear all mutes (or all solos) using the OMX's own state - reliable regardless of what
+		// the M8 streams back. Toggle only the tracks currently set, so nothing flips the wrong way.
+		bool solo = (modifier == kLppSolo);
+		uint8_t mask = solo ? omxSoloed_ : omxMuted_; // snapshot; tapTrackToggle mutates the live mask
 		sendLpp(modifier, true);
 		delay(kModSettleMs); // let the M8 register the modifier as held before any track tap
 		for (uint8_t i = 0; i < 8; i++)
-		{
-			// Act only on tracks already in the matching state, so nothing is toggled the
-			// wrong way: unmute the muted (coral), unsolo the soloed (cyan).
-			uint8_t c = ledColor_[kLppTrack1 + i];
-			bool match = (modifier == kLppMute) ? (c == kTrkMuted || c == kTrkMutedAlt)
-												: (c == kTrkSoloed);
-			if (match)
-				sendLppTap((uint8_t)(kLppTrack1 + i));
-		}
+			if (mask & (1 << i))
+				tapTrackToggle(i, solo);
 		sendLpp(modifier, false);
-		omxDisp.displayMessageTimed(modifier == kLppMute ? "UNMUTE ALL" : "CLEAR SOLO", 5);
+		omxDisp.displayMessageTimed(solo ? "CLEAR SOLO" : "UNMUTE ALL", 5);
 	}
 
 	// ------------------------------------------------------------------- Views
@@ -1086,7 +1088,7 @@ namespace midimacro
 				uint8_t bit = (uint8_t)(1 << (thisKey - 11));
 				if (momentaryTracks_ & bit)
 				{
-					sendLppTap((uint8_t)(kLppTrack1 + (thisKey - 11)));
+					tapTrackToggle((uint8_t)(thisKey - 11), padMode_ == PAD_SOLO); // undo the momentary toggle
 					momentaryTracks_ &= (uint8_t)~bit;
 					omxLeds.setDirty();
 					return;
@@ -1236,7 +1238,7 @@ namespace midimacro
 			{
 				if (clipMuteChord_)
 				{
-					sendLppTap((uint8_t)(kLppTrack1 + (thisKey - 3))); // mute/unmute track 1-8
+					tapTrackToggle((uint8_t)(thisKey - 3), false); // mute/unmute track 1-8
 					omxLeds.setDirty();
 					return;
 				}
@@ -1357,7 +1359,7 @@ namespace midimacro
 			{
 				sendLpp(kLppMute, true);
 				delay(kModSettleMs); // register Mute-held before the track tap
-				sendLppTap((uint8_t)(kLppTrack1 + (thisKey - 11)));
+				tapTrackToggle((uint8_t)(thisKey - 11), false);
 				sendLpp(kLppMute, false);
 				omxLeds.setDirty();
 				return;
@@ -1366,7 +1368,7 @@ namespace midimacro
 			{
 				sendLpp(kLppSolo, true);
 				delay(kModSettleMs); // register Solo-held before the track tap (else it mutes)
-				sendLppTap((uint8_t)(kLppTrack1 + (thisKey - 19)));
+				tapTrackToggle((uint8_t)(thisKey - 19), true);
 				sendLpp(kLppSolo, false);
 				omxLeds.setDirty();
 				return;
@@ -1473,7 +1475,7 @@ namespace midimacro
 		{
 			uint8_t bit = (uint8_t)(1 << (thisKey - 11));
 			bool latch = (padMode_ == PAD_MUTE && muteLatch_) || (padMode_ == PAD_SOLO && soloLatch_);
-			sendLppTap(note);
+			tapTrackToggle((uint8_t)(thisKey - 11), padMode_ == PAD_SOLO);
 			if (latch)
 				latchedTracks_ ^= bit; // LED memory only; the M8 holds the real state
 			else
@@ -1977,7 +1979,25 @@ namespace midimacro
 				rvalue = clipColMode_ ? "COL" : "ROW";
 				rsel = (page == M8V2PAGE_MAIN && params_.getSelParam() == 1);
 			}
-			omxDisp.dispLaunchpadGrid(tiers, l1, l2[0] ? l2 : nullptr, linked_ ? "LINK" : "WAIT", rlabel, rvalue, rsel);
+			// Mix/Session: a vertical track strip on the right from the OMX-authoritative state.
+			// Effective view (matches the M8 screen): a soloed track shows soloed; anything else
+			// shows muted when it's explicitly muted or when any solo is active (solo mutes the
+			// rest); otherwise present.
+			uint8_t strip[8];
+			const uint8_t *stripPtr = nullptr;
+			if (view_ == VIEW_MIX || view_ == VIEW_SESSION)
+			{
+				bool anySolo = (omxSoloed_ != 0);
+				for (uint8_t i = 0; i < 8; i++)
+				{
+					uint8_t bit = (uint8_t)(1 << i);
+					strip[i] = (omxSoloed_ & bit) ? 3
+							   : ((omxMuted_ & bit) || anySolo) ? 2
+							   : 1;
+				}
+				stripPtr = strip;
+			}
+			omxDisp.dispLaunchpadGrid(tiers, l1, l2[0] ? l2 : nullptr, linked_ ? "LINK" : "WAIT", rlabel, rvalue, rsel, stripPtr);
 			return;
 		}
 

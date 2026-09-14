@@ -93,6 +93,9 @@ namespace midimacro
 		// which is what a real Launchpad Pro MK3 does in programmer mode.
 		void sendLpp(uint8_t n, bool on);
 		void sendLppTap(uint8_t n) { sendLpp(n, true); sendLpp(n, false); }
+		// Tap a track button (101-108) to toggle its mute (solo=false) / solo (solo=true) and
+		// flip the OMX-authoritative bit to match. The Mute/Solo modifier must already be held.
+		void tapTrackToggle(uint8_t trackIdx, bool solo);
 		static bool isRingButton(uint8_t n);
 		void releaseLatchedTracks();
 		void releaseMomentaryTracks(); // undo (retap) any momentary mute/solo track still mid-press
@@ -171,6 +174,12 @@ namespace midimacro
 
 		uint8_t ledColor_[kNumLppNotes]; // LPP palette index by LPP note
 		uint8_t ledMode_[kNumLppNotes];	 // 0 static, 1 flash, 2 pulse
+		// OMX-authoritative track state for the Mix/Session strip and the "all" keys. The M8 does
+		// not reliably stream the Session track-button (101-108) mute/solo LEDs back over TRS, so
+		// instead we track state from the OMX's own toggles (bit i = track i+1). Can drift only if
+		// the user mutes/solos on the M8 hardware directly, which this controller setup doesn't do.
+		uint8_t omxMuted_ = 0;
+		uint8_t omxSoloed_ = 0;
 		uint8_t keyNoteSent_[kNumKeys];	 // LPP note currently held per OMX key, 0 = none
 		int8_t ctrlSent_[kNumKeys];		 // Control Map note sent per OMX key (M-CH), -1 = none
 

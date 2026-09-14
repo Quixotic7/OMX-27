@@ -1532,7 +1532,7 @@ void OmxDisp::dispGenericModeLabelDoubleLine(const char *label1, const char *lab
 }
 
 void OmxDisp::dispLaunchpadGrid(const uint8_t *tiers, const char *l1, const char *l2, const char *l3,
-								const char *rlabel, const char *rvalue, bool rsel)
+								const char *rlabel, const char *rvalue, bool rsel, const uint8_t *trackStrip)
 {
 	if (isMessageActive())
 	{
@@ -1575,8 +1575,27 @@ void OmxDisp::dispLaunchpadGrid(const uint8_t *tiers, const char *l1, const char
 	if (l2) u8g2leftText(l2, 0, 18, 46, 10);
 	if (l3) u8g2leftText(l3, 0, 29, 46, 10);
 
-	// Optional right-side field (e.g. Clip orientation). Grid ends at x=80; use x>=84.
-	if (rlabel || rvalue)
+	// Right side: either the Mix/Session track strip or a single field (e.g. Clip orientation).
+	// Grid ends at x=80; use x>=84.
+	if (trackStrip)
+	{
+		// 8 tracks stacked top (track 1) to bottom (track 8), a mini M8 mixer. Each 4px row:
+		// soloed = solid bar, muted = hollow bar, present/playing = short tick, empty = blank.
+		display.drawFastVLine(85, 0, 32, WHITE); // left rail so it reads as one strip
+		for (uint8_t i = 0; i < 8; i++)
+		{
+			int16_t y = i * 4;
+			int16_t x = 88;
+			switch (trackStrip[i])
+			{
+			case 3: display.fillRect(x, y, 20, 3, WHITE); break; // soloed
+			case 2: display.drawRect(x, y, 20, 3, WHITE); break; // muted (outline)
+			case 1: display.fillRect(x, y, 4, 3, WHITE); break;  // present / playing
+			default: break;										 // empty
+			}
+		}
+	}
+	else if (rlabel || rvalue)
 	{
 		if (rlabel) u8g2leftText(rlabel, 84, 7, 44, 10);
 		if (rvalue)

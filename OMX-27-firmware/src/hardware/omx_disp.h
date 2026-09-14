@@ -46,8 +46,12 @@ public:
 	// 1 = faint (lit but empty, e.g. the M8's dim step grid), 2 = holds a note/clip, 3 = playing/
 	// playhead/root. The macro derives the tier from the mirrored M8 colour's brightness. Up to
 	// three short labels (5x8 font, ~9 chars) go down the left; nullptr skips.
+	// trackStrip (optional): 8 bytes, track 1..8, 0 = empty, 1 = present/playing, 2 = muted,
+	// 3 = soloed. When non-null a vertical 8-row strip is drawn on the right (top = track 1),
+	// used by the Mix/Session views; it takes the place of the rlabel/rvalue field.
 	void dispLaunchpadGrid(const uint8_t *tiers, const char *l1, const char *l2, const char *l3,
-						   const char *rlabel = nullptr, const char *rvalue = nullptr, bool rsel = false);
+						   const char *rlabel = nullptr, const char *rvalue = nullptr, bool rsel = false,
+						   const uint8_t *trackStrip = nullptr);
 	// Held-modifier split view: top label + a row of topCount boxes (top keys) over a row
 	// of bottomCount boxes (bottom keys) + bottom label. Boxes are filled to show state.
 	// Pass nullptr for a fill array to draw empty outlines; pass count 0 to omit that row
