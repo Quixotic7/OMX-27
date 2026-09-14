@@ -120,6 +120,7 @@ namespace midimacro
 		static uint8_t beatPadForKey(uint8_t key);  // BEAT keys 3-26 -> track / range rows
 		static uint8_t seqNotePadNote(uint8_t key); // SEQ/PHRASE black keys 3-10 -> pads 11-18
 		static uint8_t seqSlotNote(uint8_t key);    // SEQ whites -> left 4x4 note slots
+		uint8_t seqTopNotePad(uint8_t key) const;    // SEQ v2 top row 1-10 -> 10 consecutive keyboard notes
 		static uint8_t seqPatternNote(uint8_t key); // PHRASE whites -> right 4x4 phrase slots
 		uint8_t sessionPadForKey(uint8_t key) const; // SESSION 11-19 pads / track buttons
 		uint8_t clipPadForKey(uint8_t key) const;    // CLIP 11-18 -> pads of clipRow_ (row) / clipRow_ as column when clipColMode_
@@ -155,6 +156,8 @@ namespace midimacro
 		uint8_t row_ = 8; // 1..8, which grid row Session keys 11-18 show
 		uint8_t clipRow_ = 8; // 1..8, Clip Launch selected row / column (not persisted)
 		bool clipColMode_ = false; // Clip Launch orientation: false = rows, true = columns (page-1 param)
+		uint8_t seqMode_ = 0;      // Seq v2 edit mode: 0 NOTE, 1 VEL, 2 OCT
+		uint8_t seqHeldStep_ = 0;  // Seq v2: white key (11-26) held as a step, 0 = none
 		bool clipMuteChord_ = false; // CLIP: keys 1+2 held together -> Launchpad Mute held, keys 3-10 = track buttons
 
 		bool linked_ = false;

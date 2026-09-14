@@ -1,7 +1,8 @@
 # ML Seq view v2 — step-hold editing (proposal)
 
-Status: **design, not built.** 2026-09-13. Supersedes the current Seq view (keys 3-10 fixed
-keypads, whites = note slots) once approved. Current Seq view keeps working until then.
+Status: **BUILT 2026-09-13** (uncommitted). NOTE mode verified on a real M8; VEL/OCT built but
+their M8 edit effect is unconfirmed (see Build status at the end). Phrase view keeps the old
+keypad+phrase-slot layout; only Seq view changed.
 
 ## Why
 
@@ -97,3 +98,24 @@ math is proven; v2 is the interaction layer on top.
 - Flash: Teensy 3.2 is at 97.8% (~5.8 KB free). Stub the hold logic and modes first and check
   the build fits before finishing; trim elsewhere if needed.
 - Keep the current Seq view behind the change until the probe passes and the layout is approved.
+
+## Build status (2026-09-13)
+
+Implemented in `midimacro_m8v2.cpp`/`.h`: `seqMode_` (NOTE/VEL/OCT), `seqHeldStep_`,
+`seqTopNotePad()`, the two hold orders, the mode-select top row, and the split from Phrase view.
+Builds on all targets (teensy31 98.1%). Flashed and tested against the real M8:
+
+- **NOTE mode — CONFIRMED.** Hold a step (white key) + tap a top-row note → the note locks into
+  that phrase step. Verified: locked B-3 into step 2 on the M8.
+- **VEL / OCT — built, effect unconfirmed.** Tapping the side-column (VEL) did not visibly change
+  the step's velocity on the M8. In the earlier probe I only saw the side column *light* while a
+  step was held; I never confirmed that *tapping* a side button edits velocity, nor Up/Down for
+  octave. The M8's velocity/octave edit gesture needs another probe (it may be hold-based, or a
+  different pad set) before VEL/OCT can be trusted.
+
+**Integration nuance found:** the M8's Launchpad only enters step-edit mode for a phrase after it
+receives the Seq button (97) *while the M8 is on that phrase*. If the M8 screen is on the phrase
+but 97 was sent earlier (e.g. while on Song), the pad-holds select tracks instead of steps —
+re-send Seq (switch the OMX away and back to Seq) to arm step editing. In normal use the
+follow-view feature covers this (double-tap a pad → M8 jumps to its sequencer → OMX follows).
+Record must be armed (AUX+8/9). CC vs NOTE for the ring did not matter once seq-edit mode was armed.

@@ -255,7 +255,9 @@ namespace MM
 	}
 	void OnSysExHW(byte* sysexData, unsigned length)
 	{
-		sendSysEx(length, sysexData, false);
+		// Process TRS/DIN SysEx too (was echo-only). Needed so a hardware M8 wired to the
+		// OMX's MIDI ports gets its Launchpad Device-Inquiry answered and the handshake runs.
+		sysEx->processIncomingSysex(sysexData, length);
 	}
 
 	void sendNoteOn(int note, int velocity, int channel)

@@ -30,7 +30,7 @@ namespace midimacro
 	static void sendIdentityReply()
 	{
 		s_identitySent++;
-		MM::sendSysExUSB(sizeof(kIdentityReply), kIdentityReply, false); // USB only: the M8 (or iOS app) is on USB, and TRS would eat 17 bytes/s while unlinked
+		MM::sendSysEx(sizeof(kIdentityReply), kIdentityReply, false); // USB + TRS: iOS app is on USB, a hardware M8 is on the DIN/TRS ports; both need the reply
 	}
 
 	void onDeviceInquiry(const uint8_t *data, unsigned length)
@@ -180,6 +180,8 @@ namespace midimacro
 		row_ = 8; // Session pins the left keys to Launchpad row 8; keys 1/2 move the box.
 		clipRow_ = 8; // Clip Launch starts on the top row (not persisted)
 		clipColMode_ = false; // land in row orientation
+		seqHeldStep_ = 0;
+		seqMode_ = 0; // Seq v2 defaults: no step held, NOTE mode
 		latchedTracks_ = 0;
 		momentaryTracks_ = 0;
 		trackHeld_ = false;
@@ -277,6 +279,7 @@ namespace midimacro
 		padMode_ = PAD_CLIP;
 
 		trackHeld_ = false;
+		seqHeldStep_ = 0;
 		if (clipMuteChord_)
 		{
 			clipMuteChord_ = false;
@@ -762,6 +765,18 @@ namespace midimacro
 		return (uint8_t)((8 - idx / 4) * 10 + (idx % 4) + 5); // cols 5-8
 	}
 
+	// SEQ v2: top row keys 1-10 -> 10 consecutive keyboard notes (rows 1-4), same interval as
+	// Notes view so K / auto-K carry over. Used while a step is held to lock a note into it.
+	uint8_t MidiMacroM8V2::seqTopNotePad(uint8_t key) const
+	{
+		if (key < 1 || key > 10) return 0;
+		uint8_t s = (uint8_t)(key - 1);
+		uint8_t k = (nrow_ == 4) ? autoK_ : (uint8_t)(3 + nrow_);
+		uint8_t row = (uint8_t)(1 + s / k), col = (uint8_t)(1 + s % k);
+		if (row > 8) return 0;
+		return (uint8_t)(row * 10 + col);
+	}
+
 	// ------------------------------------------------------------------ Runtime
 
 	void MidiMacroM8V2::loopUpdate()
@@ -1058,6 +1073,8 @@ namespace midimacro
 				keyNoteSent_[thisKey] = 0;
 				omxLeds.setDirty();
 			}
+			if (thisKey == seqHeldStep_)
+				seqHeldStep_ = 0; // Seq v2: this step is no longer held
 			return;
 		}
 
@@ -1220,7 +1237,62 @@ namespace midimacro
 			return;
 		}
 
-		if (view_ == VIEW_SEQ || view_ == VIEW_PHRASE)
+		if (view_ == VIEW_SEQ)
+		{
+			// Seq v2 (spec ML-SEQ-V2-SPEC): white keys 11-26 are the 16 steps (top-left 4x4);
+			// hold a step, then the top row edits it per the selected mode. Clear/Duplicate are
+			// modifier-first (hold, then tap steps). Record must be armed (AUX+8/9) to lock.
+			bool modHeld = (keyNoteSent_[1] == kLppClear) || (keyNoteSent_[2] == kLppDup);
+			if (thisKey >= 11 && thisKey <= 26)
+			{
+				uint8_t pad = seqSlotNote(thisKey);
+				if (pad == 0)
+					return;
+				sendLpp(pad, true); // with a modifier held: clear/dup this step; else select it to edit
+				keyNoteSent_[thisKey] = pad;
+				if (!modHeld)
+					seqHeldStep_ = thisKey; // step-first: this step is now held for editing
+				omxLeds.setDirty();
+				return;
+			}
+			if (seqHeldStep_ != 0)
+			{
+				// a step is held: the top row applies the selected mode to it
+				if (seqMode_ == 0) // NOTE
+				{
+					uint8_t p = seqTopNotePad(thisKey);
+					if (p)
+						sendLppTap(p);
+				}
+				else if (seqMode_ == 1) // VEL: side-row ring column 19..89
+				{
+					if (thisKey >= 1 && thisKey <= 8)
+						sendLppTap((uint8_t)(thisKey * 10 + 9));
+				}
+				else // OCT: left half = down, right half = up
+				{
+					if (thisKey >= 1 && thisKey <= 10)
+						sendLppTap(thisKey <= 5 ? kLppDown : kLppUp);
+				}
+				omxLeds.setDirty();
+				return;
+			}
+			// idle top row: Clear/Dup modifiers + mode select
+			switch (thisKey)
+			{
+			case 1: sendLpp(kLppClear, true); keyNoteSent_[1] = kLppClear; omxDisp.displayMessageTimed("CLEAR", 5); break;
+			case 2: sendLpp(kLppDup, true); keyNoteSent_[2] = kLppDup; omxDisp.displayMessageTimed("DUPLICATE", 5); break;
+			case 3: seqMode_ = 0; omxDisp.displayMessageTimed("SEQ: NOTE", 5); break;
+			case 4: seqMode_ = 1; omxDisp.displayMessageTimed("SEQ: VEL", 5); break;
+			case 5: seqMode_ = 2; omxDisp.displayMessageTimed("SEQ: OCT", 5); break;
+			default: return; // 6-10 reserved
+			}
+			omxLeds.setDirty();
+			omxDisp.setDirty();
+			return;
+		}
+
+		if (view_ == VIEW_PHRASE)
 		{
 			uint8_t note = 0;
 			if (thisKey == 1)
@@ -1230,7 +1302,7 @@ namespace midimacro
 			else if (thisKey <= 10)
 				note = seqNotePadNote(thisKey);
 			else
-				note = (view_ == VIEW_SEQ) ? seqSlotNote(thisKey) : seqPatternNote(thisKey);
+				note = seqPatternNote(thisKey);
 
 			if (note != 0)
 			{
@@ -1596,15 +1668,42 @@ namespace midimacro
 			for (uint8_t k = 19; k <= 26; k++)
 				drawPaletteKey(k, (uint8_t)(kLppTrack1 + (k - 19)), RED);
 		}
-		else if (view_ == VIEW_SEQ || view_ == VIEW_PHRASE)
+		else if (view_ == VIEW_SEQ)
+		{
+			// steps on the white keys (held step = white); top row depends on hold state
+			for (uint8_t k = 11; k <= 26; k++)
+			{
+				if (k == seqHeldStep_)
+					strip.setPixelColor(k, WHITE);
+				else
+					drawPaletteKey(k, seqSlotNote(k), LOWWHITE);
+			}
+			if (seqHeldStep_ != 0)
+			{
+				if (seqMode_ == 0)
+					for (uint8_t k = 1; k <= 10; k++) drawPaletteKey(k, seqTopNotePad(k), DKCYAN);
+				else if (seqMode_ == 1)
+					for (uint8_t k = 1; k <= 10; k++) strip.setPixelColor(k, (k <= 8) ? GREEN : LEDOFF);
+				else
+					for (uint8_t k = 1; k <= 10; k++) strip.setPixelColor(k, (k <= 5) ? BLUE : CYAN);
+			}
+			else
+			{
+				strip.setPixelColor(1, keyNoteSent_[1] ? WHITE : RED);	 // Clear
+				strip.setPixelColor(2, keyNoteSent_[2] ? WHITE : ORANGE); // Duplicate
+				strip.setPixelColor(3, seqMode_ == 0 ? CYAN : DKCYAN);	 // NOTE
+				strip.setPixelColor(4, seqMode_ == 1 ? GREEN : DKGREEN); // VEL
+				strip.setPixelColor(5, seqMode_ == 2 ? MAGENTA : DKMAGENTA); // OCT
+			}
+		}
+		else if (view_ == VIEW_PHRASE)
 		{
 			strip.setPixelColor(1, RED);	// Clear (hold)
 			strip.setPixelColor(2, ORANGE); // Duplicate (hold)
 			for (uint8_t k = 3; k <= 10; k++)
 				drawPaletteKey(k, seqNotePadNote(k), DKCYAN);
 			for (uint8_t k = 11; k <= 26; k++)
-				drawPaletteKey(k, view_ == VIEW_SEQ ? seqSlotNote(k) : seqPatternNote(k),
-							   view_ == VIEW_SEQ ? LOWWHITE : DKMAGENTA);
+				drawPaletteKey(k, seqPatternNote(k), DKMAGENTA);
 		}
 		else if (view_ == VIEW_BEAT)
 		{
@@ -1808,7 +1907,10 @@ namespace midimacro
 				case VIEW_SESSION: if (k >= 11 && k <= 18) add((uint8_t)(80 + (k - 10))); break;
 				case VIEW_CLIP: if (k >= 11 && k <= 18) add(clipPadForKey(k)); break;
 				case VIEW_NOTE: if (k >= 11) add(notesPadForKey(k)); break;
-				case VIEW_SEQ: add(k <= 10 ? seqNotePadNote(k) : seqSlotNote(k)); break;
+				case VIEW_SEQ:
+					if (k >= 11) add(seqSlotNote(k));
+					else if (seqHeldStep_ != 0) add(seqTopNotePad(k));
+					break;
 				case VIEW_PHRASE: add(k <= 10 ? seqNotePadNote(k) : seqPatternNote(k)); break;
 				case VIEW_BEAT: if (k >= 3) add(beatPadForKey(k)); break;
 				default: break; // MIX, CTRL: nothing in view
@@ -1833,8 +1935,8 @@ namespace midimacro
 				if (trackHeld_) snprintf(l2, sizeof(l2), "TRACK");
 				break;
 			case VIEW_SEQ:
-				snprintf(l1, sizeof(l1), "SEQ");
-				if (recLatched_) snprintf(l2, sizeof(l2), "REC");
+				snprintf(l1, sizeof(l1), ledColor_[kLppRec] != 0 ? "SEQ REC" : "SEQ");
+				snprintf(l2, sizeof(l2), "%s", seqMode_ == 0 ? "NOTE" : seqMode_ == 1 ? "VEL" : "OCT");
 				break;
 			case VIEW_PHRASE:
 				snprintf(l1, sizeof(l1), "PHRASE");
