@@ -203,3 +203,34 @@ Closing the remaining untested-on-M8 paths (same rig: OMX over USB via omxctl, M
   view and the M8 both switch correctly.)
 
 All four passed; no code changes were needed.
+
+## Track-button (101-108) LED streaming — the M8 does NOT send it back (2026-09-14)
+
+Discovered while building the Mix/Session track strip. The M8 shows mute/solo on its own screen
+(the `M`/`S` markers) but does **not** reliably stream the Session track-button (101-108) LEDs back
+over TRS: `ledColor_[101..108]` stayed 0 in Mix and Session views even during sustained playback
+with tracks muted (confirmed with an on-screen `ledColor_[101]` diagnostic — always 0). Grid pads
+(notes/clips) do stream, so RX works; the track buttons just aren't sent. Note the physical-keypad
+LED read via `omxctl.leds()` is misleading here — an *off* track draws the row's orange/red
+*offColor*, which the RGB matcher mis-decodes as "muted"; only the firmware-side `ledColor_` value
+is trustworthy.
+
+**Consequence:** any feature that needs track mute/solo state can't get it from the M8 stream —
+this bounds both the track strip and the Mix "all" keys.
+
+**Fix adopted:** the OMX is authoritative. It tracks mute/solo from its **own** toggle commands in
+`omxMuted_`/`omxSoloed_` bitmasks (flipped in `tapTrackToggle()` at every send site: Mix per-track,
+Session pad modes incl. the momentary revert, Clip mute chord, and the "all" keys). The strip and
+the "all" keys read these masks, so they work with no dependence on M8 feedback and persist when
+stopped. Caveat: drifts only if mute/solo is done on the M8 hardware directly, or if a command is
+dropped over TRS (see next) — self-corrects on the next toggle of that track.
+
+## OMX→M8 TRS TX can go flaky/down mid-session (2026-09-14)
+
+During testing the OMX→M8 direction became unreliable and then stopped registering entirely — mute/
+solo toggles and even view-switch buttons (Note 94) no longer changed the M8, while LED RX kept
+working (grid still streamed, macro still showed LINK) and a re-handshake didn't recover it. It had
+worked earlier the same session, so this is a transient hardware/link issue (cable/connector or the
+M8's MIDI input), not firmware — but it affects *all* OMX→M8 control, and while it's down the
+OMX-authoritative state will drift from the M8 (the OMX sends toggles the M8 never applies). Worth
+checking the TRS cable/connection if control stops responding.
