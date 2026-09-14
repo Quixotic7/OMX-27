@@ -41,11 +41,12 @@ public:
 	// Displays a label and page numbers
 	void dispGenericModeLabel(const char *label, uint8_t numPages, int8_t selectedPage);
 	void dispGenericModeLabelDoubleLine(const char *label1, const char *label2, uint8_t numPages, int8_t selectedPage);
-	// ML macro: the 8x8 Launchpad grid as boxes (design/m8v2/Display/cliplaunch.png). lppLeds is
-	// indexed by Launchpad pad number row*10+col (row 1 = bottom, drawn at the bottom); 0 = off
-	// = nothing drawn. inView is a 64-bit mask, bit (row-1)*8 + (col-1): pads in view draw 3x3,
-	// the rest 2x2. Up to three short labels (5x8 font, ~9 chars) go down the left; nullptr skips.
-	void dispLaunchpadGrid(const uint8_t *lppLeds, uint64_t inView, const char *l1, const char *l2, const char *l3,
+	// ML macro: the 8x8 Launchpad grid as boxes (design/m8v2/Display/cliplaunch.png). tiers is
+	// indexed by Launchpad pad number row*10+col (row 1 = bottom, drawn at the bottom): 0 = off,
+	// 1 = faint (lit but empty, e.g. the M8's dim step grid), 2 = holds a note/clip, 3 = playing/
+	// playhead/root. The macro derives the tier from the mirrored M8 colour's brightness. Up to
+	// three short labels (5x8 font, ~9 chars) go down the left; nullptr skips.
+	void dispLaunchpadGrid(const uint8_t *tiers, const char *l1, const char *l2, const char *l3,
 						   const char *rlabel = nullptr, const char *rvalue = nullptr, bool rsel = false);
 	// Held-modifier split view: top label + a row of topCount boxes (top keys) over a row
 	// of bottomCount boxes (bottom keys) + bottom label. Boxes are filled to show state.

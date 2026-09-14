@@ -1922,26 +1922,21 @@ namespace midimacro
 		// Page 1 of every view: the 8x8 Launchpad grid (design/m8v2/Display/cliplaunch.png). Pads
 		// the current view's keys reach draw 3x3, everything else lit on the M8 draws 2x2.
 		{
-			uint64_t mask = 0;
-			auto add = [&mask](uint8_t pad) {
-				uint8_t r = pad / 10, c = pad % 10;
-				if (r >= 1 && r <= 8 && c >= 1 && c <= 8)
-					mask |= (uint64_t)1 << ((r - 1) * 8 + (c - 1));
-			};
-			for (uint8_t k = 1; k < kNumKeys; k++)
+			// Classify each pad's mirrored M8 colour into a brightness tier for the OLED overview
+			// (see OmxDisp::dispLaunchpadGrid): 0 off, 1 faint (lit but empty, e.g. the M8's dim
+			// step grid), 2 holds a note/clip, 3 playing/playhead/root. Thresholds from the M8's
+			// real palette on hardware: empty step ~90, note/clip ~440, playhead/root >=650 of 765.
+			uint8_t tiers[89] = {0};
+			for (uint8_t r = 1; r <= 8; r++)
 			{
-				switch (view_)
+				for (uint8_t c = 1; c <= 8; c++)
 				{
-				case VIEW_SESSION: if (k >= 11 && k <= 18) add((uint8_t)(80 + (k - 10))); break;
-				case VIEW_CLIP: if (k >= 11 && k <= 18) add(clipPadForKey(k)); break;
-				case VIEW_NOTE: if (k >= 11) add(notesPadForKey(k)); break;
-				case VIEW_SEQ:
-					if (k >= 11) add(seqSlotNote(k));
-					else if (seqHeldStep_ != 0) add(seqTopNotePad(k));
-					break;
-				case VIEW_PHRASE: add(k <= 10 ? seqNotePadNote(k) : seqPatternNote(k)); break;
-				case VIEW_BEAT: if (k >= 3) add(beatPadForKey(k)); break;
-				default: break; // MIX, CTRL: nothing in view
+					uint8_t idx = ledColor_[r * 10 + c];
+					if (idx == 0)
+						continue;
+					uint32_t col = lppPaletteColor(idx);
+					uint16_t sum = (uint16_t)(((col >> 16) & 0xFF) + ((col >> 8) & 0xFF) + (col & 0xFF));
+					tiers[r * 10 + c] = (sum < 150) ? 1 : (sum < 550) ? 2 : 3;
 				}
 			}
 
@@ -1982,7 +1977,7 @@ namespace midimacro
 				rvalue = clipColMode_ ? "COL" : "ROW";
 				rsel = (page == M8V2PAGE_MAIN && params_.getSelParam() == 1);
 			}
-			omxDisp.dispLaunchpadGrid(ledColor_, mask, l1, l2[0] ? l2 : nullptr, linked_ ? "LINK" : "WAIT", rlabel, rvalue, rsel);
+			omxDisp.dispLaunchpadGrid(tiers, l1, l2[0] ? l2 : nullptr, linked_ ? "LINK" : "WAIT", rlabel, rvalue, rsel);
 			return;
 		}
 

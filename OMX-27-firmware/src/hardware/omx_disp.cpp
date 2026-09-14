@@ -1531,7 +1531,7 @@ void OmxDisp::dispGenericModeLabelDoubleLine(const char *label1, const char *lab
 	}
 }
 
-void OmxDisp::dispLaunchpadGrid(const uint8_t *lppLeds, uint64_t inView, const char *l1, const char *l2, const char *l3,
+void OmxDisp::dispLaunchpadGrid(const uint8_t *tiers, const char *l1, const char *l2, const char *l3,
 								const char *rlabel, const char *rvalue, bool rsel)
 {
 	if (isMessageActive())
@@ -1543,19 +1543,25 @@ void OmxDisp::dispLaunchpadGrid(const uint8_t *lppLeds, uint64_t inView, const c
 	display.fillRect(0, 0, 128, 32, BLACK);
 
 	// Grid: 8 columns x 4 px starting at x=48, 8 rows x 4 px starting at y=1, row 8 on top.
+	// The macro classifies each pad's mirrored M8 colour into a brightness tier so the overview
+	// shows more than on/off: 1 = faint (an empty-but-lit step, e.g. the M8's dim step grid),
+	// 2 = a slot that holds a note/clip, 3 = playing / playhead / root (brightest). This is how
+	// you tell filled steps from empty ones and watch the playhead sweep on a mono display.
 	for (uint8_t r = 1; r <= 8; r++)
 	{
 		for (uint8_t c = 1; c <= 8; c++)
 		{
-			if (lppLeds[r * 10 + c] == 0)
+			uint8_t tier = tiers[r * 10 + c];
+			if (tier == 0)
 				continue;
 			int16_t x0 = 48 + (c - 1) * 4;
 			int16_t y0 = 1 + (8 - r) * 4;
-			bool big = (inView >> ((r - 1) * 8 + (c - 1))) & 1;
-			if (big)
-				display.fillRect(x0, y0, 3, 3, WHITE);
+			if (tier >= 3)
+				display.fillRect(x0, y0, 3, 3, WHITE);       // playing / playhead / root
+			else if (tier == 2)
+				display.fillRect(x0 + 1, y0 + 1, 2, 2, WHITE); // has a note / clip
 			else
-				display.fillRect(x0 + 1, y0 + 1, 2, 2, WHITE);
+				display.drawPixel(x0 + 1, y0 + 1, WHITE);      // faint: lit but empty (step grid)
 		}
 	}
 
