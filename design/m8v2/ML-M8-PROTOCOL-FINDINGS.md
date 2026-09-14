@@ -179,3 +179,27 @@ OMX ↔ M8 over TRS (switch B), OMX driven over USB via omxctl, M8 watched on m8
 - **Mix mute:** OMX Mix view muting track 1 → the M8 showed **1M / M1** (track 1 muted); entering Mix also sent Session so the M8 went to its Song screen.
 
 Test residue: phrase 10 now has an extra D-4 at step 2. The two firmware fixes (identity over TRS, OnSysExHW processing) are confirmed necessary and working; safe to commit. The WAIT-screen `R<n>` diagnostic can be reverted.
+
+### Additional view verifications on real hardware (2026-09-13)
+
+Closing the remaining untested-on-M8 paths (same rig: OMX over USB via omxctl, M8 on m8.run):
+
+- **Beat Repeat** (AUX+21 → Shift+Session): the M8 enters it (no dedicated M8 screen — it's a
+  launchpad overlay; the M8 stays on Song) and streams the layout. Track row (keys 3-10) toggles
+  a track's inclusion (LED cyan ↔ dim blue); the range rows (keys 11-18 = row 3, 19-26 = row 2)
+  drive the loop — holding one lights it and the green position marker advances. Row mapping matches
+  the doc (tracks row 1, loop rows 3 then 2). Exiting to another view sends plain Session and the M8
+  leaves Beat Repeat cleanly (LEDs return to the Session layout).
+- **Session PAD-SOLO** (Session key 5, then track keys 11-18): solos the track (M8 showed `2S`).
+  This path holds the Solo modifier persistently (from `setPadMode`), so — unlike the atomic Mix
+  chords — it does **not** need the `kModSettleMs` gap; the modifier is registered long before the
+  tap. (Clip view has a Mute chord, not a solo pad-mode, by design.)
+- **Notes AUTO-K** (NROW = AUTO): entering Notes, the auto-detect read the D-Chromatic root LEDs and
+  locked **K5** — the NROW legend showed `A5`, and the grid highlighted roots with a perfect-fourth
+  row interval. Matches the manual-K5 result.
+- **Follow-view double-tap**: double-tapping a clip pad in Clip view launched the clip and switched
+  the OMX to Seq; the M8 followed into **PHRASE 20**. (Minor UX note: the OLED page doesn't change
+  with the view on a double-tap — if you're on a settings page it stays there — but the launchpad
+  view and the M8 both switch correctly.)
+
+All four passed; no code changes were needed.
