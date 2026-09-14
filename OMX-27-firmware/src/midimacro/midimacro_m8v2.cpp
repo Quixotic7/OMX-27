@@ -75,6 +75,22 @@ namespace midimacro
 	static const uint8_t kLppLogo = 99;
 	static const uint8_t kLppTrack1 = 101;
 
+	// M8 Session track-button LED palette (hardware-decoded 2026-09-13 by matching the mirrored
+	// RGB against lpp_palette.h and cross-checking the M8's own M/S mixer panel):
+	// muted = coral 0xff6161 (palette idx 6 or its alias 73 - same colour), soloed = cyan
+	// 0x61e9ff (idx 79), 0 = empty. Playing tracks pulse green/grey. The earlier 5/78 guess was
+	// wrong. Match both muted aliases since which index the M8 emits can't be told from colour.
+	static const uint8_t kTrkMuted = 6;
+	static const uint8_t kTrkMutedAlt = 73;
+	static const uint8_t kTrkSoloed = 79;
+
+	// Settle gap (ms) after pressing a Mute/Solo modifier before tapping the track, so the
+	// M8 registers the modifier as held first. Without it the M8 processes the track tap in
+	// the same burst and falls through to its default (mute) - which is why Solo behaved
+	// like Mute. Only atomic chords (press modifier + tap track in one handler) need it;
+	// latch-style holds (pad modes) already hold the modifier long before any track tap.
+	static const uint8_t kModSettleMs = 20;
+
 	// M8 Control Map notes on the macro channel.
 	static const uint8_t kCmPlay = 0;
 	static const uint8_t kCmShift = 1;
@@ -474,24 +490,34 @@ namespace midimacro
 		omxDisp.displayMessageTimed("SNAP RECALL", 5);
 	}
 
-	// Mix view "all" keys. Taps every track whose mirrored T1-T8 LED says it is currently
-	// muted/soloed, with the Mute (2) or Solo (3) modifier held.
+	// Mix view "all" keys, using the hardware-decoded track LED palette
+	// (kTrkMuted / kTrkSoloed).
 	//
-	// NEEDS HARDWARE VERIFICATION (spec section 4, "Open point"): this relies on the M8
-	// reporting mute/solo state on the track LEDs at all times. The rule used here is
-	// "any track whose cached colour is neither off (0) nor white (3, 'playing')" - if the
-	// M8 reports something else, this is the one place to change.
+	// - UNMUTE ALL (Mute modifier): toggle mute only on tracks the M8 reports as muted (coral).
+	//   The old bug tapped every non-off/non-white track - which includes the pulsing green/grey
+	//   playing tracks - and so muted them (the inversion the user reported).
+	// - CLEAR SOLO (Solo modifier): tap only tracks the M8 reports as soloed (cyan); re-tapping a
+	//   soloed track un-solos it, returning to all-playing. Nothing else is touched.
 	void MidiMacroM8V2::doMixAllTracks(uint8_t modifier)
 	{
+		// Note: this reads the mirrored track-button LEDs, which the M8 only streams on a
+		// mute/solo change while playing - so it acts on tracks toggled since the macro linked.
+		// That is fine (and safe: it never touches a playing track, avoiding the old inversion
+		// bug) but it can't see mutes set before linking or while stopped.
 		sendLpp(modifier, true);
+		delay(kModSettleMs); // let the M8 register the modifier as held before any track tap
 		for (uint8_t i = 0; i < 8; i++)
 		{
+			// Act only on tracks already in the matching state, so nothing is toggled the
+			// wrong way: unmute the muted (coral), unsolo the soloed (cyan).
 			uint8_t c = ledColor_[kLppTrack1 + i];
-			if (c != 0 && c != 3)
+			bool match = (modifier == kLppMute) ? (c == kTrkMuted || c == kTrkMutedAlt)
+												: (c == kTrkSoloed);
+			if (match)
 				sendLppTap((uint8_t)(kLppTrack1 + i));
 		}
 		sendLpp(modifier, false);
-		omxDisp.displayMessageTimed(modifier == kLppMute ? "UNMUTE ALL" : "UNSOLO ALL", 5);
+		omxDisp.displayMessageTimed(modifier == kLppMute ? "UNMUTE ALL" : "CLEAR SOLO", 5);
 	}
 
 	// ------------------------------------------------------------------- Views
@@ -1330,6 +1356,7 @@ namespace midimacro
 			if (thisKey >= 11 && thisKey <= 18)
 			{
 				sendLpp(kLppMute, true);
+				delay(kModSettleMs); // register Mute-held before the track tap
 				sendLppTap((uint8_t)(kLppTrack1 + (thisKey - 11)));
 				sendLpp(kLppMute, false);
 				omxLeds.setDirty();
@@ -1338,6 +1365,7 @@ namespace midimacro
 			if (thisKey >= 19 && thisKey <= 26)
 			{
 				sendLpp(kLppSolo, true);
+				delay(kModSettleMs); // register Solo-held before the track tap (else it mutes)
 				sendLppTap((uint8_t)(kLppTrack1 + (thisKey - 19)));
 				sendLpp(kLppSolo, false);
 				omxLeds.setDirty();

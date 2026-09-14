@@ -74,32 +74,55 @@ already targets these same step pads (top-left 4×4) and row-1 keyboard, so the 
 Test residue: chain 11 / phrase 10 now holds C#4 at steps 9 and 12 (created during probing) —
 clear or ignore as you like.
 
-## Mute / Solo (Session view track buttons) — CONFIRMED
+## Mute / Solo (Session view track buttons) — CONFIRMED + CORRECTED 2026-09-13
 
-Tested during playback of a full song, watching the M8's per-track S/M indicators.
+Re-probed end-to-end through the OMX (driven over USB by omxctl, M8 watched on m8.run). This
+supersedes the earlier notes below it — two of the earlier claims were wrong.
 
-- Track buttons are **101-108**. Mute button = **2**, Solo button = **3**.
-- **Mute:** hold Mute (2), tap a track (101-108) → toggles that track's mute. The M8 shows `M`
-  next to the track; unmute clears it.
-- **Solo:** hold Solo (3), tap a track → solos that track **exclusively** (the M8 shows `S` on it
-  and `M` on all others). Holding Solo and tapping more tracks adds them to the solo group.
-- **Track-button LED palette (this is the key for the Mix view):**
-  - `1` = active / playing
-  - `5` = muted
-  - `78` = soloed (bright)
-  - off = empty track
-- The earlier "solo just mutes everything" impression was **correct solo behaviour** — soloing one
-  track mutes the rest. Per-track solo works fine.
+- Track buttons are **101-108**. Mute button = **2**, Solo button = **3** (as documented).
+- **Mute:** hold Mute (2), tap a track → toggles that track's mute (M8 shows `M`). Works.
+- **Solo:** hold Solo (3), tap a track → solos it exclusively (M8 shows `S` on it, `M` on the
+  rest). Re-tapping a soloed track un-solos it (it *does* toggle — the earlier "doesn't toggle
+  off" note was wrong). Solo works — see the timing caveat.
 
-**Fixes this implies for our Mix view:**
-- **Unmute-all** must tap only tracks whose LED == 5 (muted), not every lit track. Tapping any
-  lit track (which includes the value-1 playing tracks) is what inverted the mutes.
-- **Unsolo-all**: solo is exclusive and a repeat Solo+track does not toggle it off; the reliable
-  way back to "all playing" is to add every track to the solo group (hold Solo, tap all 8), or
-  unmute each. A dedicated clear gesture wasn't found — worth another look, or drive it as
-  "solo all".
-- Per-track **mute (keys 11-18)** and **solo (keys 19-26)** already send the right thing; solo
-  correctly mutes the others. The Mix LED rows should read 5 = muted, 78 = soloed, 1 = playing.
+### CRITICAL — a settle gap is required after the modifier
+
+The M8 needs the Mute/Solo button registered as **held before** the track tap arrives. If the OMX
+sends `modifier-on` and `track-on` back-to-back (0 ms apart, as it did), the M8 processes the
+track first and falls through to its **default, which is mute** — so **Solo behaved exactly like
+Mute** (the user's "solo is doing mutes" report). Mute was immune because its fallback *is* mute,
+which masked the bug. **Fix: insert ~20 ms (`kModSettleMs`) between the modifier press and the
+track tap.** Verified: with the gap, solo-row now shows `4S`; without it, `4M`. The OMX was already
+sending the correct MIDI (captured on its USB port: `NoteOn 3`, `NoteOn 105`, `NoteOff 105`,
+`NoteOff 3`) — only the timing was the problem.
+
+### CORRECTED track-button LED palette
+
+Decoded by matching the mirrored LED RGB against `lpp_palette.h` and cross-checking the M8's own
+per-track M/S mixer panel:
+- **muted = 0xff6161 (palette idx 6, alias 73)** — coral. (NOT 5.)
+- **soloed = 0x61e9ff (idx 79)** — cyan. (NOT 78.)
+- **playing = pulses green (idx 22/88) / grey (idx 2/118)** — not a single index.
+- empty = off (0).
+
+### Big caveat — the OMX's LED cache is only as fresh as the M8's stream
+
+The M8 sends a track-button LED note only **when that track's mute/solo changes, and only while
+playing**. It does **not** re-send existing states on view-entry or after a re-handshake, and when
+**stopped it reports all track LEDs as off**. So the OMX's cache (`ledColor_[101..108]`) only holds
+tracks toggled since the macro linked, during playback. The **"all" keys read this cache**, so:
+- **Unmute-all / unsolo-all** act only on tracks the cache shows as muted/soloed. This is **safe**
+  (it never touches a playing track, so no inversion) and correct for tracks toggled in-session,
+  but it **can't see mutes set before linking or while stopped**. That's an M8 limitation, not
+  fixable from the OMX without a way to re-request LED state.
+
+**Fixes applied to the Mix view (all in `midimacro_m8v2.cpp`):**
+- `kModSettleMs` (20 ms) gap after Mute/Solo-on in every atomic chord (per-track keys 11-26 and
+  `doMixAllTracks`). Latch-style pad modes don't need it (they hold the modifier persistently).
+- `doMixAllTracks`: unmute-all taps only LED == muted (6/73), unsolo-all taps only LED == soloed
+  (79). Symmetric and safe; replaces the old "tap any non-white track" that caused the inversion.
+- Palette constants corrected: `kTrkMuted=6`, `kTrkMutedAlt=73`, `kTrkSoloed=79`.
+- Per-track mute (11-18) and solo (19-26) verified: `2M` / `6M` for mute, `4S` for solo.
 
 ## OMX-to-M8 over TRS/DIN (2026-09-13)
 
