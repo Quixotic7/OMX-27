@@ -214,6 +214,11 @@ private:
 
 	void dispParamLabel(uint8_t x, uint8_t y, uint8_t width, uint8_t height, bool selected, uint8_t selectionType, bool encSelActive, bool showLabel, const char *label, const uint8_t *font, int8_t labelYOffset, bool centered);
 
+	// Size: these draw glyph bitmaps in place of text so whole u8g2 fonts can be dropped.
+	void drawGlyphBitmap(int16_t x, int16_t y, const uint8_t *bmp, uint8_t w, uint8_t h);
+	void drawLoaderGlyph(uint8_t frame);
+	void drawToggleGlyph(bool on, int16_t x, int16_t y, uint16_t w, uint16_t h);
+
 	void u8g2centerText(const char *s, int16_t x, int16_t y, uint16_t w, uint16_t h);
 	void u8g2leftText(const char *s, int16_t x, int16_t y, uint16_t w, uint16_t h);
 	void u8g2centerNumber(int n, uint16_t x, uint16_t y, uint16_t w, uint16_t h);

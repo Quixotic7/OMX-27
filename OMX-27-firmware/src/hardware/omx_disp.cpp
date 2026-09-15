@@ -8,7 +8,47 @@
 
 U8G2_FOR_ADAFRUIT_GFX u8g2_display;
 
-const char *loaderAnim[] = {"\u25f0", "\u25f1", "\u25f2", "\u25f3"};
+// Size: the 4-frame loader/mode spinner (U+25F0..U+25F3) was the only user of the 8.3KB
+// u8g2_font_cu12_h_symbols font. The glyph bitmaps below were decoded straight out of that
+// font, so the pixels are identical - full 14x20 glyph box (padding rows included) because
+// the callers draw with setFontMode(0), which paints the background over the whole box.
+static const uint8_t kLoaderGlyphW = 14;
+static const uint8_t kLoaderGlyphH = 20;
+static const uint8_t kLoaderGlyphs[4][40] PROGMEM = {
+	{// U+25F0
+	 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3F, 0xF8,
+	 0x21, 0x08, 0x21, 0x08, 0x21, 0x08, 0x21, 0x08, 0x3F, 0x08,
+	 0x20, 0x08, 0x20, 0x08, 0x20, 0x08, 0x20, 0x08, 0x3F, 0xF8,
+	 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	{// U+25F1
+	 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3F, 0xF8,
+	 0x20, 0x08, 0x20, 0x08, 0x20, 0x08, 0x20, 0x08, 0x3F, 0x08,
+	 0x21, 0x08, 0x21, 0x08, 0x21, 0x08, 0x21, 0x08, 0x3F, 0xF8,
+	 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	{// U+25F2
+	 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3F, 0xF8,
+	 0x20, 0x08, 0x20, 0x08, 0x20, 0x08, 0x20, 0x08, 0x21, 0xF8,
+	 0x21, 0x08, 0x21, 0x08, 0x21, 0x08, 0x21, 0x08, 0x3F, 0xF8,
+	 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	{// U+25F3
+	 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3F, 0xF8,
+	 0x21, 0x08, 0x21, 0x08, 0x21, 0x08, 0x21, 0x08, 0x21, 0xF8,
+	 0x20, 0x08, 0x20, 0x08, 0x20, 0x08, 0x20, 0x08, 0x3F, 0xF8,
+	 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+};
+
+// Size: FORM's on/off toggle cells used "\u0106" (U+0106) and "\u0108" (U+0108), the only glyphs that
+// forced the chunky font to be the big _t_all variant. Bitmaps decoded from
+// u8g2_font_tenfatguys_t_all so they are pixel-identical; both sit at x/y offset 0, height 10.
+static const uint8_t kToggleGlyphH = 10;
+static const uint8_t kToggleOffW = 10; // \u0106
+static const uint8_t kToggleOnW = 11;  // \u0108
+static const uint8_t kToggleOff[20] PROGMEM = {
+	0xFF, 0xC0, 0xFF, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0,
+	0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xFF, 0xC0, 0xFF, 0xC0};
+static const uint8_t kToggleOn[20] PROGMEM = {
+	0xFF, 0x40, 0xFE, 0xE0, 0xC1, 0xC0, 0xD3, 0x80, 0xBF, 0x40,
+	0xDE, 0xC0, 0xCC, 0xC0, 0xC0, 0xC0, 0xFF, 0xC0, 0xFF, 0xC0};
 
 // Constructor
 OmxDisp::OmxDisp()
@@ -151,8 +191,49 @@ bool OmxDisp::isMessageActive()
 	return messageTextTimer > 0 || isDispLocked();
 }
 
+// Draw a glyph bitmap exactly where u8g2 would have drawn the glyph itself: same foreground
+// / background colours and same transparency as the current font mode.
+void OmxDisp::drawGlyphBitmap(int16_t x, int16_t y, const uint8_t *bmp, uint8_t w, uint8_t h)
+{
+	if (u8g2_display.u8g2.font_decode.is_transparent)
+		display.drawBitmap(x, y, bmp, w, h, u8g2_display.u8g2.font_decode.fg_color);
+	else
+		display.drawBitmap(x, y, bmp, w, h,
+						   u8g2_display.u8g2.font_decode.fg_color,
+						   u8g2_display.u8g2.font_decode.bg_color);
+}
+
+// Replacement for u8g2centerText(loaderAnim[frame], 80, 10, 32, 32) with FONT_SYMB_BIG.
+// That font reports ascent 11 and the glyphs are 14x20 with x offset 0 / y offset -4, so
+// u8g2 put the cursor at (80 + (32-14)/2, 10 + (32-11)/2) = (89, 20) and the glyph top-left
+// at (89 + 0, 20 - 20 - (-4)) = (89, 4).
+void OmxDisp::drawLoaderGlyph(uint8_t frame)
+{
+	drawGlyphBitmap(89, 4, kLoaderGlyphs[frame & 3], kLoaderGlyphW, kLoaderGlyphH);
+}
+
+// Replacement for the "Ć"/"Ĉ" toggle glyphs, centred in the same box u8g2centerText uses.
+// u8g2 centres on (glyph width + x offset) and puts the glyph top-left at
+// (cursorX + xOffset, cursorY - glyphHeight - yOffset); both glyphs have x/y offset 0.
+void OmxDisp::drawToggleGlyph(bool on, int16_t x, int16_t y, uint16_t w, uint16_t h)
+{
+	uint16_t bw = on ? kToggleOnW : kToggleOffW;
+	uint16_t bh = u8g2_display.getFontAscent(); // 10 for the chunky font
+	int16_t cx = x + (w - bw) / 2;
+	int16_t cy = y + (h - bh) / 2;
+	drawGlyphBitmap(cx, cy - kToggleGlyphH, on ? kToggleOn : kToggleOff, bw, kToggleGlyphH);
+}
+
 void OmxDisp::u8g2centerText(const char *s, int16_t x, int16_t y, uint16_t w, uint16_t h)
 {
+	// Size: the two FORM toggle glyphs are drawn from bitmaps so the chunky font can stay
+	// on the small _tf variant. UTF-8 for U+0106 / U+0108 is C4 86 / C4 88.
+	if ((uint8_t)s[0] == 0xC4 && ((uint8_t)s[1] == 0x86 || (uint8_t)s[1] == 0x88) && s[2] == '\0')
+	{
+		drawToggleGlyph((uint8_t)s[1] == 0x88, x, y, w, h);
+		return;
+	}
+
 	//  int16_t bx, by;
 	uint16_t bw, bh;
 	bw = u8g2_display.getUTF8Width(s);
@@ -203,8 +284,7 @@ void OmxDisp::drawLoading()
 		u8g2_display.setCursor(18, 18);
 		u8g2_display.setFont(FONT_TENFAT);
 		u8g2_display.print("OMX-27");
-		u8g2_display.setFont(FONT_SYMB_BIG);
-		u8g2centerText(loaderAnim[i % 4], 80, 10, 32, 32); // "\u00BB\u00AB" // // dice: "\u2685"
+		drawLoaderGlyph(i % 4);
 		display.display();
 		delay(100);
 	}
@@ -2684,8 +2764,7 @@ void OmxDisp::dispMode()
 	if (isDirty())
 	{
 		u8g2_display.setFontMode(0);
-		u8g2_display.setFont(FONT_SYMB_BIG);
-		u8g2centerText(loaderAnim[animPos], 80, 10, 32, 32); // "\u00BB\u00AB" // // dice: "\u2685"
+		drawLoaderGlyph(animPos);
 
 		// labels formatting
 		u8g2_display.setFontMode(1);

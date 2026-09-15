@@ -99,7 +99,9 @@ const uint8_t cvHightestNote = cvLowestNote + int(fullRangeV * 12) - 1;
 #define FONT_LABELS u8g2_font_5x8_tf
 #define FONT_VALUES u8g2_font_7x14B_tf
 #define FONT_SYMB u8g2_font_9x15_m_symbols
-#define FONT_SYMB_BIG u8g2_font_cu12_h_symbols
-#define FONT_TENFAT u8g2_font_tenfatguys_t_all // _t_all: FORM's Ć/Ĉ toggle glyphs are past the _tf range
+// Size: the big cu12 symbol font (8.3KB) is gone - its 4 spinner glyphs are bitmaps in
+// omx_disp.cpp. Same for FORM's Ć/Ĉ toggle glyphs, so the chunky font can use the small
+// _tf variant instead of _t_all (~1KB).
+#define FONT_TENFAT u8g2_font_tenfatguys_tf
 #define FONT_BIG u8g2_font_helvB18_tr
 #define FONT_CHAR16 u8g2_font_6x12_tf
