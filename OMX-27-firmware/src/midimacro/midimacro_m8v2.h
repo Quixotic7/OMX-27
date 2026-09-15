@@ -169,6 +169,7 @@ namespace midimacro
 		uint8_t seqHeldStepKey_ = 0; // Seq: the step key (11-26) physically held right now, 0 = none.
 									 // Record is armed while a step is held; placement writes to it.
 		bool clipMuteChord_ = false; // CLIP: keys 1+2 held together -> Launchpad Mute held, keys 3-10 = track buttons
+		bool clipStopHeld_ = false;	 // SESSION: key 3 (Clip mode) held -> a pad tap sends Shift+pad (stop clip in live mode)
 
 		bool linked_ = false;
 		uint32_t lastIdentityMs_ = 0;

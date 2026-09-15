@@ -355,6 +355,7 @@ namespace midimacro
 		padMode_ = PAD_CLIP;
 
 		trackHeld_ = false;
+		clipStopHeld_ = false; // drop the Session clip-stop chord
 		seqTopLocked_ = false; // view change / exit drops the top-row edit lock
 		seqHeldStepKey_ = 0;   // releaseAllKeys() above already sent the held step's pad note-off
 		if (seqAutoRec_)
@@ -1135,6 +1136,13 @@ namespace midimacro
 				omxDisp.setDirty();
 				return;
 			}
+			if (thisKey == 3 && clipStopHeld_)
+			{
+				clipStopHeld_ = false; // released key 3 -> end the Shift+pad clip-stop chord
+				omxLeds.setDirty();
+				omxDisp.setDirty();
+				return;
+			}
 
 			// Double-tap a clip pad -> jump to the sequencer, like a real Launchpad. Handled
 			// OMX-side so it does not depend on the M8 echoing the Seq button back. Ignored while
@@ -1551,7 +1559,7 @@ namespace midimacro
 		// VIEW_SESSION
 		switch (thisKey)
 		{
-		case 3: setPadMode(PAD_CLIP); return;
+		case 3: setPadMode(PAD_CLIP); clipStopHeld_ = true; return; // held: pad tap = Shift+pad (stop clip)
 		case 4: setPadMode(PAD_MUTE); return;
 		case 5: setPadMode(PAD_SOLO); return;
 		case 6: // Clear (held): tap a pad to delete that chain (M8 edit submode)
@@ -1592,6 +1600,18 @@ namespace midimacro
 		uint8_t note = sessionPadForKey(thisKey);
 		if (note == 0)
 			return;
+
+		// Clip-stop chord: hold key 3 (Clip mode), tap a pad -> Shift + pad, which stops that clip
+		// in the M8's live mode. Self-contained tap; Shift needs a settle gap to register first.
+		if (clipStopHeld_ && padMode_ == PAD_CLIP && thisKey >= 11 && thisKey <= 18)
+		{
+			sendLpp(kLppShift, true);
+			delay(kModSettleMs);
+			sendLppTap(note);
+			sendLpp(kLppShift, false);
+			omxLeds.setDirty();
+			return;
+		}
 
 		// MUTE/SOLO: keys 11-18 are the M8 track buttons. A tap toggles that track's
 		// mute/solo (the M8 acts on the press and ignores the release). Momentary re-taps
@@ -1729,7 +1749,7 @@ namespace midimacro
 			bool muteDark = (padMode_ == PAD_MUTE && muteLatch_ && !omxLeds.getSlowBlinkState());
 			bool soloDark = (padMode_ == PAD_SOLO && soloLatch_ && !omxLeds.getSlowBlinkState());
 
-			strip.setPixelColor(3, padMode_ == PAD_CLIP ? MAGENTA : DKMAGENTA);
+			strip.setPixelColor(3, clipStopHeld_ ? WHITE : padMode_ == PAD_CLIP ? MAGENTA : DKMAGENTA); // white = stop-clip chord held
 			strip.setPixelColor(4, (padMode_ == PAD_MUTE && !muteDark) ? RED : DKRED);
 			strip.setPixelColor(5, (padMode_ == PAD_SOLO && !soloDark) ? YELLOW : DKYELLOW);
 			strip.setPixelColor(6, keyNoteSent_[6] ? WHITE : PURPLE); // Clear (held)
