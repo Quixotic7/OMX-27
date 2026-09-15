@@ -1,286 +1,229 @@
 # OMX-27 ML Macro (M8 Launchpad Pro) — User Guide
 
-The ML macro turns the OMX-27 into a Launchpad Pro for the Dirtywave M8, so the M8 (hardware or the iOS app) drives the OMX's LEDs and the OMX's keys play, sequence and navigate the M8. It works over USB, including the iOS app through a camera-adapter or USB-C connection.
+The **ML** macro turns the OMX-27 into a Novation Launchpad Pro for the Dirtywave M8: the M8 (hardware or the iOS app) paints the OMX's LEDs, and the OMX's keys play, sequence and navigate the M8. It works over **USB** (including the iOS app via a USB-C / camera adapter) and over the **hardware TRS/DIN MIDI ports**.
+
+> Every view below has a faceplate map in [`doc-images/`](doc-images/) showing what each key does. They're generated with the [OMX-27 LED Designer](https://github.com/) and embedded per section.
 
 ## Setup
 
 1. **On the OMX:** set the `MCRO` parameter to `ML` (MIDI mode page 4, or CONFIG mode → MIDI). `M8` is the classic mute/solo macro and still works as before. Set `M-CH` to the channel you use for the M8's Control Map (default 10).
-2. **Save and power-cycle.** When `ML` is the *saved* macro, the OMX enumerates over USB as a Novation "Launchpad Pro MK3". The M8 app only talks to a port with that name. If you later pick a different macro, save and power-cycle again and the OMX goes back to being `omx-27-v3`.
-3. **On the M8:** MIDI Settings → `CTRL SURFACE` = `LAUNCHPAD PRO`. For the OMX's right-hand navigation keys, also set the Control Map channel to the same value as `M-CH`.
-4. **Connect** the OMX to the M8 (or the phone/iPad) over USB.
+2. **Save and power-cycle.** When `ML` is the *saved* macro, the OMX enumerates over USB as a Novation "Launchpad Pro MK3" — the name the M8 app looks for. If you later pick a different macro, save and power-cycle again and the OMX goes back to `omx-27-v3`. (A convenient way to flash firmware is to save with the macro **off** first, so the OMX enumerates normally for PlatformIO.)
+3. **On the M8:** MIDI Settings → `CTRL SURFACE` = `LAUNCHPAD PRO`. For the OMX's navigation keys, also set the Control Map channel to match `M-CH`.
+4. **Connect** the OMX to the M8 (or phone/iPad):
+   - **USB:** just plug in.
+   - **TRS/DIN:** wire OMX MIDI **OUT → M8 IN** and M8 **OUT → OMX IN**. Set the OMX's **A/B TRS polarity switch to B** for Type-A gear (the M8 and most USB-MIDI interfaces). The control surface uses only SysEx over DIN, so the USB name doesn't matter on the hardware path.
 5. **Enter the macro:** in MI, DRUM, CHORDS or FORM mode, double-click AUX. Double-click AUX again to leave.
 
-The screen shows `WAIT S<n> R<n>` until the M8 answers (S = identity replies sent, R = inquiries received), then `LPP LINK`. Once linked, the M8 paints the OMX keys with its own colours.
+The screen shows `WAIT S<n> R<n>` until the M8 answers (S = identity replies sent, R = inquiries received), then `LPP LINK`. Once linked, the M8 paints the OMX keys with its own colours and the macro **lands in Session view**.
 
-**Terminology.** *LPP* = a Launchpad Pro button or pad (what the OMX pretends to be, sent on channel 1). *M8 Key* = one of the M8's own physical buttons (Play, Shift, Edit, Option, arrows), driven over the M8 Control Map on `M-CH`. These are two different Shifts: the **LPP Shift** (AUX+3) is the Launchpad modifier; the **M8 Key Shift** in the Session and Control nav clusters presses the M8's own Shift button.
+**Terminology.** *LPP* = a Launchpad Pro button or pad (what the OMX pretends to be, sent on channel 1). *M8 Key* = one of the M8's own physical buttons (Play, Shift, Edit, Option, arrows), driven over the M8 Control Map on `M-CH`. Note the two different Shifts: the **LPP Shift** (AUX+3) is the Launchpad modifier; the **M8 Key Shift** in the nav clusters presses the M8's own Shift.
 
-**Messages.** Most shortcuts flash a short confirmation on the OLED (for example `SHIFT ON`, `PROJECT`, `MUTE MODE`, `CLEAR`, `Clip: Cols`) so a two-finger combo tells you what it did. The scroll keys (AUX+1/2 Left/Right, AUX+11/12 Down/Up) stay silent so the 8x8 grid remains visible while you scroll; Live mode is shown by the AUX LED instead.
+**Messages.** Most shortcuts flash a short confirmation on the OLED (`SHIFT ON`, `PROJECT`, `MUTE MODE`, `M8 PLAY`, `SEQ UNLOCK`, …). The scroll keys stay silent so the 8×8 grid stays visible while you scroll.
 
 ## Views
 
-Hold **AUX** and press a key from the AUX layer (below) to switch views. The same command switches the M8's own Launchpad view. Mix is an OMX-side view (the M8 stays on its Session screen; the OMX sends Session when you enter Mix). Control is pure M8 Control Map on the M-CH channel (nothing to the Launchpad).
+Hold **AUX** and press a key (see the AUX layer) to switch views — this also switches the M8's own Launchpad view. Mix is an OMX-side overlay (the M8 stays on Session). Control is pure M8 Control Map (nothing to the Launchpad).
 
 | AUX + key | View | Purpose |
 |---|---|---|
-| 15 | Session | Clip launch (left/right-hand layout selectable via HAND param) |
+| 15 | Session | Clip launch + track pads; left/right-hand layout (HAND param) |
 | 16 | Clip Launch | Launch clips a row or a column at a time (orientation is a page-1 param) |
 | 17 | Mix | Track mute/solo overview without leaving M8 Session |
-| 18 | Notes | Keyboard: 16 consecutive scale notes, Track select, Edit/Play |
-| 19 | Seq | Sequencer: keypads + phrase slots, Clear/Duplicate |
-| 20 | Phrase | Sequencer phrase selector: 16 phrase slots (like Seq phrase panel) |
-| 21 | Beat Repeat | Beat loop: **M8 must be playing** (hold pads to loop a range) |
-| 22 | Control | M8 Control Map (arrows, Option, Edit, Shift, Play): two-handed layout |
+| 18 | Notes | Keyboard: 16 in-scale notes, track select, Edit/Play |
+| 19 | Seq | Step editor: lock a step, place notes/velocity/octave |
+| 20 | Phrase | The current chain's 16 phrase slots |
+| 21 | Beat Repeat | Beat loop (hold pads to loop a range) — **M8 must be playing** |
+| 22 | Control | M8 Control Map (arrows, Option, Edit, Shift, Play) |
 
-## AUX layer (hold AUX) — global, every view
+## AUX layer (hold AUX)
 
-The AUX layer is identical in all views. Tap keys while AUX is held:
+Identical in every view. The **current view lights white** (keys 15–22).
 
-| Key | Function |
-|---|---|
-| 1 / 2 | **Launchpad Left / Right** (Track <>) — with Shift latched (AUX+3), AUX+1 toggles Live mode |
-| 3 | **LPP Shift latch:** hold AUX, press 3; the Launchpad Shift latches until AUX is released. Enables combos like Shift+Session (beat repeat) or Shift+Left (live mode). Key 3 blinks magenta while latched. |
-| 4 | — (dark) |
-| 5 | **Launchpad Project view** — with Shift latched, selects a project |
-| 6 | **Store snapshot:** hold AUX, press 6 to save the M8's current state |
-| 7 | **Recall snapshot:** hold AUX, press 7 to load the saved snapshot |
-| 8 | **Latch Record held** (Seq / Phrase / all views). Tap to toggle; AUX blinks red while latched. |
-| 9 | **Edit/Rec** — global control, works in all views |
-| 10 | **Play** — global control |
-| 11 / 12 | **Launchpad Down / Up** (octave-like, move notes a row) |
-| 13 / 14 | **Pot bank − / +** (cycle through pot banks, same as normal OMX AUX layer) |
-| 15-22 | **View selection:** Session, Clip Launch, Mix, Notes, Seq, Phrase, Beat Repeat, Control (key 23 unused) |
-| 26 | **Waveform display** — Control Map macro (Up+Down+Left+Right) |
-| 23-25 | — (dark) |
-
-**LED colours:** 15-22 magenta (bright = current view); 11-14 red; 26 yellow; 1/2 red; 3 magenta (blinks when Shift latched); 5/6/7 magenta; 9 red; 10 white/green (green when M8 reports Play lit); 8 dark red (bright red when Record latched).
-
-On page 1 (the 8x8 grid) the grid redraws live as you scroll with AUX+1/2/11/12, so you can watch the M8's view move while holding AUX.
-
-### Session view (AUX + 15) — left / right hand
-
-Mirrors the M8 Song view. Keys 11-18 are the eight track pads; the M8 colours them (dull pink = empty, white = populated, green = playhead).
-
-The **HAND** parameter (page 2) swaps the navigation keys. Use left-hand if the M8's nav buttons are on your left; right-hand if they are on your right (e.g., iPad on your left, controller on your right).
-
-**Left-hand layout:**
+![AUX layer](doc-images/aux.png)
 
 | Key | Function |
 |---|---|
-| 1 / 2 | Scroll down / up |
-| 3 / 4 / 5 | **CLIP / MUTE / SOLO** pad modes |
-| 8 | M8 **Up** |
-| 9 | M8 **Option** |
-| 10 | M8 **Edit** |
-| 11-18 | Track pads 1-8 (Launchpad row 8) |
-| 19 | Row launch |
-| 21 | M8 **Left** |
-| 22 | M8 **Down** |
-| 23 | M8 **Right** |
-| 24 | M8 **Shift** |
-| 26 | M8 **Play** |
-
-**Right-hand layout:**
-
-| Key | Function |
-|---|---|
-| 1 / 2 | Scroll down / up |
-| 3 / 4 / 5 | **CLIP / MUTE / SOLO** pad modes |
-| 8 | M8 **Option** |
-| 9 | M8 **Edit** |
-| 10 | M8 **Up** |
-| 11-18 | Track pads 1-8 (Launchpad row 8) |
-| 19 | Row launch |
-| 21 | — (dark) |
-| 22 | M8 **Shift** |
-| 23 | M8 **Play** |
-| 24 | M8 **Left** |
-| 25 | M8 **Down** |
-| 26 | M8 **Right** |
-
-In both layouts, keys 3/4/5 toggle between CLIP, MUTE and SOLO modes. In MUTE or SOLO, press the key again to toggle latch / momentary (holding the Launchpad button vs. tapping it for each track).
-
-**LED colours:** keys 3/4/5 are magenta/red/yellow (bright when active); nav arrows are indigo, Option orange, Edit blue, Shift green, Play white (green when the M8 reports it lit).
-
-### Clip Launch view (AUX + 16) — direct row selection
-
-Shows any Launchpad row directly. The black keys select the row (1-8), the white keys are that row's pads.
-
-| Key | Function |
-|---|---|
-| 1 | **Clear**: hold, then tap a pad to delete that chain |
-| 2 | **Duplicate**: hold, tap the source pad, tap the destination |
-| 1 + 2 | **Mute chord**: hold both and keys 3-10 mute or unmute tracks 1-8 (red = muted) |
-| 3-10 | **Select Launchpad row** (key 3 = row 8 top, key 10 = row 1 bottom, matching the OLED grid; selected row key is white); track mute buttons while the chord is held |
-| 11-18 | The eight pads of the selected row (tracks 1-8) |
-| 19-26 | **Row launch** (the Launchpad's right column; key 19 = row 8 top, key 26 = row 1 bottom) |
-
-**Encoder:** turn to select the row/column (same as keys 3-10); no MIDI output. Scrolling the M8's session box is AUX + 11/12.
-
-**Orientation (rows vs columns):** Clip Launch is one view; a page-1 encoder parameter on the right of the 8x8 grid switches between rows and columns. Click the encoder to select the `ORIENT` field, click again to edit, turn to toggle `ROW`/`COL` (a `Clip: Rows` / `Clip: Cols` message confirms). In **columns**, keys 3-10 select a track column 1-8, keys 11-18 are that column's eight clips (key 11 = row 8 top, key 18 = row 1), and Clear, Duplicate, the mute chord and the row-launch keys all behave the same. Status `ML CLIP C<n>`; rows show `ML CLIP R<n>`.
-
-**LED colours:** 11-18 mirror the selected row's pads; 19-26 mirror the scene buttons (the M8 lights the playing row's scene); 3-10 are LOWWHITE with the selected row WHITE. In edit mode (Rec on), the blue cursor pad shows wherever it is in the M8 grid.
-
-Mute/solo modes stay in Session view; Clip Launch is launching only. AUX layer (snapshots, Rec, Play, waveform) works as everywhere.
-
-### Notes view (AUX + 18) — keyboard
-
-The M8 keyboard view. Every pad plays an in-scale note for the current track.
-
-| Key | Function |
-|---|---|
-| 1 / 2 | Scroll down / up (Launchpad Down/Up; octave-ish) |
-| 3 | **Track hold:** keys 11-18 become T1-T8 (track buttons). Hold 3 and tap a track key to switch. |
-| 6 / 7 | **Track <** / **Track >** — previous / next track |
-| 9 / 10 | **Edit/Rec** / **Play** |
-| 11-26 | 16 keyboard pads: 16 consecutive scale steps above the base pad, in ascending order. |
-
-**The 16-note keyboard:** the M8's keyboard view is a 2D grid with root notes repeated every column. The OMX maps keys 11-26 as 16 consecutive scale steps (middle row first, then up by column bands). This makes the layout simpler: key 11 = base note, key 12 = base + 1, …, key 26 = base + 15. The M8 lights roots and pads; the OMX mirrors them.
-
-**Row interval (NROW):** the M8's Notes grid puts each row up a perfect fourth (5 semitones), so the number of *scale steps* per row depends on the M8's scale. Leave **NROW** on **AUTO** (recommended) and the macro reads the M8's root LEDs and locks the spacing on its own — K5 for Chromatic, K3 for a 7-note scale, and so on. The AUTO legend shows the locked value (e.g. `A5`). If you prefer to pin it, K3-K6 are selectable: K5 for Chromatic, K3 for major/minor. With the right value keys 11-26 climb the scale with no gaps and the roots line up.
-
-Hold key 3 (Track) to jump between tracks; hold key 9 (Edit/Rec) and tap key 10 (Play) to live-record into the current phrase.
-
-### Seq view (AUX + 19) — sequencer
-
-The M8 sequencer view. Black keys are pitches, white keys are note slots in the current phrase.
-
-| Key | Function |
-|---|---|
-| 1 | **Clear** (hold, then tap a slot to delete it) |
-| 2 | **Duplicate** (hold, tap source slot, tap destination; double-tap destination = deep clone) |
-| 3-10 | Eight keypads (Launchpad row 1): pitches |
-| 11-26 | 16 note slots of the displayed phrase (top-left 4×4). Identical phrases pulse. |
-
-Keys 3-10 stay free for pitches; scroll using the encoder or AUX+11/12 to reach lower/higher notes. The M8 only writes slots while in editing submode (turn on with AUX+9), so activate Edit first. With Record latched (AUX+8), use the M8's held-Record combos: tap a pitch keypad to enter a note, or tap AUX+10 to live-record.
-
-### Mix view (AUX + 17) — mute/solo overview
-
-An OMX-side view: navigate tracks and toggle mute/solo without switching the M8's view. The M8 stays in Session.
-
-| Key | Function |
-|---|---|
-| 1 | **Unmute all** (taps mute for all muted tracks) |
-| 3 | Go to M8 Mixer view (Control Map macro) |
-| 4 / 5 | **Recall / Store** snapshot |
-| 6 | **Unsolo all** (taps solo for all soloed tracks) |
-| 9 | **Waveform** display (Control Map macro: all four arrows) |
+| 1 / 2 | **LPP Left / Right** (Track ◀ ▶). With Shift latched, key 1 toggles Live mode. |
+| 3 | **LPP Shift latch** — latches until AUX is released; enables Shift combos (Beat Repeat, Live mode, Select Project). Blinks magenta while latched. |
+| 5 | **LPP Project / Load** (Select Project with Shift latched) |
+| 6 / 7 | **Store / Recall snapshot** |
+| 8 | **Record — latch on/off** (AUX blinks red while latched) |
+| 9 | **Edit / Rec** (tap) |
 | 10 | **Play** |
-| 11-18 | **Mute** track 1-8: white = playing, red = muted (or floor colour if no M8 feedback yet) |
-| 19-26 | **Solo** track 1-8: red = soloed (or floor colour otherwise) |
+| 11 / 12 | **LPP Down / Up** (scroll the grid) |
+| 13 / 14 | **Pot bank − / +** |
+| 15–22 | **View select:** Session, Clip, Mix, Notes, Seq, Phrase, Beat Repeat, Control |
+| 24 | **Waveform** display (Control Map: all four arrows) |
+| 25 | **M8 Shift + Play** — stops clips in live mode |
+| 26 | **M8 Play** — plays the current phrase (the M8's own Play, not the Launchpad Play) |
 
-Mute/solo are sent on the Launchpad's Mute (note 2) and Solo (note 3) buttons; the M8 does the toggling. Keys 1-10 use fixed colours: orange, lime, cyan, magenta, red, yellow, blue as on the classic M8 macro page 1.
+## Session view (AUX + 15)
 
-### Phrase view (AUX + 20) — phrase selector
+Mirrors the M8 Song view. The eight pads are the current row's clips/tracks; the M8 colours them. Keys 3/4/5 pick what the pads do (**CLIP / MUTE / SOLO**); in MUTE/SOLO, press the key again to toggle latch vs. momentary. The **HAND** parameter swaps the nav cluster left/right.
 
-The top-right 4×4 of the M8 sequencer: the 16 phrase slots of the current chain. Tap a phrase to edit it; hold and press Play to loop just that phrase; use Duplicate to copy phrases.
+**Hold key 3 (Clip mode) and tap a pad** to send **Shift + pad**, which *stops* that clip in live mode. Key 3 lights white while the stop-chord is held.
+
+![Session view](doc-images/session.png)
+
+| Key | Function (HAND = L) |
+|---|---|
+| 1 / 2 | Move the session box down / up |
+| 3 / 4 / 5 | **CLIP / MUTE / SOLO** pad modes (hold CLIP → Shift+pad stop) |
+| 6 / 7 | **Clear / Duplicate** (hold, then tap a clip) |
+| 8 / 9 / 10 | M8 **Up / Option / Edit** |
+| 11–18 | Pads 1–8 (Launchpad row 8) |
+| 19 | Scene / row launch |
+| 22 / 23 / 24 | M8 **Left / Down / Right** |
+| 25 / 26 | M8 **Shift / Play** |
+
+*HAND = R* moves the nav cluster: 8/9/10 → Option/Edit/Up, and 22–26 → Shift/Play/Left/Down/Right.
+
+## Clip Launch view (AUX + 16)
+
+Launch any Launchpad row (or column) directly. The black keys select the row/column, the white keys are its pads. A page-1 `ORIENT` field (right of the 8×8 grid) toggles **ROW / COL**.
+
+![Clip Launch view](doc-images/clip.png)
 
 | Key | Function |
 |---|---|
-| 1 | **Clear** (hold, tap a phrase) |
-| 2 | **Duplicate** (hold, source, destination) |
-| 3-10 | Eight keypads: pitches (same as Seq, so you can audition while choosing) |
-| 11-26 | 16 phrase slots (top-right 4×4 of the M8 sequencer): key 11 = top-left |
+| 1 | **Clear** (hold, then tap a slot) |
+| 2 | **Duplicate** (hold source, tap destination) |
+| 1 + 2 | **Mute chord** — keys 3–10 become track mutes 1–8 |
+| 3–10 | Select the row (key 3 = row 8 top … key 10 = row 1); selected key is white |
+| 11–18 | The eight pads of the selected row/column (launch) |
+| 19–26 | Scene / row launch column |
 
-All other controls are the same as Seq view (Edit/Rec, Play, Record latch on AUX layer). Entering Phrase sends the sequencer button (like Seq), so the M8 stays in sequencer view; the status line shows `ML PHRS`.
+**Double-tap any clip pad** to jump straight to Seq view (the M8 follows into its sequencer).
 
-Typical flow: enter Phrase view (AUX+20), tap a phrase to select it, switch to Seq view (AUX+19) to edit its slots.
+## Mix view (AUX + 17)
 
-### Beat Repeat view (AUX + 21) — beat loop
+An OMX-side overlay for mute/solo without leaving the M8's Session screen. A **vertical track strip** on the right of the OMX screen shows all 8 tracks: a soloed track is a solid bar, muted tracks are hollow bars, present tracks a tick. State is tracked OMX-side, so it stays correct even when playback is stopped.
 
-The M8's beat-repeat mode (hidden under Shift + Session on the Launchpad). **The M8 must be playing.** Hold one pad, or two pads, on the range rows to loop that range; the track row selects which tracks follow the repeat.
+![Mix view](doc-images/mix.png)
 
 | Key | Function |
 |---|---|
-| 3-10 | Track select (1-8), Launchpad row 1 (bottom) |
-| 11-18 | Range pads, first range row |
-| 19-26 | Range pads, second range row |
+| 1 | **Unmute all** |
+| 3 | Go to the M8 Mixer |
+| 4 / 5 | **Recall / Store** snapshot |
+| 6 | **Clear solo** |
+| 9 | **Waveform** |
+| 10 | **Play** |
+| 11–18 | **Mute** track 1–8 |
+| 19–26 | **Solo** track 1–8 (exclusive: solos one, mutes the rest) |
 
-Hold and release pads to loop: a single pad loops that beat, two pads loop the range between them. Entering Beat Repeat sends Shift + Session; leaving sends Session (`93`) to exit beat repeat on the M8. Status line: `ML BEAT`.
+## Notes view (AUX + 18)
 
-### Control view (AUX + 22) — M8 Control Map
+The M8 keyboard: keys 11–26 are 16 in-scale notes for the current track, roots highlighted, each row up a perfect fourth.
 
-Pure M8 Control Map on the M-CH channel. Nothing goes to the Launchpad. The **HAND** parameter (page 2) picks the layout (left or right hand).
+![Notes view](doc-images/notes.png)
 
-**Left-hand layout (HAND = L):**
+| Key | Function |
+|---|---|
+| 1 / 2 | Scroll down / up |
+| 3 | **Track** (hold → keys 11–18 select the track) |
+| 6 / 7 | **Track ◀ / ▶** |
+| 9 / 10 | **Edit / Rec** / **Play** |
+| 11–26 | 16 in-scale notes (ascending) |
 
-| Key | Function | Sends |
-|---|---|---|
-| 1 | M8 **Option** | CM 3 |
-| 2 | M8 **Edit** | CM 2 |
-| 8 | M8 **Up** | CM 6 |
-| 10 | M8 **Down** | CM 7 |
-| 11 | M8 **Left** | CM 4 |
-| 12 | M8 **Shift** | CM 1 |
-| 13 | M8 **Play** | CM 0 |
-| 23 | M8 **Right** | CM 5 |
+**Row interval (NROW):** leave it on **AUTO** — the macro reads the M8's root LEDs and locks the spacing itself (the legend shows the value, e.g. `A5`; K5 for Chromatic, K3 for a 7-note scale). You can also pin K3–K6.
 
-**Right-hand layout (HAND = R):** (arrows on opposite keys; matches classic M8 macro control page)
+## Seq view (AUX + 19)
 
-| Key | Function | Sends |
-|---|---|---|
-| 1 | M8 **Up** | CM 6 |
-| 9 | M8 **Option** | CM 3 |
-| 10 | M8 **Edit** | CM 2 |
-| 11 | M8 **Left** | CM 4 |
-| 12 | M8 **Down** | CM 7 |
-| 13 | M8 **Right** | CM 5 |
-| 23 | M8 **Shift** | CM 1 |
-| 24 | M8 **Play** | CM 0 |
+The M8 step editor, reworked FORM-style. The 16 **white keys are the steps** (the top-left 4×4 of the M8). Pick a mode with keys 3/4/5, then **press a step to lock the top row** for editing — the top row stays in edit mode hands-free until you unlock.
 
-**LED colours:** arrows are indigo, Option orange, Edit blue, Shift green, Play white (green when M8 reports it lit). All other keys dark.
+![Seq view — idle](doc-images/seq.png)
 
-**Status line:** `ML CTRL L` or `ML CTRL R` (depending on HAND setting).
+**Idle (top row unlocked):**
 
-The AUX layer (snapshots, Rec, Play, waveform, view selection) works as everywhere.
+| Key | Function |
+|---|---|
+| 1 / 2 | **Clear / Duplicate** (hold, then tap a step) |
+| 3 / 4 / 5 | Mode: **NOTE / VEL / OCT** |
+| 11–26 | The 16 steps — press one to lock the top row & begin editing |
+
+**Locked (screen shows `LK NOTE` / `LK VEL` / `LK OCT`):**
+
+![Seq view — locked, NOTE mode](doc-images/seq-locked.png)
+
+- **NOTE:** keys 1–10 are ten in-scale notes. Tap one alone to **preview** (audition) it. **Place** a note two ways: hold a step then tap a note, **or** hold a note then tap a step.
+- **VEL:** keys 1–8 set the held step's velocity (the side-column ramp).
+- **OCT:** key 6 = octave down, key 7 = octave up (for the held step).
+- **Record** is auto-armed while you physically hold a step, so the note you play lands on that step; it disarms when you let go (a Record you latched yourself via AUX+8 is left alone).
+- **Unlock:** a *quick tap* of **AUX** drops the top-row lock; *holding* AUX opens the normal AUX menu (toggle playback etc.) without unlocking. Re-entering the view also unlocks.
+
+## Phrase view (AUX + 20)
+
+The current chain's 16 phrase slots (the top-right 4×4 of the M8 sequencer).
+
+![Phrase view](doc-images/phrase.png)
+
+| Key | Function |
+|---|---|
+| 1 / 2 | **Clear / Duplicate** (hold, then tap a slot) |
+| 3–10 | Keyboard row 1 — audition notes |
+| 11–26 | The 16 phrase slots |
+
+Typical flow: enter Phrase (AUX+20), pick a phrase, switch to Seq (AUX+19) to edit its steps.
+
+## Beat Repeat view (AUX + 21)
+
+The M8's beat-repeat mode (Shift + Session on the Launchpad). **The M8 must be playing.** Enter with AUX+21; leaving sends plain Session to exit it cleanly.
+
+![Beat Repeat view](doc-images/beat.png)
+
+| Key | Function |
+|---|---|
+| 3–10 | Track toggles 1–8 (which tracks the repeat affects) |
+| 11–18 | Loop range — row 3 (hold to trigger) |
+| 19–26 | Loop range — row 2 (hold to trigger) |
+
+Hold one range pad to loop that beat, two to loop the range between them.
+
+## Control view (AUX + 22)
+
+Pure M8 Control Map on `M-CH` — nothing goes to the Launchpad. The **HAND** parameter picks the layout.
+
+![Control view](doc-images/control.png)
+
+**HAND = L:** Option=1, Edit=2, Up=8, Shift=12, Play=13, Left=22, Down=23, Right=24.
+**HAND = R:** Up=1, Option=9, Edit=10, Left=11, Down=12, Right=13, Shift=23, Play=24.
 
 ## Following the M8
 
-Double-tap a clip pad in Session or Clip Launch view and the OMX switches to Seq view itself and sends the Seq button so the M8 follows, showing `M8 > SEQ`. It no longer waits for the M8 to echo the Seq button back. The OMX also follows when the M8 changes to Note or Session on its own.
+Double-tap a clip pad (Session or Clip view) and the OMX switches to Seq itself, sending the Seq button so the M8 follows (`M8 > SEQ`). The OMX also follows when the M8 changes to Note or Session on its own. On entering the macro it stays in Session for a moment so the M8 sitting on a phrase won't pull you into Seq.
 
 ## Parameters (encoder)
 
-Click the encoder to toggle between select and edit; turn to change.
+Click the encoder to toggle select/edit; turn to change.
 
-**Page 1:** Status line and link state (e.g., `ML SESS L` = Session view left-hand, `ML SESS R` = right-hand, `ML CLIP R5` = Clip Launch row 5, `ML NOTE`, `ML SEQ`, `ML PHRS`, `ML BEAT`, `ML CTRL L/R` = Control left/right-hand).
+**Page 1** is the 8×8 grid + status line (`ML SESS L`, `ML CLIP R5`, `ML SEQ`, `ML MIX`, …). In Clip view the right side shows the `ORIENT` field.
 
 **Page 2:**
 
 | Param | Setting | Meaning |
 |---|---|---|
-| `HAND` | L / R | Left-hand or right-hand navigation layout (Session view). Default L. Saved. |
-| `MUTE` | MOM / LAT | Momentary or latch mute toggle (shown `MOM`/`LAT`). Default **LAT**. Saved. |
-| `SOLO` | MOM / LAT | Momentary or latch solo toggle (shown `MOM`/`LAT`). Default **LAT**. Saved. |
-| `RING` | CC / NOTE | Send ring buttons as CC (default, like a real Launchpad) or as notes. Change only if a button stops responding. Saved. |
+| `HAND` | L / R | Nav-cluster layout (Session/Control). Default L. |
+| `MUTE` | MOM / LAT | Momentary or latch mute. Default **LAT**. |
+| `SOLO` | MOM / LAT | Momentary or latch solo. Default **LAT**. |
+| `RING` | CC / NOTE | Send ring buttons as CC (default) or notes. |
 
 **Page 3:**
 
 | Param | Setting | Meaning |
 |---|---|---|
-| `NROW` | AUTO / K3 / K4 / K5 / K6 | Notes view row interval. **AUTO** detects it from the M8's root LEDs (legend shows the locked value, e.g. `A5`). Or pin it: K5 = Chromatic, K3 = 7-note scales. Default K3. Saved. |
+| `NROW` | AUTO / K3–K6 | Notes-view row interval. **AUTO** detects it from the M8 root LEDs (legend e.g. `A5`). |
 
-All settings survive power cycles and are saved with CONFIG mode Save.
-
-The five pots always send their CCs on `M-CH`, independent of the view or parameters.
-
-## Colours
-
-The M8 sends colours for grid pads, track buttons and scene buttons; the OMX renders them through the Launchpad palette (including flash and pulse). Fixed OMX colours:
-
-- **AUX** purple (except when Live mode is active: mirrors the Launchpad logo colour; blinks red while Record latched)
-- **Keys 1/2** scroll: red
-- **Keys 3/4/5** mode selectors: magenta / red / yellow (bright when active, blinking when latched)
-- **Navigation keys** (depend on HAND setting): indigo arrows, orange Option, blue Edit, green Shift, white Play (green when the M8 reports it lit)
-- **View keys 11-16** (AUX layer): blue (bright for current view)
-- **Key 26** waveform: yellow
+All settings are saved with CONFIG mode Save and survive power cycles. The five pots always send their CCs on `M-CH`.
 
 ## Troubleshooting
 
-- **Stuck on `WAIT`.** R stays 0: the host never sent a Device Inquiry, so it has not adopted the OMX as its control surface. Check the M8's `CTRL SURFACE` setting and that the OMX is showing up as "Launchpad Pro MK3" (save the M8 macro and power-cycle). R climbs but no `LINK`: the host rejects the identity reply.
-- **Pads work but no LEDs.** The M8 is sending its LEDs to a different port. Same fix: make sure the OMX enumerates under the Launchpad name.
+- **Stuck on `WAIT`.** R stays 0 → the host never sent a Device Inquiry (check `CTRL SURFACE` and that the OMX shows as "Launchpad Pro MK3"; on TRS check the A/B switch is on **B** and the cable direction). R climbs but no `LINK` → the host rejected the identity reply.
+- **Pads work but no LEDs.** The M8 is sending LEDs to a different port — make sure the OMX enumerates under the Launchpad name (USB) or is wired both directions (TRS).
 - **A ring button does nothing.** Flip `RING` on page 2.
-- **Shift / Option / Edit seem dead in Session view.** They are modifiers. Hold one and press an arrow to see them act. If combos also fail, check the M8's Control Map channel equals `M-CH`.
-- **Test without an M8.** Connect the OMX to a computer and run `OMX-27-firmware/tools/virtual_m8.py`; it plays the M8's side of the handshake and paints test colours.
+- **Mute/solo occasionally needs a re-tap.** DIN/TRS can drop the odd message; tap again.
+- **Test without an M8.** Run `OMX-27-firmware/tools/virtual_m8.py`.
 
 ## The classic M8 macro
 
-The original mute/solo + control-page macro is still available as `M8` in the `MCRO` list. Pick `M8` for the old behaviour or `ML` for the Launchpad emulation. Only `ML` changes the USB name.
+The original mute/solo + control-page macro is still available as `M8` in the `MCRO` list. Only `ML` changes the USB name.
